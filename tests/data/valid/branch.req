@@ -4,14 +4,14 @@ package A
     let y in integer [W] 
   part
 
-  requirement R1 is
-    if (B::x in real) then 0 
+  requirement R1 on B is
+    if (B::x in real) then true
     end
   requirement
 
-  requirement R2 is
-    if (B::y in real) then 0 
-    else 1
+  requirement R2 on B is
+    if (B::y in real) then true
+    else false
     end
   requirement
 

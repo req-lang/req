@@ -16,12 +16,12 @@
 //
 // For commercial licensing, see COMMERCIAL.md
 
-use diagnostic::{Diagnostic, ResultErr};
+use diagnostic::{Issue, ResultErr};
 use mapper::{
     ancestors::{self, AncestorsMap},
     id,
     path::{self, PathMap},
-    requirement::{self, ForwardMap},
+    requirement::ForwardMap,
 };
 use serde_derive::Serialize;
 use syntax::entity::Entity;
@@ -62,7 +62,7 @@ pub struct Analysis {
     pub traceabilities: ForwardMap,
     pub usages: UsageMap,
     pub tags: TagMap,
-    pub diagnostics: Vec<Diagnostic>,
+    pub diagnostics: Vec<Issue>,
 }
 
 impl From<&Entity> for Analysis {
@@ -86,14 +86,23 @@ impl From<&Entity> for Analysis {
         let (types, errs) = verifier.results.into_iter().map(ResultErr).collect();
         diagnostics.extend(errs);
 
-        let mut mapper = requirement::Mapper::new(&references);
+        let mut mapper = mapper::requirement::Mapper::new(&references);
         let _ = mapper.walk(root);
-        let traceabilities = mapper.map.forward;
-        let usages = mapper.map.usages;
+        let requirement_map = mapper.map;
 
-        let mut detector = cycles::traceability::Detector::new(&traceabilities);
+        let mut detector = cycles::traceability::Detector::new(&requirement_map.forward);
         detector.detect();
-        let trace_cycles = detector.cycles;
+        let cycles = detector.cycles;
+
+        let mut verifier = verifier::requirement::Verifier::new(
+            &nodes_by_id,
+            &paths,
+            &requirement_map,
+            &cycles,
+            &types,
+        );
+        let _ = verifier.walk(root);
+        diagnostics.extend(verifier.issues);
 
         let mut mapper = tags::Mapper::default();
         let _ = mapper.walk(root);
@@ -104,9 +113,9 @@ impl From<&Entity> for Analysis {
             ancestors,
             references,
             types,
-            traceabilities,
+            traceabilities: requirement_map.forward,
             diagnostics,
-            usages,
+            usages: requirement_map.usages,
             tags,
         }
     }

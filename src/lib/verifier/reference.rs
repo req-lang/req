@@ -4,7 +4,7 @@ use itertools::Itertools;
 
 use crate::{
     children::{Children, ChildrenIter},
-    diagnostic::Diagnostic,
+    diagnostic::Issue,
     mapper::path::{Path, PathMap},
     syntax::{
         self, NodeId, ReferenceId,
@@ -20,7 +20,7 @@ pub struct Verifier<'a, 'b> {
     parent: Vec<&'a Path>,
     local: HashMap<&'b str, &'b NodeId>,
     imports: Vec<Vec<&'a Path>>,
-    pub results: HashMap<ReferenceId, Result<NodeId, Diagnostic>>,
+    pub results: HashMap<ReferenceId, Result<NodeId, Issue>>,
 }
 
 impl<'a, 'b> Walk<&'b Entity> for Verifier<'a, 'b> {
@@ -117,8 +117,8 @@ impl<'a, 'b> Visitor<&'b Expression> for Verifier<'a, 'b> {
 }
 
 impl Verifier<'_, '_> {
-    fn find(&self, reference: &Reference) -> Result<NodeId, Diagnostic> {
-        use crate::diagnostic::DiagnosticKind::{AmbiguousReference, ReferenceNotFound};
+    fn find(&self, reference: &Reference) -> Result<NodeId, Issue> {
+        use crate::diagnostic::IssueKind::{AmbiguousReference, ReferenceNotFound};
 
         if let Some(id) = self.local.get(&reference.value[..]) {
             return Ok(**id);
@@ -141,10 +141,10 @@ impl Verifier<'_, '_> {
 
         let id = reference.id;
         match hypotheses.next() {
-            None => Err(Diagnostic::new(id, ReferenceNotFound(reference.clone()))),
+            None => Err(Issue::new(id, ReferenceNotFound(reference.clone()))),
             Some(found) => match hypotheses.next() {
                 None => Ok(**found),
-                Some(_) => Err(Diagnostic::new(id, AmbiguousReference(reference.clone()))),
+                Some(_) => Err(Issue::new(id, AmbiguousReference(reference.clone()))),
             },
         }
     }

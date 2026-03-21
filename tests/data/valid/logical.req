@@ -4,7 +4,7 @@ package A
     let y in boolean
   part
 
-  requirement R1 is
+  requirement R1 on B is
     (not B::x and B::y or false xor B::x) iff true implies B::y
   requirement
 

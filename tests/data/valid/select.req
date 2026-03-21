@@ -4,25 +4,25 @@ package A
     let y in integer [W] 
   part
 
-  requirement R1 is
-    select s in real such that s > 10
-      maximize  1 / s 
-    end
+  requirement R1 on B is
+    (select s in real such that s > 10
+      maximize  1 / s
+    end) < 10
   requirement
 
-  requirement R2 is
-    select s in real such that s > 10
-    end
+  requirement R2 on B is
+    (select s in real such that s > 10
+    end) > 10
   requirement
 
-  requirement R3 is
-    select s in real
-    end
+  requirement R3 on B is
+    (select s in real
+    end) > 10
   requirement
 
-  requirement R4 is
-    select s in real
+  requirement R4 on B is
+    (select s in real
       maximize s ^ 2
-    end
+    end) > 48
   requirement
 package

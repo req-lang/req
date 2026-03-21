@@ -1,7 +1,7 @@
 use std::{collections::HashMap, ops::ControlFlow};
 
 use crate::{
-    diagnostic::Diagnostic,
+    diagnostic::Issue,
     mapper::path::{Path, PathMap},
     syntax::entity::Entity,
     visitor::{Visitor, WalkPre},
@@ -10,19 +10,19 @@ use crate::{
 pub struct Verifier<'a> {
     paths: &'a PathMap,
     nodes_by_path: HashMap<&'a Path, &'a Entity>,
-    pub diagnostics: Vec<Diagnostic>,
+    pub diagnostics: Vec<Issue>,
 }
 
 impl<'a> Visitor<&'a Entity> for Verifier<'a> {
     type WalkKind = WalkPre;
 
     fn visit(&mut self, node: &'a Entity) -> ControlFlow<()> {
-        use crate::diagnostic::DiagnosticKind::RedefinedEntity;
+        use crate::diagnostic::IssueKind::RedefinedEntity;
 
         let path = self.paths.get(&node.id).unwrap();
 
         if let Some(_) = self.nodes_by_path.insert(&path, node) {
-            let err = Diagnostic::new(node.id, RedefinedEntity(path.clone()));
+            let err = Issue::new(node.id, RedefinedEntity(path.clone()));
             self.diagnostics.push(err);
         }
 

@@ -5,7 +5,7 @@ use colored::Colorize;
 use crate::{
     Analysis,
     children::{Children, ChildrenIter},
-    diagnostic::{self, DiagnosticSeverity},
+    diagnostic::{self, IssueSeverity},
     syntax::{self},
     verifier::{reference::is_builtin, typing::TypeKind},
     visitor::{Visitor, Walk, WalkCustom},
@@ -19,9 +19,9 @@ pub struct Renderer<'a> {
     pub result: String,
 }
 
-impl DiagnosticSeverity {
+impl IssueSeverity {
     pub fn colored(&self, err: &str) -> colored::ColoredString {
-        use diagnostic::DiagnosticSeverity::*;
+        use diagnostic::IssueSeverity::*;
         match self {
             Critical => err.red(),
             Severe => err.yellow(),

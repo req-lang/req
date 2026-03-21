@@ -7,7 +7,7 @@ package A
   Comment {A::B::x}
   @@
   # tag tag has a value #
-  requirement R1 is
+  requirement R1 on B is
   @@
   Some tests {B::x}
   @@

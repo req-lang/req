@@ -8,11 +8,11 @@ package A
   Comment {A::B::x}
   @@
   # tag tag has a value #
-  requirement R1 is
+  requirement R1 on B is
     B::x = 0
   requirement
 
-  requirement R2 is
+  requirement R2 on B is
     B::y = true
   requirement
 

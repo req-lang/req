@@ -4,7 +4,7 @@ use serde_derive::Serialize;
 
 use crate::{
     children::ChildrenIter,
-    diagnostic::{Diagnostic, DiagnosticKind},
+    diagnostic::{Issue, IssueKind},
     mapper::id::NodeMap,
     syntax::{
         self, NodeId,
@@ -18,7 +18,7 @@ use crate::{
 pub struct Verifier<'a> {
     nodes_by_id: &'a NodeMap<'a>,
     references: &'a ReferenceMap,
-    pub results: HashMap<NodeId, Result<TypeKind, Diagnostic>>,
+    pub results: HashMap<NodeId, Result<TypeKind, Issue>>,
 }
 
 impl<'a> Walk<&Entity> for Verifier<'a> {
@@ -74,34 +74,30 @@ impl<'a> Visitor<&Expression> for Verifier<'a> {
 
 impl Verifier<'_> {
     #[inline]
-    fn get_result(&self, referer: &Expression, node: &Expression) -> Result<TypeKind, Diagnostic> {
+    fn get_result(&self, referer: &Expression, node: &Expression) -> Result<TypeKind, Issue> {
         self.results
             .get(&node.id)
             .unwrap()
             .clone()
-            .map_err(|err| Diagnostic::propagated(referer.id, err))
+            .map_err(|err| Issue::propagated(referer.id, err))
     }
 
-    fn check_set_element(
-        &self,
-        node: &Expression,
-        set: &SetElement,
-    ) -> Result<TypeKind, Diagnostic> {
-        use DiagnosticKind::NotASet;
-        use DiagnosticKind::UnexpectedType;
+    fn check_set_element(&self, node: &Expression, set: &SetElement) -> Result<TypeKind, Issue> {
+        use IssueKind::NotASet;
+        use IssueKind::UnexpectedType;
         use TypeKind::*;
 
         let domain = &set.domain;
         let typ = match self.get_result(node, domain)? {
             Set(t) => t,
-            typ => return Err(Diagnostic::new(domain.id, NotASet(typ))),
+            typ => return Err(Issue::new(domain.id, NotASet(typ))),
         };
 
         if let Some(filter) = &set.filter {
             let typ = self.get_result(node, filter)?;
             if typ != Boolean {
                 let id = filter.id;
-                return Err(Diagnostic::new(id, UnexpectedType(Boolean, typ)));
+                return Err(Issue::new(id, UnexpectedType(Boolean, typ)));
             }
         }
 
@@ -113,14 +109,14 @@ impl Verifier<'_> {
         node: &Expression,
         expected: &Option<TypeKind>,
         case: &Case,
-    ) -> Result<TypeKind, Diagnostic> {
-        use DiagnosticKind::UnexpectedType;
+    ) -> Result<TypeKind, Issue> {
+        use IssueKind::UnexpectedType;
         use TypeKind::*;
 
         let cond = self.get_result(node, &case.condition)?;
         if cond != Boolean {
             let id = case.condition.id;
-            return Err(Diagnostic::new(id, UnexpectedType(Boolean, cond)));
+            return Err(Issue::new(id, UnexpectedType(Boolean, cond)));
         }
 
         let cons = self.get_result(node, &case.consequence)?;
@@ -128,19 +124,19 @@ impl Verifier<'_> {
             Some(t) if cons == *t => Ok(cons),
             Some(t) => {
                 let id = case.consequence.id;
-                Err(Diagnostic::new(id, UnexpectedType(t.clone(), cons)))
+                Err(Issue::new(id, UnexpectedType(t.clone(), cons)))
             }
             None => Ok(cons),
         }
     }
 
-    fn eval(&mut self, node: &Expression) -> Result<TypeKind, Diagnostic> {
+    fn eval(&mut self, node: &Expression) -> Result<TypeKind, Issue> {
         {
-            use DiagnosticKind::NotASet;
-            use DiagnosticKind::NotAnAttribute;
-            use DiagnosticKind::UnexpectedType;
             use EntityVariant::*;
             use ExpressionVariant::*;
+            use IssueKind::NotASet;
+            use IssueKind::NotAnAttribute;
+            use IssueKind::UnexpectedType;
 
             match &node.variant {
                 Branch(branch) => {
@@ -175,7 +171,7 @@ impl Verifier<'_> {
                     let typ = self.get_result(node, expr)?;
                     if typ != Boolean {
                         let id = expr.id;
-                        return Err(Diagnostic::new(id, UnexpectedType(Boolean, typ)));
+                        return Err(Issue::new(id, UnexpectedType(Boolean, typ)));
                     }
 
                     Ok(Boolean)
@@ -198,7 +194,7 @@ impl Verifier<'_> {
                             Number => Ok(Number),
                             t => {
                                 let id = opt.expression.id;
-                                Err(Diagnostic::new(id, UnexpectedType(Number, t)))
+                                Err(Issue::new(id, UnexpectedType(Number, t)))
                             }
                         },
                     }
@@ -211,7 +207,7 @@ impl Verifier<'_> {
                         let type_expr = self.get_result(node, expression)?;
                         if type_expr != Boolean {
                             let id = expression.id;
-                            return Err(Diagnostic::new(id, UnexpectedType(Boolean, type_expr)));
+                            return Err(Issue::new(id, UnexpectedType(Boolean, type_expr)));
                         }
                     }
 
@@ -232,7 +228,7 @@ impl Verifier<'_> {
                     match type_op {
                         actual if actual != expected => {
                             let id = unary_op.operand.id;
-                            Err(Diagnostic::new(id, UnexpectedType(expected, actual)))
+                            Err(Issue::new(id, UnexpectedType(expected, actual)))
                         }
                         _ => Ok(expected),
                     }
@@ -255,11 +251,11 @@ impl Verifier<'_> {
                         }
                         In => match &rhs {
                             TypeKind::Set(rhs) => (*rhs.clone(), Boolean),
-                            _ => return Err(Diagnostic::new(bin_op.right.id, NotASet(rhs))),
+                            _ => return Err(Issue::new(bin_op.right.id, NotASet(rhs))),
                         },
                         Includes => match &rhs {
                             TypeKind::Set(rhs) => (TypeKind::Set(rhs.clone()), Boolean),
-                            _ => return Err(Diagnostic::new(bin_op.right.id, NotASet(rhs))),
+                            _ => return Err(Issue::new(bin_op.right.id, NotASet(rhs))),
                         },
                     };
 
@@ -267,27 +263,27 @@ impl Verifier<'_> {
                         (In, lhs, _) if lhs == expected => Ok(result),
                         (In, lhs, _) => {
                             let id = bin_op.left.id;
-                            Err(Diagnostic::new(id, UnexpectedType(expected, lhs)))
+                            Err(Issue::new(id, UnexpectedType(expected, lhs)))
                         }
                         (Union | Intersection | Includes | Complement | Difference, lhs, _)
                             if !lhs.is_set() =>
                         {
                             let id = bin_op.left.id;
-                            Err(Diagnostic::new(id, UnexpectedType(expected, lhs)))
+                            Err(Issue::new(id, UnexpectedType(expected, lhs)))
                         }
                         (Union | Intersection | Includes | Complement | Difference, _, rhs)
                             if !rhs.is_set() =>
                         {
                             let id = bin_op.right.id;
-                            Err(Diagnostic::new(id, UnexpectedType(expected, rhs)))
+                            Err(Issue::new(id, UnexpectedType(expected, rhs)))
                         }
                         (_, lhs, _) if lhs != expected => {
                             let id = bin_op.left.id;
-                            Err(Diagnostic::new(id, UnexpectedType(expected, lhs)))
+                            Err(Issue::new(id, UnexpectedType(expected, lhs)))
                         }
                         (_, _, rhs) if rhs != expected => {
                             let id = bin_op.right.id;
-                            Err(Diagnostic::new(id, UnexpectedType(expected, rhs)))
+                            Err(Issue::new(id, UnexpectedType(expected, rhs)))
                         }
                         (_, _, _) => Ok(result),
                     }
@@ -301,7 +297,7 @@ impl Verifier<'_> {
                         let type_elem = self.get_result(node, &elem)?;
                         if type_elem != type_first {
                             let id = elem.id;
-                            return Err(Diagnostic::new(id, UnexpectedType(type_first, type_elem)));
+                            return Err(Issue::new(id, UnexpectedType(type_first, type_elem)));
                         }
                     }
 
@@ -326,7 +322,7 @@ impl Verifier<'_> {
                                 _ => Ok(TypeKind::Undefined),
                             },
 
-                            _ => Err(Diagnostic::new(*id, NotAnAttribute(ident.target.clone()))),
+                            _ => Err(Issue::new(*id, NotAnAttribute(ident.target.clone()))),
                         },
 
                         None => match self.nodes_by_id.expressions.get(id) {

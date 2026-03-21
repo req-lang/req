@@ -5,17 +5,17 @@ package A
   part Y
   part
 
-  requirement R0 is
+  requirement R0 on X is
   @@ very broad requirement @@
   requirement
 
-  requirement R1 refines R0 is
+  requirement R1 on X refines R0 is
   @@
   Some tests 1
   @@
   requirement
 
-  requirement R2 refines R1 refines R0 is
+  requirement R2 on X refines R1 refines R0 is
   @@
   Some tests 2
   @@

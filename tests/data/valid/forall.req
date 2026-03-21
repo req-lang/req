@@ -4,7 +4,7 @@ package A
     let y in integer [W] 
   part
 
-  requirement R1 is
+  requirement R1 on B is
     forall s in real such that s > 10 
       s < B::x
     end
