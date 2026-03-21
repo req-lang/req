@@ -13,7 +13,7 @@ pub mod simple {
             let mut generator = generator::Simple::new();
             generator.packages = size;
             let root = generator.generate();
-            let mut renderer = renderer::linter::Renderer::new();
+            let mut renderer = renderer::formatter::Renderer::new();
             let _ = renderer.walk(&root);
             let input = renderer.source;
 
@@ -33,7 +33,7 @@ pub mod simple {
             let mut generator = generator::Simple::new();
             generator.depth = size;
             let root = generator.generate();
-            let mut renderer = renderer::linter::Renderer::new();
+            let mut renderer = renderer::formatter::Renderer::new();
             let _ = renderer.walk(&root);
             let input = renderer.source;
 
@@ -53,7 +53,7 @@ pub mod simple {
             let mut generator = generator::Simple::new();
             generator.words = size;
             let root = generator.generate();
-            let mut renderer = renderer::linter::Renderer::new();
+            let mut renderer = renderer::formatter::Renderer::new();
             let _ = renderer.walk(&root);
             let input = renderer.source;
 

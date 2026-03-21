@@ -471,7 +471,7 @@ mod tests {
         assert_eq!(parser.errors.len(), 0);
 
         let actual = result.ok().unwrap();
-        let mut renderer = renderer::linter::Renderer::new();
+        let mut renderer = renderer::formatter::Renderer::new();
         let _ = renderer.walk(&actual);
         let output = renderer.source;
 
@@ -490,7 +490,7 @@ mod tests {
         generator.depth = 1;
         generator.words = 2;
         let expected = generator.generate();
-        let mut renderer = renderer::linter::Renderer::new();
+        let mut renderer = renderer::formatter::Renderer::new();
         let _ = renderer.walk(&expected);
         let input = renderer.source;
 
@@ -514,7 +514,7 @@ mod tests {
 
         let actual = result.ok().unwrap();
 
-        let mut renderer = renderer::linter::Renderer::new();
+        let mut renderer = renderer::formatter::Renderer::new();
         let _ = renderer.walk(&actual);
         let output = renderer.source;
 
