@@ -1,4 +1,10 @@
 package A
+  part X
+  part
+
+  part Y
+  part
+
   requirement R0 is
   @@ very broad requirement @@
   requirement
@@ -14,4 +20,11 @@ package A
   Some tests 2
   @@
   requirement
+
+  requirement R3 on X via Y refines R1 refines R2 is
+  @@
+  Some tests 2
+  @@
+  requirement
+
 package

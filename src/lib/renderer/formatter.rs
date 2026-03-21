@@ -96,6 +96,14 @@ impl Visitor<&entity::Entity> for Renderer {
             Requirement(requirement) => {
                 self.push_line(&format!("requirement {}", node.meta.label));
 
+                if let Some(constrained) = &requirement.constrained {
+                    self.push_line(&format!("on {}", constrained));
+                }
+
+                if let Some(allocated) = &requirement.allocated {
+                    self.push_line(&format!("via {}", allocated));
+                }
+
                 for trace in &requirement.traceability {
                     use entity::TraceabilityKind::*;
 
