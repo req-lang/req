@@ -63,14 +63,14 @@ pub enum IssueKind {
     NotPartOrAttribute(Path),
     #[error("Requirement is missing a constraint")]
     MissingRequirementBinding,
-    #[error("Expected specialization to constraint the same entity")]
-    SpecializationMismatch,
-    #[error("Expected refinement to constraint a children entity")]
-    RefinementMismatch,
-    #[error("Expected derivation to constraint the backward allocated entity")]
-    DerivationMismatch,
-    #[error("Expected allocation in the derived requirement")]
-    NoDerivedAllocation,
+    #[error("Expected specialization to constraint the same entity as {0}")]
+    SpecializationMismatch(Path),
+    #[error("Expected refinement to constraint a children entity from {0}")]
+    RefinementMismatch(Path),
+    #[error("Expected derivation to constraint the backward allocated entity by {0}")]
+    DerivationMismatch(Path),
+    #[error("Expected allocation in the derived requirement {0}")]
+    NoDerivedAllocation(Path),
     #[error("Allocation of an entity without a deriving requirement")]
     MissingDerivation,
     #[error("Expected different entities in allocation and constraint")]
@@ -119,10 +119,10 @@ impl From<&IssueKind> for IssueSeverity {
             CircularTrace(_) => Severe,
             SameAllocationAndConstraint => Severe,
             MissingRequirementBinding => Severe,
-            SpecializationMismatch => Severe,
-            RefinementMismatch => Severe,
-            DerivationMismatch => Severe,
-            NoDerivedAllocation => Moderate,
+            SpecializationMismatch(_) => Severe,
+            RefinementMismatch(_) => Severe,
+            DerivationMismatch(_) => Severe,
+            NoDerivedAllocation(_) => Moderate,
             MissingDerivation => Light,
         }
     }

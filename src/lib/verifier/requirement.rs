@@ -15,7 +15,7 @@ pub struct Verifier<'a> {
     nodes_by_id: &'a NodeMap<'a>,
     paths: &'a PathMap,
     map: &'a RequirementMap,
-    cycles: &'a Vec<Vec<NodeId>>,
+    trace_cycles: &'a Vec<Vec<NodeId>>,
     types: &'a TypeMap,
     ancestors: &'a AncestorsMap,
     pub issues: Vec<Issue>,
@@ -24,6 +24,7 @@ pub struct Verifier<'a> {
 impl Visitor<&Entity> for Verifier<'_> {
     type WalkKind = WalkPre;
 
+    // TODO: Detect circular allocations
     fn visit(&mut self, node: &Entity) -> ControlFlow<()> {
         use EntityVariant::*;
         use IssueKind::*;
@@ -80,7 +81,7 @@ impl Visitor<&Entity> for Verifier<'_> {
                 }
             }
 
-            for cycle in self.cycles {
+            for cycle in self.trace_cycles {
                 if cycle.contains(&node.id) {
                     let path = cycle.iter().map(|n| self.paths.get(n).unwrap().clone());
                     issues.push(CircularTrace(path.collect()));
@@ -92,6 +93,7 @@ impl Visitor<&Entity> for Verifier<'_> {
 
                 for (id, trace) in ids.iter().zip(&requirement.traceability) {
                     let back = self.nodes_by_id.entities.get(id).unwrap();
+                    let bpath = self.paths.get(id).unwrap();
                     match back.variant {
                         Requirement(_) => {}
                         _ => issues.push(NotARequirement(self.paths.get(id).unwrap().clone())),
@@ -100,19 +102,26 @@ impl Visitor<&Entity> for Verifier<'_> {
                     match (self.map.on.get(&node.id), self.map.on.get(&back.id)) {
                         (Some(nid), Some(bid)) => match &trace.kind {
                             Specialization if nid != bid => {
-                                issues.push(SpecializationMismatch);
+                                issues.push(SpecializationMismatch(bpath.clone()));
                             }
                             Refinement if !self.ancestors.get(nid).unwrap().contains(bid) => {
-                                issues.push(RefinementMismatch);
+                                issues.push(RefinementMismatch(bpath.clone()));
                             }
-                            Derivation => match self.map.via.get(&back.id) {
-                                Some(vid) if vid != nid => issues.push(DerivationMismatch),
-                                None => issues.push(NoDerivedAllocation),
-                                _ => {}
-                            },
                             _ => {}
                         },
                         _ => {}
+                    }
+
+                    if let Some(nid) = self.map.on.get(&node.id)
+                        && trace.kind == Derivation
+                    {
+                        match self.map.via.get(&back.id) {
+                            Some(vid) if vid != nid => {
+                                issues.push(DerivationMismatch(bpath.clone()))
+                            }
+                            None => issues.push(NoDerivedAllocation(bpath.clone())),
+                            _ => {}
+                        }
                     }
                 }
             }
@@ -129,7 +138,7 @@ impl<'a> Verifier<'a> {
         nodes_by_id: &'a NodeMap<'a>,
         paths: &'a PathMap,
         map: &'a RequirementMap,
-        cycles: &'a Vec<Vec<NodeId>>,
+        trace_cycles: &'a Vec<Vec<NodeId>>,
         types: &'a TypeMap,
         ancestors: &'a AncestorsMap,
     ) -> Self {
@@ -137,7 +146,7 @@ impl<'a> Verifier<'a> {
             nodes_by_id,
             paths,
             map,
-            cycles,
+            trace_cycles,
             types,
             ancestors,
             issues: Vec::new(),

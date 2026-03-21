@@ -88,17 +88,17 @@ impl From<&Entity> for Analysis {
 
         let mut mapper = mapper::requirement::Mapper::new(&references);
         let _ = mapper.walk(root);
-        let requirement_map = mapper.map;
+        let rmap = mapper.map;
 
-        let mut detector = cycles::traceability::Detector::new(&requirement_map.forward);
+        let mut detector = cycles::traceability::Detector::new(&rmap.forward);
         detector.detect();
-        let cycles = detector.cycles;
+        let trace_cycles = detector.cycles;
 
         let mut verifier = verifier::requirement::Verifier::new(
             &nodes_by_id,
             &paths,
-            &requirement_map,
-            &cycles,
+            &rmap,
+            &trace_cycles,
             &types,
             &ancestors,
         );
@@ -114,9 +114,9 @@ impl From<&Entity> for Analysis {
             ancestors,
             references,
             types,
-            traceabilities: requirement_map.forward,
+            traceabilities: rmap.forward,
             diagnostics,
-            usages: requirement_map.usages,
+            usages: rmap.usages,
             tags,
         }
     }

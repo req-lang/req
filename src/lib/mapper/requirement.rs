@@ -57,7 +57,7 @@ impl Visitor<&Entity> for Mapper<'_> {
                 if let Some(reference) = self.references.get(&traceability.target.rid) {
                     let source = *reference;
 
-                    match self.map.backward.get_mut(reference) {
+                    match self.map.backward.get_mut(&node.id) {
                         Some(traces) => {
                             traces.push(source);
                         }
