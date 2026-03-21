@@ -6,22 +6,23 @@ use std::{
 use crate::{
     syntax::{
         NodeId,
-        entity::{Entity, EntityVariant, Reference, RequirementVariant},
+        entity::{Entity, EntityVariant, RequirementVariant},
         expression::{Expression, ExpressionVariant},
     },
+    upsert::Upsert,
     verifier::reference::ReferenceMap,
     visitor::{Visitor, Walk, WalkPre},
 };
 
 pub type TraceabilityMap = HashMap<NodeId, Vec<NodeId>>;
-pub type ConstraintMap = HashMap<NodeId, NodeId>;
+pub type RestrictionMap = HashMap<NodeId, NodeId>;
 pub type AllocationMap = HashMap<NodeId, NodeId>;
 pub type UsageMap = HashMap<NodeId, HashSet<NodeId>>;
 
 #[derive(Debug, Clone, Default)]
 pub struct RequirementMap {
-    pub on: ConstraintMap,
-    pub via: AllocationMap,
+    pub restrictions: RestrictionMap,
+    pub allocations: AllocationMap,
     pub forward: TraceabilityMap,
     pub backward: TraceabilityMap,
     pub usages: UsageMap,
@@ -41,15 +42,15 @@ impl Visitor<&Entity> for Mapper<'_> {
         use RequirementVariant::*;
 
         if let Requirement(requirement) = &node.variant {
-            if let Some(constrained) = &requirement.constrained {
-                if let Some(reference) = self.references.get(&constrained.rid) {
-                    self.map.on.insert(node.id, *reference);
+            if let Some(restricted) = &requirement.restriction {
+                if let Some(reference) = self.references.get(&restricted.rid) {
+                    self.map.restrictions.insert(node.id, *reference);
                 }
             }
 
-            if let Some(allocated) = &requirement.allocated {
+            if let Some(allocated) = &requirement.allocation {
                 if let Some(reference) = self.references.get(&allocated.rid) {
-                    self.map.via.insert(node.id, *reference);
+                    self.map.allocations.insert(node.id, *reference);
                 }
             }
 
@@ -57,23 +58,8 @@ impl Visitor<&Entity> for Mapper<'_> {
                 if let Some(reference) = self.references.get(&traceability.target.rid) {
                     let source = *reference;
 
-                    match self.map.backward.get_mut(&node.id) {
-                        Some(traces) => {
-                            traces.push(source);
-                        }
-                        None => {
-                            self.map.backward.insert(node.id, vec![source]);
-                        }
-                    }
-
-                    match self.map.forward.get_mut(reference) {
-                        Some(traces) => {
-                            traces.push(node.id);
-                        }
-                        None => {
-                            self.map.forward.insert(source, vec![node.id]);
-                        }
-                    }
+                    self.map.backward.upsert(node.id, source);
+                    self.map.forward.upsert(source, node.id);
                 }
             }
 
@@ -84,7 +70,9 @@ impl Visitor<&Entity> for Mapper<'_> {
                 }
                 Informal(container) => {
                     for reference in container.references() {
-                        self.insert(reference);
+                        if let Some(id) = self.references.get(&reference.rid) {
+                            self.map.usages.upsert(self.current.unwrap(), *id);
+                        }
                     }
                 }
             }
@@ -101,28 +89,12 @@ impl Visitor<&Expression> for Mapper<'_> {
         use ExpressionVariant::*;
 
         if let Identifier(ident) = &node.variant {
-            self.insert(&ident.target);
+            if let Some(id) = self.references.get(&ident.target.rid) {
+                self.map.usages.upsert(self.current.unwrap(), *id);
+            }
         }
 
         ControlFlow::Continue(())
-    }
-}
-
-impl Mapper<'_> {
-    pub fn insert(&mut self, reference: &Reference) {
-        let requirement = self.current.unwrap();
-        if let Some(id) = self.references.get(&reference.rid) {
-            match self.map.usages.get_mut(id) {
-                Some(usages) => {
-                    usages.insert(requirement);
-                }
-                None => {
-                    let mut set = HashSet::new();
-                    set.insert(requirement);
-                    self.map.usages.insert(*id, set);
-                }
-            }
-        }
     }
 }
 

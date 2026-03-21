@@ -147,8 +147,8 @@ impl Entity {
             }
 
             EntityVariant::Requirement(requirement) => {
-                ret.extend(requirement.constrained.iter());
-                ret.extend(requirement.allocated.iter());
+                ret.extend(requirement.restriction.iter());
+                ret.extend(requirement.allocation.iter());
                 ret.extend(requirement.traceability.iter().map(|t| &t.target));
             }
 
@@ -171,8 +171,8 @@ impl Entity {
             }
 
             EntityVariant::Requirement(requirement) => {
-                ret.extend(requirement.constrained.iter_mut());
-                ret.extend(requirement.allocated.iter_mut());
+                ret.extend(requirement.restriction.iter_mut());
+                ret.extend(requirement.allocation.iter_mut());
                 ret.extend(requirement.traceability.iter_mut().map(|t| &mut t.target));
             }
             _ => {}
@@ -323,8 +323,8 @@ impl Package {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "ts", ts(export))]
 pub struct Requirement {
-    pub constrained: Option<Reference>,
-    pub allocated: Option<Reference>,
+    pub restriction: Option<Reference>,
+    pub allocation: Option<Reference>,
     pub traceability: Vec<TraceabilityLink>,
     pub variant: RequirementVariant,
 }
@@ -332,8 +332,8 @@ pub struct Requirement {
 impl Requirement {
     pub fn new() -> Self {
         Requirement {
-            constrained: None,
-            allocated: None,
+            restriction: None,
+            allocation: None,
             traceability: Vec::new(),
             variant: RequirementVariant::Informal(markup::Markup::default()),
         }

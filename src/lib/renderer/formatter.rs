@@ -96,11 +96,11 @@ impl Visitor<&entity::Entity> for Renderer {
             Requirement(requirement) => {
                 self.push_line(&format!("requirement {}", node.meta.label));
 
-                if let Some(constrained) = &requirement.constrained {
+                if let Some(constrained) = &requirement.restriction {
                     self.push_line(&format!("on {}", constrained));
                 }
 
-                if let Some(allocated) = &requirement.allocated {
+                if let Some(allocated) = &requirement.allocation {
                     self.push_line(&format!("via {}", allocated));
                 }
 

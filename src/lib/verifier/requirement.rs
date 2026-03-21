@@ -1,4 +1,4 @@
-use std::ops::ControlFlow;
+use std::{collections::HashSet, ops::ControlFlow};
 
 use crate::{
     diagnostic::{Issue, IssueKind},
@@ -44,7 +44,7 @@ impl Visitor<&Entity> for Verifier<'_> {
                 self.issues.extend(iss);
             }
 
-            match self.map.on.get(&node.id) {
+            match self.map.restrictions.get(&node.id) {
                 None => issues.push(MissingRequirementBinding),
                 Some(id) => match self.nodes_by_id.entities.get(id).unwrap().variant {
                     Part(_) | Attribute(_) => {}
@@ -52,7 +52,7 @@ impl Visitor<&Entity> for Verifier<'_> {
                 },
             }
 
-            if let Some(vid) = self.map.via.get(&node.id) {
+            if let Some(vid) = self.map.allocations.get(&node.id) {
                 match self.nodes_by_id.entities.get(vid).unwrap().variant {
                     Part(_) | Attribute(_) => {}
                     _ => issues.push(NotPartOrAttribute(self.paths.get(vid).unwrap().clone())),
@@ -62,7 +62,7 @@ impl Visitor<&Entity> for Verifier<'_> {
                     Some(fids) => {
                         let derived = fids.iter().find(|fid| {
                             let forward = self.nodes_by_id.entities.get(*fid).unwrap();
-                            match self.map.on.get(&forward.id) {
+                            match self.map.restrictions.get(&forward.id) {
                                 Some(oid) => oid == vid,
                                 None => false,
                             }
@@ -74,7 +74,7 @@ impl Visitor<&Entity> for Verifier<'_> {
                     None => issues.push(MissingDerivation),
                 }
 
-                if let Some(oid) = self.map.on.get(&node.id)
+                if let Some(oid) = self.map.restrictions.get(&node.id)
                     && oid == vid
                 {
                     issues.push(SameAllocationAndConstraint);
@@ -99,7 +99,10 @@ impl Visitor<&Entity> for Verifier<'_> {
                         _ => issues.push(NotARequirement(self.paths.get(id).unwrap().clone())),
                     }
 
-                    match (self.map.on.get(&node.id), self.map.on.get(&back.id)) {
+                    match (
+                        self.map.restrictions.get(&node.id),
+                        self.map.restrictions.get(&back.id),
+                    ) {
                         (Some(nid), Some(bid)) => match &trace.kind {
                             Specialization if nid != bid => {
                                 issues.push(SpecializationMismatch(bpath.clone()));
@@ -112,10 +115,10 @@ impl Visitor<&Entity> for Verifier<'_> {
                         _ => {}
                     }
 
-                    if let Some(nid) = self.map.on.get(&node.id)
+                    if let Some(nid) = self.map.restrictions.get(&node.id)
                         && trace.kind == Derivation
                     {
-                        match self.map.via.get(&back.id) {
+                        match self.map.allocations.get(&back.id) {
                             Some(vid) if vid != nid => {
                                 issues.push(DerivationMismatch(bpath.clone()))
                             }

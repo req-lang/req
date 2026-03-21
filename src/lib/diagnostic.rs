@@ -55,7 +55,7 @@ pub enum IssueKind {
     NotAnAttribute(Reference),
     #[error("Expected a requirement: {0}")]
     NotARequirement(Path),
-    #[error("Expected a set: {0}")]
+    #[error("Expected a set got {0}")]
     NotASet(TypeKind),
     #[error("Circular traceability")]
     CircularTrace(Vec<Path>),
@@ -75,6 +75,14 @@ pub enum IssueKind {
     MissingDerivation,
     #[error("Expected different entities in allocation and constraint")]
     SameAllocationAndConstraint,
+    #[error("Unused entity")]
+    Unused,
+    #[error("Unrestricted entity")]
+    Unrestricted,
+    #[error("Expected the attribute to be typed")]
+    UntypedAttribute,
+    #[error("Units are expected only for numerical attributes")]
+    UnexpectedUnit,
 }
 
 impl PartialOrd for IssueKind {
@@ -115,6 +123,7 @@ impl From<&IssueKind> for IssueSeverity {
             NotAnAttribute(_) => Critical,
             NotARequirement(_) => Critical,
             NotPartOrAttribute(_) => Critical,
+            UnexpectedUnit => Critical,
             NotASet(_) => Critical,
             CircularTrace(_) => Severe,
             SameAllocationAndConstraint => Severe,
@@ -122,7 +131,10 @@ impl From<&IssueKind> for IssueSeverity {
             SpecializationMismatch(_) => Severe,
             RefinementMismatch(_) => Severe,
             DerivationMismatch(_) => Severe,
+            UntypedAttribute => Moderate,
             NoDerivedAllocation(_) => Moderate,
+            Unrestricted => Moderate,
+            Unused => Light,
             MissingDerivation => Light,
         }
     }

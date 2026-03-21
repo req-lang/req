@@ -36,6 +36,7 @@ use crate::{
     detector::cycles,
     mapper::{
         requirement::UsageMap,
+        subject::SubjectMap,
         tags::{self, TagMap},
     },
 };
@@ -43,11 +44,13 @@ use crate::{
 pub mod children;
 pub mod detector;
 pub mod diagnostic;
+pub mod inverse;
 pub mod iter;
 pub mod mapper;
 pub mod mock;
 pub mod renderer;
 pub mod syntax;
+pub mod upsert;
 pub mod verifier;
 pub mod visitor;
 
@@ -105,6 +108,15 @@ impl From<&Entity> for Analysis {
         let _ = verifier.walk(root);
         diagnostics.extend(verifier.issues);
 
+        let smap = SubjectMap::from(&rmap);
+        let mut verifier = verifier::part::Verifier::new(&smap, &paths);
+        let _ = verifier.walk(root);
+        diagnostics.extend(verifier.issues);
+
+        let mut verifier = verifier::attribute::Verifier::new(&smap, &types);
+        let _ = verifier.walk(root);
+        diagnostics.extend(verifier.issues);
+
         let mut mapper = tags::Mapper::default();
         let _ = mapper.walk(root);
         let tags = mapper.map;
@@ -116,7 +128,7 @@ impl From<&Entity> for Analysis {
             types,
             traceabilities: rmap.forward,
             diagnostics,
-            usages: rmap.usages,
+            usages: smap.usages,
             tags,
         }
     }

@@ -316,7 +316,7 @@ impl Visitor<&mut Peekable<TokenIterator<'_>>, Error, Entity> for NodeParser<'_>
                         }
 
                         Reserved(Keyword::On) => {
-                            requirement.constrained = match try_consume_identifier(tokens) {
+                            requirement.restriction = match try_consume_identifier(tokens) {
                                 Ok(r) => Some(Reference::new(id, ReferenceId::new(), r.0.into())),
                                 Err(Some(tok)) => Break(Error::missing_id(&tok))?,
                                 Err(None) => Break(Error::unterminated(&token))?,
@@ -324,7 +324,7 @@ impl Visitor<&mut Peekable<TokenIterator<'_>>, Error, Entity> for NodeParser<'_>
                         }
 
                         Reserved(Keyword::Via) => {
-                            requirement.allocated = match try_consume_identifier(tokens) {
+                            requirement.allocation = match try_consume_identifier(tokens) {
                                 Ok(r) => Some(Reference::new(id, ReferenceId::new(), r.0.into())),
                                 Err(Some(tok)) => Break(Error::missing_id(&tok))?,
                                 Err(None) => Break(Error::unterminated(&token))?,
@@ -580,20 +580,20 @@ mod tests {
     fn parses_requirement_with_constraint() {
         let req = get_requirement("package p requirement x on y is @@ text @@ requirement package");
         assert_eq!(
-            req.constrained.as_ref().map(|r| r.value.as_str()),
+            req.restriction.as_ref().map(|r| r.value.as_str()),
             Some("y")
         );
         assert!(req.traceability.is_empty());
-        assert!(req.allocated.is_none());
+        assert!(req.allocation.is_none());
     }
 
     #[test]
     fn parses_requirement_with_allocation() {
         let req =
             get_requirement("package p requirement x via z is @@ text @@ requirement package");
-        assert_eq!(req.allocated.as_ref().map(|r| r.value.as_str()), Some("z"));
+        assert_eq!(req.allocation.as_ref().map(|r| r.value.as_str()), Some("z"));
         assert!(req.traceability.is_empty());
-        assert!(req.constrained.is_none());
+        assert!(req.restriction.is_none());
     }
 
     #[test]
@@ -602,10 +602,10 @@ mod tests {
             "package p requirement x on y via z refines a specializes b is @@ text @@ requirement package",
         );
         assert_eq!(
-            req.constrained.as_ref().map(|r| r.value.as_str()),
+            req.restriction.as_ref().map(|r| r.value.as_str()),
             Some("y")
         );
-        assert_eq!(req.allocated.as_ref().map(|r| r.value.as_str()), Some("z"));
+        assert_eq!(req.allocation.as_ref().map(|r| r.value.as_str()), Some("z"));
         assert_eq!(req.traceability.len(), 2);
         assert_eq!(req.traceability[0].kind, TraceabilityKind::Refinement);
         assert_eq!(req.traceability[0].target.value, "a");
