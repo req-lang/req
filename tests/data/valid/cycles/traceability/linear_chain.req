@@ -1,0 +1,9 @@
+package p
+  requirement x refines y is
+    @@ text @@
+  requirement
+
+  requirement y refines z is
+    @@ text @@
+  requirement
+package

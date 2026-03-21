@@ -15,7 +15,7 @@ package A
   @@
   requirement
 
-  requirement R2 refines R1 refines R2 is
+  requirement R2 refines R1 refines R0 is
   @@
   Some tests 2
   @@

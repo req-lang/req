@@ -1,0 +1,5 @@
+package p
+  requirement x is
+    @@ text @@
+  requirement
+package

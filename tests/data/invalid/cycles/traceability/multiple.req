@@ -1,0 +1,17 @@
+package p
+  requirement a refines b is
+    @@ text @@
+  requirement
+
+  requirement b refines a is
+    @@ text @@
+  requirement
+
+  requirement c refines d is
+    @@ text @@
+  requirement
+
+  requirement d refines c is
+    @@ text @@
+  requirement
+package

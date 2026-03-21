@@ -53,6 +53,8 @@ pub enum DiagnosticKind {
     NotAnAttribute(Reference),
     #[error("Not a set: {0}")]
     NotASet(TypeKind),
+    #[error("Circular traceability")]
+    CircularTrace(Vec<Path>),
 }
 
 impl PartialOrd for DiagnosticKind {
@@ -91,6 +93,7 @@ impl From<&DiagnosticKind> for DiagnosticSeverity {
             UnexpectedType(_, _) => Critical,
             NotAnAttribute(_) => Critical,
             NotASet(_) => Critical,
+            CircularTrace(_) => Severe,
         }
     }
 }

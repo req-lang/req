@@ -33,7 +33,10 @@ use verifier::{
 };
 use visitor::Walk;
 
-use crate::mapper::tags::{self, TagMap};
+use crate::{
+    mapper::tags::{self, TagMap},
+    verifier::cycles,
+};
 
 pub mod children;
 pub mod diagnostic;
@@ -83,6 +86,9 @@ impl From<&Entity> for Analysis {
         let mut mapper = traceability::Mapper::new(&references);
         let _ = mapper.walk(root);
         let traceabilities = mapper.map;
+
+        let verifier = cycles::traceability::Verifier::new(&traceabilities, &paths);
+        diagnostics.extend(Vec::from(verifier));
 
         let mut mapper = usage::Mapper::new(&references);
         let _ = mapper.walk(root);
