@@ -79,10 +79,14 @@ pub enum IssueKind {
     Unused,
     #[error("Unrestricted entity")]
     Unrestricted,
+    #[error("Uncommented entity")]
+    Uncommented,
     #[error("Expected the attribute to be typed")]
     UntypedAttribute,
     #[error("Units are expected only for numerical attributes")]
     UnexpectedUnit,
+    #[error("Unexpected attribute")]
+    UnexpectedAttribute(Path),
 }
 
 impl PartialOrd for IssueKind {
@@ -123,6 +127,7 @@ impl From<&IssueKind> for IssueSeverity {
             NotAnAttribute(_) => Critical,
             NotARequirement(_) => Critical,
             NotPartOrAttribute(_) => Critical,
+            UnexpectedAttribute(_) => Critical,
             UnexpectedUnit => Critical,
             NotASet(_) => Critical,
             CircularTrace(_) => Severe,
@@ -135,6 +140,7 @@ impl From<&IssueKind> for IssueSeverity {
             NoDerivedAllocation(_) => Moderate,
             Unrestricted => Moderate,
             Unused => Light,
+            Uncommented => Light,
             MissingDerivation => Light,
         }
     }

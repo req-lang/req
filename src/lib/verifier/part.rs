@@ -39,6 +39,10 @@ impl Visitor<&Entity> for Verifier<'_> {
                 issues.push(Unrestricted);
             }
 
+            if let None = node.meta.comment {
+                issues.push(Uncommented);
+            }
+
             let iss = issues.into_iter().map(|i| Issue::new(node.id, i));
             self.issues.extend(iss);
         }

@@ -32,6 +32,10 @@ impl Visitor<&Entity> for Verifier<'_> {
                 issues.push(Unrestricted);
             }
 
+            if let None = node.meta.comment {
+                issues.push(Uncommented);
+            }
+
             match self.types.get(&attribute.domain.id) {
                 Some(TypeKind::Set(typ)) => {
                     let mut inner = *typ.clone();

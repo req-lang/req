@@ -117,6 +117,10 @@ impl From<&Entity> for Analysis {
         let _ = verifier.walk(root);
         diagnostics.extend(verifier.issues);
 
+        let mut verifier = verifier::package::Verifier::new(&paths);
+        let _ = verifier.walk(root);
+        diagnostics.extend(verifier.issues);
+
         let mut mapper = tags::Mapper::default();
         let _ = mapper.walk(root);
         let tags = mapper.map;
