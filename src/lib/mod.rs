@@ -21,7 +21,7 @@ use mapper::{
     ancestors::{self, AncestorsMap},
     id,
     path::{self, PathMap},
-    requirement::ForwardMap,
+    requirement::TraceabilityMap,
 };
 use serde_derive::Serialize;
 use syntax::entity::Entity;
@@ -59,7 +59,7 @@ pub struct Analysis {
     pub ancestors: AncestorsMap,
     pub references: ReferenceMap,
     pub types: TypeMap,
-    pub traceabilities: ForwardMap,
+    pub traceabilities: TraceabilityMap,
     pub usages: UsageMap,
     pub tags: TagMap,
     pub diagnostics: Vec<Issue>,
@@ -100,6 +100,7 @@ impl From<&Entity> for Analysis {
             &requirement_map,
             &cycles,
             &types,
+            &ancestors,
         );
         let _ = verifier.walk(root);
         diagnostics.extend(verifier.issues);

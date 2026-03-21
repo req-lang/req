@@ -63,6 +63,18 @@ pub enum IssueKind {
     NotPartOrAttribute(Path),
     #[error("Requirement is missing a constraint")]
     MissingRequirementBinding,
+    #[error("Expected specialization to constraint the same entity")]
+    SpecializationMismatch,
+    #[error("Expected refinement to constraint a children entity")]
+    RefinementMismatch,
+    #[error("Expected derivation to constraint the backward allocated entity")]
+    DerivationMismatch,
+    #[error("Expected allocation in the derived requirement")]
+    NoDerivedAllocation,
+    #[error("Allocation of an entity without a deriving requirement")]
+    MissingDerivation,
+    #[error("Expected different entities in allocation and constraint")]
+    SameAllocationAndConstraint,
 }
 
 impl PartialOrd for IssueKind {
@@ -105,7 +117,13 @@ impl From<&IssueKind> for IssueSeverity {
             NotPartOrAttribute(_) => Critical,
             NotASet(_) => Critical,
             CircularTrace(_) => Severe,
+            SameAllocationAndConstraint => Severe,
             MissingRequirementBinding => Severe,
+            SpecializationMismatch => Severe,
+            RefinementMismatch => Severe,
+            DerivationMismatch => Severe,
+            NoDerivedAllocation => Moderate,
+            MissingDerivation => Light,
         }
     }
 }

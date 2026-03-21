@@ -13,8 +13,7 @@ use crate::{
     visitor::{Visitor, Walk, WalkPre},
 };
 
-pub type BackwardMap = HashMap<NodeId, NodeId>;
-pub type ForwardMap = HashMap<NodeId, Vec<NodeId>>;
+pub type TraceabilityMap = HashMap<NodeId, Vec<NodeId>>;
 pub type ConstraintMap = HashMap<NodeId, NodeId>;
 pub type AllocationMap = HashMap<NodeId, NodeId>;
 pub type UsageMap = HashMap<NodeId, HashSet<NodeId>>;
@@ -23,8 +22,8 @@ pub type UsageMap = HashMap<NodeId, HashSet<NodeId>>;
 pub struct RequirementMap {
     pub on: ConstraintMap,
     pub via: AllocationMap,
-    pub forward: ForwardMap,
-    pub backward: BackwardMap,
+    pub forward: TraceabilityMap,
+    pub backward: TraceabilityMap,
     pub usages: UsageMap,
 }
 
@@ -48,7 +47,7 @@ impl Visitor<&Entity> for Mapper<'_> {
                 }
             }
 
-            if let Some(allocated) = &requirement.constrained {
+            if let Some(allocated) = &requirement.allocated {
                 if let Some(reference) = self.references.get(&allocated.rid) {
                     self.map.via.insert(node.id, *reference);
                 }
@@ -58,7 +57,14 @@ impl Visitor<&Entity> for Mapper<'_> {
                 if let Some(reference) = self.references.get(&traceability.target.rid) {
                     let source = *reference;
 
-                    self.map.backward.insert(node.id, source);
+                    match self.map.backward.get_mut(reference) {
+                        Some(traces) => {
+                            traces.push(source);
+                        }
+                        None => {
+                            self.map.backward.insert(node.id, vec![source]);
+                        }
+                    }
 
                     match self.map.forward.get_mut(reference) {
                         Some(traces) => {

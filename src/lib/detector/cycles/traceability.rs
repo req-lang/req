@@ -1,9 +1,9 @@
 use std::collections::HashSet;
 
-use crate::{mapper::requirement::ForwardMap, syntax::NodeId};
+use crate::{mapper::requirement::TraceabilityMap, syntax::NodeId};
 
 pub struct Detector<'a> {
-    forward: &'a ForwardMap,
+    forward: &'a TraceabilityMap,
     in_path: HashSet<NodeId>,
     path: Vec<NodeId>,
     visited: HashSet<NodeId>,
@@ -11,7 +11,7 @@ pub struct Detector<'a> {
 }
 
 impl<'a> Detector<'a> {
-    pub fn new(forward: &'a ForwardMap) -> Self {
+    pub fn new(forward: &'a TraceabilityMap) -> Self {
         Self {
             forward,
             path: Vec::new(),

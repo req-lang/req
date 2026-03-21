@@ -2,10 +2,10 @@ use std::ops::ControlFlow;
 
 use crate::{
     diagnostic::{Issue, IssueKind},
-    mapper::{id::NodeMap, path::PathMap, requirement::RequirementMap},
+    mapper::{ancestors::AncestorsMap, id::NodeMap, path::PathMap, requirement::RequirementMap},
     syntax::{
         NodeId,
-        entity::{Entity, EntityVariant, RequirementVariant},
+        entity::{Entity, EntityVariant, RequirementVariant, TraceabilityKind},
     },
     verifier::typing::{TypeKind, TypeMap},
     visitor::{Visitor, WalkPre},
@@ -17,6 +17,7 @@ pub struct Verifier<'a> {
     map: &'a RequirementMap,
     cycles: &'a Vec<Vec<NodeId>>,
     types: &'a TypeMap,
+    ancestors: &'a AncestorsMap,
     pub issues: Vec<Issue>,
 }
 
@@ -50,6 +51,35 @@ impl Visitor<&Entity> for Verifier<'_> {
                 },
             }
 
+            if let Some(vid) = self.map.via.get(&node.id) {
+                match self.nodes_by_id.entities.get(vid).unwrap().variant {
+                    Part(_) | Attribute(_) => {}
+                    _ => issues.push(NotPartOrAttribute(self.paths.get(vid).unwrap().clone())),
+                };
+
+                match self.map.forward.get(&node.id) {
+                    Some(fids) => {
+                        let derived = fids.iter().find(|fid| {
+                            let forward = self.nodes_by_id.entities.get(*fid).unwrap();
+                            match self.map.on.get(&forward.id) {
+                                Some(oid) => oid == vid,
+                                None => false,
+                            }
+                        });
+                        if derived.is_none() {
+                            issues.push(MissingDerivation);
+                        }
+                    }
+                    None => issues.push(MissingDerivation),
+                }
+
+                if let Some(oid) = self.map.on.get(&node.id)
+                    && oid == vid
+                {
+                    issues.push(SameAllocationAndConstraint);
+                }
+            }
+
             for cycle in self.cycles {
                 if cycle.contains(&node.id) {
                     let path = cycle.iter().map(|n| self.paths.get(n).unwrap().clone());
@@ -57,10 +87,33 @@ impl Visitor<&Entity> for Verifier<'_> {
                 }
             }
 
-            if let Some(id) = self.map.backward.get(&node.id) {
-                match self.nodes_by_id.entities.get(id).unwrap().variant {
-                    Requirement(_) => {}
-                    _ => issues.push(NotARequirement(self.paths.get(id).unwrap().clone())),
+            if let Some(ids) = self.map.backward.get(&node.id) {
+                use TraceabilityKind::*;
+
+                for (id, trace) in ids.iter().zip(&requirement.traceability) {
+                    let back = self.nodes_by_id.entities.get(id).unwrap();
+                    match back.variant {
+                        Requirement(_) => {}
+                        _ => issues.push(NotARequirement(self.paths.get(id).unwrap().clone())),
+                    }
+
+                    match (self.map.on.get(&node.id), self.map.on.get(&back.id)) {
+                        (Some(nid), Some(bid)) => match &trace.kind {
+                            Specialization if nid != bid => {
+                                issues.push(SpecializationMismatch);
+                            }
+                            Refinement if !self.ancestors.get(nid).unwrap().contains(bid) => {
+                                issues.push(RefinementMismatch);
+                            }
+                            Derivation => match self.map.via.get(&back.id) {
+                                Some(vid) if vid != nid => issues.push(DerivationMismatch),
+                                None => issues.push(NoDerivedAllocation),
+                                _ => {}
+                            },
+                            _ => {}
+                        },
+                        _ => {}
+                    }
                 }
             }
 
@@ -78,6 +131,7 @@ impl<'a> Verifier<'a> {
         map: &'a RequirementMap,
         cycles: &'a Vec<Vec<NodeId>>,
         types: &'a TypeMap,
+        ancestors: &'a AncestorsMap,
     ) -> Self {
         Self {
             nodes_by_id,
@@ -85,6 +139,7 @@ impl<'a> Verifier<'a> {
             map,
             cycles,
             types,
+            ancestors,
             issues: Vec::new(),
         }
     }
