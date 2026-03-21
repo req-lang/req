@@ -21,8 +21,7 @@ use mapper::{
     ancestors::{self, AncestorsMap},
     id,
     path::{self, PathMap},
-    traceability::{self, TraceabilityMap},
-    usage::{self, UsageMap},
+    requirement::{self, ForwardMap},
 };
 use serde_derive::Serialize;
 use syntax::entity::Entity;
@@ -34,11 +33,15 @@ use verifier::{
 use visitor::Walk;
 
 use crate::{
-    mapper::tags::{self, TagMap},
-    verifier::cycles,
+    detector::cycles,
+    mapper::{
+        requirement::UsageMap,
+        tags::{self, TagMap},
+    },
 };
 
 pub mod children;
+pub mod detector;
 pub mod diagnostic;
 pub mod iter;
 pub mod mapper;
@@ -56,7 +59,7 @@ pub struct Analysis {
     pub ancestors: AncestorsMap,
     pub references: ReferenceMap,
     pub types: TypeMap,
-    pub traceabilities: TraceabilityMap,
+    pub traceabilities: ForwardMap,
     pub usages: UsageMap,
     pub tags: TagMap,
     pub diagnostics: Vec<Diagnostic>,
@@ -83,16 +86,14 @@ impl From<&Entity> for Analysis {
         let (types, errs) = verifier.results.into_iter().map(ResultErr).collect();
         diagnostics.extend(errs);
 
-        let mut mapper = traceability::Mapper::new(&references);
+        let mut mapper = requirement::Mapper::new(&references);
         let _ = mapper.walk(root);
-        let traceabilities = mapper.map;
+        let traceabilities = mapper.map.forward;
+        let usages = mapper.map.usages;
 
-        let verifier = cycles::traceability::Verifier::new(&traceabilities, &paths);
-        diagnostics.extend(Vec::from(verifier));
-
-        let mut mapper = usage::Mapper::new(&references);
-        let _ = mapper.walk(root);
-        let usages = mapper.map;
+        let mut detector = cycles::traceability::Detector::new(&traceabilities);
+        detector.detect();
+        let trace_cycles = detector.cycles;
 
         let mut mapper = tags::Mapper::default();
         let _ = mapper.walk(root);
