@@ -1,7 +1,10 @@
 package A
+  @@ System block @@
   part B
+    @@ Discrete value x @@
     let x in {0,1,2} union {0,3,4} complement {256}
-    let y in {2,3,4} intersection {55,56,57} difference {123} 
+    @@ Discrete value y @@
+    let y in {2,3,4} intersection {55,56,57} difference {123}
   part
 
   requirement R1 on B is

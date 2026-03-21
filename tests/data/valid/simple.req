@@ -1,5 +1,7 @@
 package A
+  @@ System block @@
   part B
+    @@ Power draw @@
     let x in real [W]
   part
 

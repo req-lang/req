@@ -1,7 +1,11 @@
 package A
+  @@ Top-level system @@
   part X
+    @@ Subsystem X1 @@
     part X1
+      @@ Sub-subsystem X2 @@
       part X2
+        @@ State flag @@
         let x in boolean
       part
     part
@@ -25,7 +29,7 @@ package A
 
   requirement R3 on X::X1::X2::x refines R1 refines R2 is
   @@
-  Some tests 2
+  Some tests on {X::X1::X2::x}
   @@
   requirement
 

@@ -1,11 +1,14 @@
 package A
+  @@ System block @@
   part B
+    @@ Upper bound @@
     let x in real [W]
-    let y in integer [W] 
+    @@ Lower bound @@
+    let y in integer [W]
   part
 
   requirement R1 on B is
-    exists s in real such that s > 10 
+    exists s in real such that s > B::y and s < B::x
     end
   requirement
 

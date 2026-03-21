@@ -1,11 +1,11 @@
-use std::{collections::HashSet, ops::ControlFlow};
+use std::{collections::HashMap, ops::ControlFlow};
 
 use crate::{
     diagnostic::{Issue, IssueKind},
     mapper::{ancestors::AncestorsMap, id::NodeMap, path::PathMap, requirement::RequirementMap},
     syntax::{
         NodeId,
-        entity::{Entity, EntityVariant, RequirementVariant, TraceabilityKind},
+        entity::{Entity, EntityVariant, RequirementVariant, TraceabilityKind, TraceabilityLink},
     },
     verifier::typing::{TypeKind, TypeMap},
     visitor::{Visitor, WalkPre},
@@ -91,7 +91,19 @@ impl Visitor<&Entity> for Verifier<'_> {
             if let Some(ids) = self.map.backward.get(&node.id) {
                 use TraceabilityKind::*;
 
+                let mut seen: HashMap<&NodeId, &TraceabilityLink> = HashMap::new();
                 for (id, trace) in ids.iter().zip(&requirement.traceability) {
+                    let path = self.paths.get(id).unwrap();
+                    match seen.get(id) {
+                        Some(first) => match &first.kind {
+                            k if *k == trace.kind => issues.push(DuplicatedTrace(path.clone())),
+                            _ => issues.push(ConflictingTrace(path.clone())),
+                        },
+                        None => {
+                            seen.insert(id, trace);
+                        }
+                    }
+
                     let back = self.nodes_by_id.entities.get(id).unwrap();
                     let bpath = self.paths.get(id).unwrap();
                     match back.variant {

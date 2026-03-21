@@ -1,7 +1,10 @@
 package A
+  @@ System block @@
   part B
+    @@ Continuous signal @@
     let x in real [W]
-    let y in integer [W] 
+    @@ Discrete signal @@
+    let y in integer [W]
   part
 
   requirement R1 on B is
@@ -24,7 +27,7 @@ package A
   requirement
 
   requirement R4 on B is
-    when 
+    when
       B::x > 0 then B::y > 0,
       B::y > 0 then B::y > 0,
       otherwise B::x > 0

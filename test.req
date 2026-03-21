@@ -16,7 +16,7 @@ package System
     not Data::x
   requirement
 
-  requirement R2 on Fonctional derives R1 via Physical is
+  requirement R2 on Fonctional derives R1 derives R1 via Physical is
     Data::y
   requirement
 

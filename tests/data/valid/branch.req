@@ -1,7 +1,10 @@
 package A
+  @@ System block @@
   part B
+    @@ Power draw @@
     let x in real [W]
-    let y in integer [W] 
+    @@ Sample count @@
+    let y in integer [W]
   part
 
   requirement R1 on B is

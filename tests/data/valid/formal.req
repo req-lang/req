@@ -1,6 +1,9 @@
 package A
+  @@ System block @@
   part B
+    @@ Power draw @@
     let x in real [W]
+    @@ Status flag @@
     let y in boolean
   part
 

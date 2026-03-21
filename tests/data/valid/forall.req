@@ -1,12 +1,15 @@
 package A
+  @@ System block @@
   part B
+    @@ Upper bound @@
     let x in real [W]
-    let y in integer [W] 
+    @@ Offset @@
+    let y in integer [W]
   part
 
   requirement R1 on B is
-    forall s in real such that s > 10 
-      s < B::x
+    forall s in real such that s > 10
+      s < B::x + B::y
     end
   requirement
 

@@ -1,28 +1,31 @@
 package A
+  @@ System block @@
   part B
+    @@ Upper bound @@
     let x in real [W]
-    let y in integer [W] 
+    @@ Offset @@
+    let y in integer [W]
   part
 
   requirement R1 on B is
     (select s in real such that s > 10
       maximize  1 / s
-    end) < 10
+    end) < B::x
   requirement
 
   requirement R2 on B is
     (select s in real such that s > 10
-    end) > 10
+    end) > B::y
   requirement
 
   requirement R3 on B is
     (select s in real
-    end) > 10
+    end) > 0
   requirement
 
   requirement R4 on B is
     (select s in real
       maximize s ^ 2
-    end) > 48
+    end) > 0
   requirement
 package

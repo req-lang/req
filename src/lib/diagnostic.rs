@@ -39,7 +39,7 @@ pub struct IssueHint(pub String);
 #[cfg_attr(feature = "ts", ts(export))]
 #[serde(rename_all = "snake_case", tag = "type", content = "value")]
 pub enum IssueKind {
-    #[error("Import not found: {0}")]
+    #[error("Import not found at {0}")]
     ImportNotFound(Path),
     #[error("Reference not found: {0}")]
     ReferenceNotFound(Reference),
@@ -49,17 +49,17 @@ pub enum IssueKind {
     RedefinedEntity(Path),
     #[error("Expected {0} got {1}")]
     UnexpectedType(TypeKind, TypeKind),
-    #[error("Requiring type to be: {0}")]
+    #[error("Requiring type to be a {0}")]
     MissingType(TypeKind),
-    #[error("Expected an attribute: {0}")]
+    #[error("Expected an attribute at {0}")]
     NotAnAttribute(Reference),
-    #[error("Expected a requirement: {0}")]
+    #[error("Expected a requirement at {0}")]
     NotARequirement(Path),
     #[error("Expected a set got {0}")]
     NotASet(TypeKind),
     #[error("Circular traceability")]
     CircularTrace(Vec<Path>),
-    #[error("Part or attribute expected: {0}")]
+    #[error("Part or attribute expected at {0}")]
     NotPartOrAttribute(Path),
     #[error("Requirement is missing a constraint")]
     MissingRequirementBinding,
@@ -73,7 +73,11 @@ pub enum IssueKind {
     NoDerivedAllocation(Path),
     #[error("Allocation of an entity without a deriving requirement")]
     MissingDerivation,
-    #[error("Expected different entities in allocation and constraint")]
+    #[error("Same traceability link to {0} is featured multiple times")]
+    DuplicatedTrace(Path),
+    #[error("Different traceability link for the same target {0}")]
+    ConflictingTrace(Path),
+    #[error("Tracebility link is duplicated")]
     SameAllocationAndConstraint,
     #[error("Unused entity")]
     Unused,
@@ -85,7 +89,7 @@ pub enum IssueKind {
     UntypedAttribute,
     #[error("Units are expected only for numerical attributes")]
     UnexpectedUnit,
-    #[error("Unexpected attribute")]
+    #[error("Unexpected attribute at {0}")]
     UnexpectedAttribute(Path),
 }
 
@@ -130,12 +134,14 @@ impl From<&IssueKind> for IssueSeverity {
             UnexpectedAttribute(_) => Critical,
             UnexpectedUnit => Critical,
             NotASet(_) => Critical,
+            ConflictingTrace(_) => Severe,
             CircularTrace(_) => Severe,
             SameAllocationAndConstraint => Severe,
             MissingRequirementBinding => Severe,
             SpecializationMismatch(_) => Severe,
             RefinementMismatch(_) => Severe,
             DerivationMismatch(_) => Severe,
+            DuplicatedTrace(_) => Moderate,
             UntypedAttribute => Moderate,
             NoDerivedAllocation(_) => Moderate,
             Unrestricted => Moderate,

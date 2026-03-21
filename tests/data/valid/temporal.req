@@ -1,6 +1,9 @@
 package A
+  @@ System block @@
   part B
+    @@ Flag x @@
     let x in boolean
+    @@ Flag y @@
     let y in boolean
   part
 
