@@ -147,6 +147,8 @@ impl Entity {
             }
 
             EntityVariant::Requirement(requirement) => {
+                ret.extend(requirement.constrained.iter());
+                ret.extend(requirement.allocated.iter());
                 ret.extend(requirement.traceability.iter().map(|t| &t.target));
             }
 
@@ -169,6 +171,8 @@ impl Entity {
             }
 
             EntityVariant::Requirement(requirement) => {
+                ret.extend(requirement.constrained.iter_mut());
+                ret.extend(requirement.allocated.iter_mut());
                 ret.extend(requirement.traceability.iter_mut().map(|t| &mut t.target));
             }
             _ => {}
@@ -319,15 +323,19 @@ impl Package {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "ts", ts(export))]
 pub struct Requirement {
+    pub constrained: Option<Reference>,
+    pub allocated: Option<Reference>,
     pub traceability: Vec<TraceabilityLink>,
     pub variant: RequirementVariant,
 }
 
 impl Requirement {
-    pub fn new(variant: RequirementVariant) -> Self {
+    pub fn new() -> Self {
         Requirement {
+            constrained: None,
+            allocated: None,
             traceability: Vec::new(),
-            variant,
+            variant: RequirementVariant::Informal(markup::Markup::default()),
         }
     }
 
@@ -363,6 +371,17 @@ pub enum TraceabilityKind {
     Specialization,
     Refinement,
     Derivation,
+}
+
+impl TraceabilityKind {
+    pub fn is_traceability_keyword(value: &Keyword) -> bool {
+        match value {
+            Keyword::Refines => true,
+            Keyword::Specializes => true,
+            Keyword::Derives => true,
+            _ => false,
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]

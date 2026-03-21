@@ -5,7 +5,7 @@ use crate::{
         entity::{
             self, Attribute, Entity, EntityMeta, EntityVariant, Package, Part, Reference,
             Requirement, TraceabilityKind, TraceabilityLink,
-            tokenizer::{Keyword, TokenIterator, TokenVariant},
+            tokenizer::{Keyword, TokenIterator, TokenVariant, try_consume_identifier},
         },
         error::Error,
     },
@@ -167,25 +167,19 @@ impl<'a> Walk<&mut Peekable<TokenIterator<'a>>, Error, Entity> for NodeParser<'a
             }
 
             match token.variant {
-                Reserved(Import) => {
-                    let token = tokens
-                        .next()
-                        .continue_or_else(|| Error::unterminated(&token))?;
-
-                    match token.variant {
-                        Identifier(ident) => {
-                            let id = node.id;
-                            let imports = node.imports_mut().unwrap();
-                            let rid = ReferenceId::new();
-                            imports.push(Reference::new(id, rid, ident.to_string()));
-                        }
-
-                        _ => {
-                            let error = Error::from_token(&token, MissingIdentifier);
-                            self.errors.push(error);
-                        }
+                Reserved(Import) => match try_consume_identifier(tokens) {
+                    Ok(ident) => {
+                        let id = node.id;
+                        let imports = node.imports_mut().unwrap();
+                        let rid = ReferenceId::new();
+                        imports.push(Reference::new(id, rid, ident.0.to_string()));
                     }
-                }
+
+                    _ => {
+                        let error = Error::from_token(&token, MissingIdentifier);
+                        self.errors.push(error);
+                    }
+                },
 
                 Reserved(ref keyword) => match State::try_from(keyword.clone()) {
                     Ok(state) => {
@@ -231,6 +225,7 @@ impl Visitor<&mut Peekable<TokenIterator<'_>>, Error, Entity> for NodeParser<'_>
     type WalkKind = WalkCustom;
 
     fn visit(&mut self, tokens: &mut Peekable<TokenIterator<'_>>) -> ControlFlow<Error, Entity> {
+        use ControlFlow::*;
         use ErrorKind::*;
         use TokenVariant::*;
 
@@ -243,20 +238,11 @@ impl Visitor<&mut Peekable<TokenIterator<'_>>, Error, Entity> for NodeParser<'_>
             .collect();
         entity.comment = std::mem::take(&mut self.last_comment);
 
-        let token = tokens.next().continue_or_else(|| Error::empty())?;
-        match token.variant {
-            Identifier(l) => {
-                if l.contains("::") {
-                    let error = Error::from_token(&token, BadIdentifier);
-                    return ControlFlow::Break(error);
-                }
-                entity.label = l.to_string();
-            }
-
-            _ => {
-                let error = Error::from_token(&token, MissingIdentifier);
-                return ControlFlow::Break(error);
-            }
+        match try_consume_identifier(tokens) {
+            Ok((l, span)) if l.contains("if") => Break(Error::from_span(span, BadIdentifier))?,
+            Ok(l) => entity.label = l.0.to_string(),
+            Err(Some(tok)) => Break(Error::from_token(&tok, MissingIdentifier))?,
+            Err(None) => Break(Error::empty())?,
         };
 
         let variant = match self.state {
@@ -271,9 +257,7 @@ impl Visitor<&mut Peekable<TokenIterator<'_>>, Error, Entity> for NodeParser<'_>
             }
 
             State::Attribute => {
-                let token = tokens
-                    .next()
-                    .continue_or_else(|| Error::unterminated(&token))?;
+                let token = tokens.next().continue_or_else(|| Error::empty())?;
                 let mut end;
                 let domain = match token.variant {
                     TokenVariant::Reserved(Keyword::In) => {
@@ -304,6 +288,7 @@ impl Visitor<&mut Peekable<TokenIterator<'_>>, Error, Entity> for NodeParser<'_>
                 let token = tokens
                     .peek()
                     .continue_or_else(|| Error::unterminated(&token))?;
+
                 attribute.unit = match token.variant {
                     TokenVariant::Unit(expr) => {
                         end = token.span.end;
@@ -321,47 +306,51 @@ impl Visitor<&mut Peekable<TokenIterator<'_>>, Error, Entity> for NodeParser<'_>
             }
 
             State::Requirement => {
-                let mut traces = Vec::new();
+                let mut requirement = Requirement::new();
                 while let Some(token) = tokens.next() {
+                    use ControlFlow::*;
+
                     match token.variant {
                         Reserved(Keyword::Is) => {
                             break;
                         }
 
-                        Reserved(ref k) => {
-                            let kind = TraceabilityKind::try_from(k).continue_or_else(|_| {
-                                Error::from_token(&token, UnexpectedKeyword)
-                            })?;
-
-                            let token = tokens
-                                .next()
-                                .continue_or_else(|| Error::unterminated(&token))?;
-
-                            let target = match token.variant {
-                                TokenVariant::Identifier(r) => {
-                                    let rid = ReferenceId::new();
-                                    Reference::new(id, rid, r.to_string())
-                                }
-                                _ => {
-                                    let error = Error::from_token(&token, MissingIdentifier);
-                                    return ControlFlow::Break(error);
-                                }
+                        Reserved(Keyword::On) => {
+                            requirement.constrained = match try_consume_identifier(tokens) {
+                                Ok(r) => Some(Reference::new(id, ReferenceId::new(), r.0.into())),
+                                Err(Some(tok)) => Break(Error::missing_id(&tok))?,
+                                Err(None) => Break(Error::unterminated(&token))?,
                             };
+                        }
 
-                            traces.push(TraceabilityLink::new(kind, target));
+                        Reserved(Keyword::Via) => {
+                            requirement.allocated = match try_consume_identifier(tokens) {
+                                Ok(r) => Some(Reference::new(id, ReferenceId::new(), r.0.into())),
+                                Err(Some(tok)) => Break(Error::missing_id(&tok))?,
+                                Err(None) => Break(Error::unterminated(&token))?,
+                            };
+                        }
+
+                        Reserved(ref k) if TraceabilityKind::is_traceability_keyword(&k) => {
+                            let kind = TraceabilityKind::try_from(k).unwrap();
+                            let target = match try_consume_identifier(tokens) {
+                                Ok(r) => Reference::new(id, ReferenceId::new(), r.0.into()),
+                                Err(Some(tok)) => Break(Error::missing_id(&tok))?,
+                                Err(None) => Break(Error::unterminated(&token))?,
+                            };
+                            let link = TraceabilityLink::new(kind, target);
+                            requirement.traceability.push(link);
                         }
 
                         _ => {
                             let error = Error::from_token(&token, IllFormedRequirement);
-                            return ControlFlow::Break(error);
+                            Break(error)?;
                         }
                     };
                 }
                 use RequirementVariant::*;
 
-                let token = tokens
-                    .next()
-                    .continue_or_else(|| Error::unterminated(&token))?;
+                let token = tokens.next().continue_or_else(|| Error::empty())?;
 
                 self.offset = token.span.start;
                 let end = token.span.end;
@@ -369,13 +358,11 @@ impl Visitor<&mut Peekable<TokenIterator<'_>>, Error, Entity> for NodeParser<'_>
                     Markup(expr) => Informal(self.parse_markup(expr.to_string(), end)),
                     Expression(expr) => Formal(self.parse_expr(expr)?),
                     _ => {
-                        eprintln!("{:?}", token);
                         let error = Error::from_token(&token, MissingExpression);
                         return ControlFlow::Break(error);
                     }
                 };
-                let mut requirement = Requirement::new(variant);
-                requirement.traceability = traces;
+                requirement.variant = variant;
 
                 EntityVariant::Requirement(requirement)
             }
@@ -390,12 +377,12 @@ impl Visitor<&mut Peekable<TokenIterator<'_>>, Error, Entity> for NodeParser<'_>
 #[cfg(test)]
 mod tests {
     use crate::{
-        children::ChildrenMut,
+        children::{Children, ChildrenMut},
         mock::generator::{self, Generate},
         renderer,
         syntax::{
             NodeId, ReferenceId,
-            entity::{Attribute, Entity, EntityVariant, Part, Reference},
+            entity::{Attribute, Entity, EntityVariant, Part, Reference, TraceabilityKind},
             expression,
         },
         visitor::Walk,
@@ -528,5 +515,101 @@ mod tests {
         assert_eq!(parser.errors.len(), 0);
         assert_eq!(actual.iter().count(), generator.size() as usize);
         assert_eq!(actual, expected);
+    }
+
+    fn get_requirement(input: &str) -> crate::syntax::entity::Requirement {
+        let mut parser = NodeParser::default();
+        let result = parser.parse(input).expect("parse failed");
+        assert_eq!(parser.errors.len(), 0);
+        let entity = result
+            .children()
+            .unwrap()
+            .iter()
+            .find(|e| matches!(&e.variant, EntityVariant::Requirement(_)))
+            .expect("no requirement found")
+            .clone();
+        match entity.variant {
+            EntityVariant::Requirement(r) => r,
+            _ => unreachable!(),
+        }
+    }
+
+    #[test]
+    fn parses_requirement_with_refinement_traceability() {
+        let req =
+            get_requirement("package p requirement x refines a is @@ text @@ requirement package");
+        assert_eq!(req.traceability.len(), 1);
+        assert_eq!(req.traceability[0].kind, TraceabilityKind::Refinement);
+        assert_eq!(req.traceability[0].target.value, "a");
+    }
+
+    #[test]
+    fn parses_requirement_with_specialization_traceability() {
+        let req = get_requirement(
+            "package p requirement x specializes b is @@ text @@ requirement package",
+        );
+        assert_eq!(req.traceability.len(), 1);
+        assert_eq!(req.traceability[0].kind, TraceabilityKind::Specialization);
+        assert_eq!(req.traceability[0].target.value, "b");
+    }
+
+    #[test]
+    fn parses_requirement_with_derivation_traceability() {
+        let req =
+            get_requirement("package p requirement x derives c is @@ text @@ requirement package");
+        assert_eq!(req.traceability.len(), 1);
+        assert_eq!(req.traceability[0].kind, TraceabilityKind::Derivation);
+        assert_eq!(req.traceability[0].target.value, "c");
+    }
+
+    #[test]
+    fn parses_requirement_with_multiple_traceability_links() {
+        let req = get_requirement(
+            "package p requirement x refines a specializes b derives c is @@ text @@ requirement package",
+        );
+        assert_eq!(req.traceability.len(), 3);
+        assert_eq!(req.traceability[0].kind, TraceabilityKind::Refinement);
+        assert_eq!(req.traceability[0].target.value, "a");
+        assert_eq!(req.traceability[1].kind, TraceabilityKind::Specialization);
+        assert_eq!(req.traceability[1].target.value, "b");
+        assert_eq!(req.traceability[2].kind, TraceabilityKind::Derivation);
+        assert_eq!(req.traceability[2].target.value, "c");
+    }
+
+    #[test]
+    fn parses_requirement_with_constraint() {
+        let req = get_requirement("package p requirement x on y is @@ text @@ requirement package");
+        assert_eq!(
+            req.constrained.as_ref().map(|r| r.value.as_str()),
+            Some("y")
+        );
+        assert!(req.traceability.is_empty());
+        assert!(req.allocated.is_none());
+    }
+
+    #[test]
+    fn parses_requirement_with_allocation() {
+        let req =
+            get_requirement("package p requirement x via z is @@ text @@ requirement package");
+        assert_eq!(req.allocated.as_ref().map(|r| r.value.as_str()), Some("z"));
+        assert!(req.traceability.is_empty());
+        assert!(req.constrained.is_none());
+    }
+
+    #[test]
+    fn parses_requirement_with_all_advanced_traceability() {
+        let req = get_requirement(
+            "package p requirement x on y via z refines a specializes b is @@ text @@ requirement package",
+        );
+        assert_eq!(
+            req.constrained.as_ref().map(|r| r.value.as_str()),
+            Some("y")
+        );
+        assert_eq!(req.allocated.as_ref().map(|r| r.value.as_str()), Some("z"));
+        assert_eq!(req.traceability.len(), 2);
+        assert_eq!(req.traceability[0].kind, TraceabilityKind::Refinement);
+        assert_eq!(req.traceability[0].target.value, "a");
+        assert_eq!(req.traceability[1].kind, TraceabilityKind::Specialization);
+        assert_eq!(req.traceability[1].target.value, "b");
     }
 }

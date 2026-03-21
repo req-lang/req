@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use pest;
 
-use super::{entity::tokenizer::Token, Span};
+use super::{Span, entity::tokenizer::Token};
 
 #[derive(Debug, Clone)]
 pub struct Error {
@@ -37,6 +37,14 @@ impl Error {
         }
     }
 
+    pub fn from_span(span: Span, kind: ErrorKind) -> Self {
+        Self {
+            span,
+            source: String::new(),
+            kind,
+        }
+    }
+
     pub fn empty() -> Self {
         Self {
             span: Span::default(),
@@ -50,6 +58,14 @@ impl Error {
             span: token.span,
             source: token.as_str().to_string(),
             kind: ErrorKind::Unterminated,
+        }
+    }
+
+    pub fn missing_id(token: &Token<'_>) -> Self {
+        Self {
+            span: token.span,
+            source: token.as_str().to_string(),
+            kind: ErrorKind::MissingIdentifier,
         }
     }
 }

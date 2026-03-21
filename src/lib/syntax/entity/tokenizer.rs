@@ -16,6 +16,8 @@ pub enum Keyword {
     Is,
     In,
     Let,
+    On,
+    Via,
 }
 
 impl<'a> TryFrom<Lexeme<'a>> for Keyword {
@@ -36,6 +38,8 @@ impl<'a> TryFrom<Lexeme<'a>> for Keyword {
                 "in" => Ok(In),
                 "is" => Ok(Is),
                 "let" => Ok(Let),
+                "on" => Ok(On),
+                "via" => Ok(Via),
                 w => Err(w),
             }
         } else {
@@ -57,6 +61,8 @@ impl Keyword {
             In => "in",
             Is => "is",
             Let => "let",
+            On => "on",
+            Via => "via",
         }
     }
 }
@@ -462,6 +468,16 @@ impl<'a> Iterator for TokenIterator<'a> {
     }
 }
 
+pub fn try_consume_identifier<'tok>(
+    tokens: &mut impl Iterator<Item = Token<'tok>>,
+) -> Result<(&'tok str, Span), Option<Token<'tok>>> {
+    let token = tokens.next().ok_or(None)?;
+    match token.variant {
+        TokenVariant::Identifier(identifier) => Ok((identifier, token.span)),
+        _ => Err(Some(token)),
+    }
+}
+
 pub trait IntoTokens<'a> {
     fn tokens(self) -> TokenIterator<'a>;
 }
@@ -605,6 +621,28 @@ mod tests {
                 TokenVariant::Reserved(Package),
                 TokenVariant::Identifier("x"),
                 TokenVariant::Reserved(Package)
+            ]
+        );
+    }
+
+    #[test]
+    fn tokenizes_traced_requirement() {
+        let input = "requirement a on y via z refines b is y = 1 requirement";
+        let tokens = input.char_indices().positioned().lexemes().tokens();
+        assert_eq!(
+            tokens.into_iter().map(|x| x.variant).collect::<Vec<_>>(),
+            [
+                TokenVariant::Reserved(Requirement),
+                TokenVariant::Identifier("a"),
+                TokenVariant::Reserved(On),
+                TokenVariant::Identifier("y"),
+                TokenVariant::Reserved(Via),
+                TokenVariant::Identifier("z"),
+                TokenVariant::Reserved(Refines),
+                TokenVariant::Identifier("b"),
+                TokenVariant::Reserved(Is),
+                TokenVariant::Expression("y = 1"),
+                TokenVariant::Reserved(Requirement)
             ]
         );
     }

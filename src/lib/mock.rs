@@ -95,8 +95,11 @@ pub mod generator {
                                 .join(" "),
                         ));
 
+                        let mut rq = Requirement::new();
+                        rq.variant = variant;
+
                         req.id = NodeId::new();
-                        req.variant = EntityVariant::Requirement(Requirement::new(variant));
+                        req.variant = EntityVariant::Requirement(rq);
                         req.meta.label = format!("requirement_{p}_{d}_{r}");
 
                         curr.children_mut().unwrap().push(req);
