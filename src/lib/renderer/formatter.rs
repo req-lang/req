@@ -96,6 +96,14 @@ impl Visitor<&entity::Entity> for Renderer {
             Requirement(requirement) => {
                 self.push_line(&format!("requirement {}", node.meta.label));
 
+                use entity::TraceabilityInhibitor::*;
+                match requirement.inhibitor {
+                    Some(Top) => self.push_line("top"),
+                    Some(Bottom) => self.push_line("bottom"),
+                    Some(Isolated) => self.push_line("top bottom"),
+                    None => {}
+                }
+
                 if let Some(constrained) = &requirement.restriction {
                     self.push_line(&format!("on {}", constrained));
                 }
