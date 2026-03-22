@@ -1,28 +1,27 @@
 package System
   part Data
     let x in boolean 
-    let y in  { undefined }
+    let y in  boolean 
   part
 
   part Fonctional 
-    let x in {{ 0 }} 
+    let x in boolean 
   part
 
   part Physical
     let x in real 
   part
 
-  requirement R1 on Data via Fonctional is
-    not Data::x
+  requirement R1 top on Data via Fonctional is
+    not Data::x and Data::y
   requirement
 
-  requirement R2 on Fonctional derives R1 derives R1 via Physical is
-    Data::y
+  requirement R2 on Fonctional derives R1 via Physical is
+    Fonctional::x
   requirement
 
 
-  requirement R3 on Physical derives R2 is
-    Data::y
+  requirement R3 bottom on Physical derives R2 is
+    Physical::x > 0
   requirement
-
 package

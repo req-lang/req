@@ -4,7 +4,7 @@ use crate::{
         NodeId, ReferenceId,
         entity::{
             self, Attribute, Entity, EntityMeta, EntityVariant, Package, Part, Reference,
-            Requirement, TraceabilityKind, TraceabilityLink,
+            Requirement, TraceabilityInhibitor, TraceabilityKind, TraceabilityLink,
             tokenizer::{Keyword, TokenIterator, TokenVariant, try_consume_identifier},
         },
         error::Error,
@@ -309,6 +309,7 @@ impl Visitor<&mut Peekable<TokenIterator<'_>>, Error, Entity> for NodeParser<'_>
                 let mut requirement = Requirement::new();
                 while let Some(token) = tokens.next() {
                     use ControlFlow::*;
+                    use TraceabilityInhibitor::*;
 
                     match token.variant {
                         Reserved(Keyword::Is) => {
@@ -330,6 +331,18 @@ impl Visitor<&mut Peekable<TokenIterator<'_>>, Error, Entity> for NodeParser<'_>
                                 Err(None) => Break(Error::unterminated(&token))?,
                             };
                         }
+
+                        Reserved(Keyword::Top) => match requirement.inhibitor {
+                            None => requirement.inhibitor = Some(Top),
+                            Some(Bottom) => requirement.inhibitor = Some(Isolated),
+                            _ => {}
+                        },
+
+                        Reserved(Keyword::Bottom) => match requirement.inhibitor {
+                            None => requirement.inhibitor = Some(Bottom),
+                            Some(Top) => requirement.inhibitor = Some(Isolated),
+                            _ => {}
+                        },
 
                         Reserved(ref k) if TraceabilityKind::is_traceability_keyword(&k) => {
                             let kind = TraceabilityKind::try_from(k).unwrap();

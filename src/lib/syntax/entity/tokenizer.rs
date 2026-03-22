@@ -18,6 +18,8 @@ pub enum Keyword {
     Let,
     On,
     Via,
+    Top,
+    Bottom,
 }
 
 impl<'a> TryFrom<Lexeme<'a>> for Keyword {
@@ -40,6 +42,8 @@ impl<'a> TryFrom<Lexeme<'a>> for Keyword {
                 "let" => Ok(Let),
                 "on" => Ok(On),
                 "via" => Ok(Via),
+                "top" => Ok(Top),
+                "bottom" => Ok(Bottom),
                 w => Err(w),
             }
         } else {
@@ -63,6 +67,8 @@ impl Keyword {
             Let => "let",
             On => "on",
             Via => "via",
+            Top => "top",
+            Bottom => "bottom",
         }
     }
 }

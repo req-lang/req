@@ -49,8 +49,6 @@ pub enum IssueKind {
     RedefinedEntity(Path),
     #[error("Expected {0} got {1}")]
     UnexpectedType(TypeKind, TypeKind),
-    #[error("Requiring type to be a {0}")]
-    MissingType(TypeKind),
     #[error("Expected an attribute at {0}")]
     NotAnAttribute(Reference),
     #[error("Expected a requirement at {0}")]
@@ -91,6 +89,14 @@ pub enum IssueKind {
     UnexpectedUnit,
     #[error("Unexpected attribute at {0}")]
     UnexpectedAttribute(Path),
+    #[error("Unexpected forward traceability")]
+    UnexpectedForwardTrace,
+    #[error("Unexpected backward traceability")]
+    UnexpectedBrackwardTrace,
+    #[error("Missing forward traceability")]
+    MissingForwardTrace,
+    #[error("Missing backward traceability")]
+    MissingBackwardTrace,
 }
 
 impl PartialOrd for IssueKind {
@@ -126,28 +132,34 @@ impl From<&IssueKind> for IssueSeverity {
             ReferenceNotFound(_) => Critical,
             AmbiguousReference(_) => Critical,
             RedefinedEntity(_) => Critical,
-            MissingType(_) => Critical,
             UnexpectedType(_, _) => Critical,
             NotAnAttribute(_) => Critical,
             NotARequirement(_) => Critical,
             NotPartOrAttribute(_) => Critical,
             UnexpectedAttribute(_) => Critical,
-            UnexpectedUnit => Critical,
             NotASet(_) => Critical,
+            MissingRequirementBinding => Critical,
+
             ConflictingTrace(_) => Severe,
             CircularTrace(_) => Severe,
-            SameAllocationAndConstraint => Severe,
-            MissingRequirementBinding => Severe,
             SpecializationMismatch(_) => Severe,
             RefinementMismatch(_) => Severe,
             DerivationMismatch(_) => Severe,
+
+            UnexpectedUnit => Moderate,
+            SameAllocationAndConstraint => Moderate,
+            UnexpectedForwardTrace => Moderate,
+            UnexpectedBrackwardTrace => Moderate,
             DuplicatedTrace(_) => Moderate,
             UntypedAttribute => Moderate,
             NoDerivedAllocation(_) => Moderate,
             Unrestricted => Moderate,
+
             Unused => Light,
             Uncommented => Light,
             MissingDerivation => Light,
+            MissingForwardTrace => Light,
+            MissingBackwardTrace => Light,
         }
     }
 }

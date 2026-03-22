@@ -5,7 +5,10 @@ use crate::{
     mapper::{ancestors::AncestorsMap, id::NodeMap, path::PathMap, requirement::RequirementMap},
     syntax::{
         NodeId,
-        entity::{Entity, EntityVariant, RequirementVariant, TraceabilityKind, TraceabilityLink},
+        entity::{
+            Entity, EntityVariant, RequirementVariant, TraceabilityInhibitor, TraceabilityKind,
+            TraceabilityLink,
+        },
     },
     verifier::typing::{TypeKind, TypeMap},
     visitor::{Visitor, WalkPre},
@@ -32,11 +35,12 @@ impl Visitor<&Entity> for Verifier<'_> {
 
         if let Requirement(requirement) = &node.variant {
             let mut issues = Vec::new();
+            let forward = self.map.forward.get(&node.id);
+            let backward = self.map.backward.get(&node.id);
 
             if let Formal(expr) = &requirement.variant {
                 let iss = match self.types.get(&expr.id) {
-                    Some(TypeKind::Boolean) => None,
-                    None => Some(MissingType(TypeKind::Boolean)),
+                    Some(TypeKind::Boolean) | None => None,
                     Some(t) => Some(UnexpectedType(TypeKind::Boolean, t.clone())),
                 };
 
@@ -85,6 +89,48 @@ impl Visitor<&Entity> for Verifier<'_> {
                 if cycle.contains(&node.id) {
                     let path = cycle.iter().map(|n| self.paths.get(n).unwrap().clone());
                     issues.push(CircularTrace(path.collect()));
+                }
+            }
+
+            match requirement.inhibitor {
+                None => {
+                    if let None = forward {
+                        issues.push(MissingForwardTrace)
+                    }
+
+                    if let None = backward {
+                        issues.push(MissingBackwardTrace)
+                    }
+                }
+
+                Some(TraceabilityInhibitor::Top) => {
+                    if let None = forward {
+                        issues.push(MissingForwardTrace)
+                    }
+
+                    if let Some(_) = backward {
+                        issues.push(UnexpectedBrackwardTrace)
+                    }
+                }
+
+                Some(TraceabilityInhibitor::Bottom) => {
+                    if let Some(_) = forward {
+                        issues.push(UnexpectedForwardTrace)
+                    }
+
+                    if let None = backward {
+                        issues.push(MissingBackwardTrace)
+                    }
+                }
+
+                Some(TraceabilityInhibitor::Isolated) => {
+                    if let Some(_) = forward {
+                        issues.push(UnexpectedForwardTrace)
+                    }
+
+                    if let Some(_) = backward {
+                        issues.push(UnexpectedBrackwardTrace)
+                    }
                 }
             }
 

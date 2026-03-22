@@ -326,6 +326,7 @@ pub struct Requirement {
     pub restriction: Option<Reference>,
     pub allocation: Option<Reference>,
     pub traceability: Vec<TraceabilityLink>,
+    pub inhibitor: Option<TraceabilityInhibitor>,
     pub variant: RequirementVariant,
 }
 
@@ -335,6 +336,7 @@ impl Requirement {
             restriction: None,
             allocation: None,
             traceability: Vec::new(),
+            inhibitor: None,
             variant: RequirementVariant::Informal(markup::Markup::default()),
         }
     }
@@ -361,6 +363,16 @@ impl Requirement {
 pub enum RequirementVariant {
     Formal(expression::Expression),
     Informal(markup::Markup),
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(export))]
+#[serde(rename_all = "snake_case")]
+pub enum TraceabilityInhibitor {
+    Top,
+    Bottom,
+    Isolated,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema)]
