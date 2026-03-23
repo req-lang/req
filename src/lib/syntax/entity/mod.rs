@@ -9,11 +9,13 @@ use std::{
 };
 use tokenizer::Keyword;
 
+pub const REFERENCE_SEPARATOR: &str = "::";
+
 pub mod parser;
 pub mod tokenizer;
 
 #[derive(Debug, Copy, Clone)]
-pub(crate) struct EntityKey<'a>(&'a Entity);
+pub(crate) struct EntityKey<'a>(pub &'a Entity);
 
 impl Hash for EntityKey<'_> {
     fn hash<H: Hasher>(&self, s: &mut H) {
@@ -430,18 +432,18 @@ impl Reference {
     }
 
     pub fn len(&self) -> usize {
-        self.value.split("::").count()
+        self.value.split(REFERENCE_SEPARATOR).count()
     }
 
     pub fn replace_label(&mut self, label: &str) {
-        match self.value.rfind("::") {
+        match self.value.rfind(REFERENCE_SEPARATOR) {
             Some(slice_idx) => self.value.replace_range(slice_idx.., label),
             None => self.value = label.to_string(),
         }
     }
 
     pub fn label(&self) -> &str {
-        match self.value.rfind("::") {
+        match self.value.rfind(REFERENCE_SEPARATOR) {
             Some(slice_idx) => &self.value[slice_idx + 2..],
             None => &self.value,
         }

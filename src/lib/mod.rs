@@ -22,7 +22,6 @@ use mapper::{
     id,
     path::{self, PathMap},
 };
-use serde::Serialize;
 use syntax::entity::Entity;
 use verifier::{
     definition::{self},
@@ -53,11 +52,11 @@ pub mod upsert;
 pub mod verifier;
 pub mod visitor;
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "ts", ts(export))]
-pub struct Analysis {
-    pub paths: PathMap,
+pub struct Analysis<'a> {
+    pub paths: PathMap<'a>,
     pub ancestors: AncestorsMap,
     pub references: ReferenceMap,
     pub types: TypeMap,
@@ -67,8 +66,8 @@ pub struct Analysis {
     pub diagnostics: Vec<Issue>,
 }
 
-impl From<&Entity> for Analysis {
-    fn from(root: &Entity) -> Self {
+impl<'a> From<&'a Entity> for Analysis<'a> {
+    fn from(root: &'a Entity) -> Self {
         let paths = path::PathMap::from(root);
         let nodes_by_id = id::NodeMap::from(root);
         let ancestors = ancestors::AncestorsMap::from(root);

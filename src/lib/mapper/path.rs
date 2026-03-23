@@ -2,21 +2,20 @@ use std::{collections::HashMap, fmt::Display, ops::ControlFlow};
 
 use serde::{Deserialize, Serialize};
 
-use crate::syntax::entity::Reference;
+use crate::syntax::entity::{Entity, EntityKey, REFERENCE_SEPARATOR, Reference};
 use crate::{
     children::Children,
-    syntax::{self, NodeId},
     visitor::{Visitor, Walk, WalkCustom},
 };
 
 #[derive(Default, Debug)]
-struct Mapper {
+struct Mapper<'a> {
     current: Vec<String>,
-    map: PathMap,
+    map: PathMap<'a>,
 }
 
-impl Walk<&syntax::entity::Entity> for Mapper {
-    fn walk(&mut self, node: &syntax::entity::Entity) -> ControlFlow<()> {
+impl<'a> Walk<&'a Entity> for Mapper<'a> {
+    fn walk(&mut self, node: &'a Entity) -> ControlFlow<()> {
         self.current.push(node.meta.label.clone());
         self.visit(node)?;
         if let Some(children) = node.children() {
@@ -29,25 +28,24 @@ impl Walk<&syntax::entity::Entity> for Mapper {
     }
 }
 
-impl Visitor<&syntax::entity::Entity> for Mapper {
+impl<'a> Visitor<&'a Entity> for Mapper<'a> {
     type WalkKind = WalkCustom;
 
-    fn visit(&mut self, node: &syntax::entity::Entity) -> ControlFlow<()> {
-        self.map.insert(node.id, (&self.current).into());
-
+    fn visit(&mut self, node: &'a Entity) -> ControlFlow<()> {
+        self.map.insert(EntityKey(node), (&self.current).into());
         ControlFlow::Continue(())
     }
 }
 
-impl From<&syntax::entity::Entity> for PathMap {
-    fn from(node: &syntax::entity::Entity) -> Self {
+impl<'a> From<&'a Entity> for PathMap<'a> {
+    fn from(node: &'a Entity) -> Self {
         let mut mapper = Mapper::default();
         let _ = mapper.walk(node);
         mapper.map
     }
 }
 
-pub type PathMap = HashMap<NodeId, Path>;
+pub type PathMap<'a> = HashMap<EntityKey<'a>, Path>;
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
@@ -70,7 +68,7 @@ impl PartialEq<str> for Path {
 
 impl From<&Vec<String>> for Path {
     fn from(labels: &Vec<String>) -> Self {
-        Path(labels.join("::"))
+        Path(labels.join(REFERENCE_SEPARATOR))
     }
 }
 
@@ -145,7 +143,7 @@ mod tests {
     #[test]
     fn merges_path_with_reference() {
         let path = Path("spec::sys".to_string());
-        let reference = Reference::new(0.into(), 0.into(), "sys::mass".to_string());
+        let reference = Reference::new("sys::mass".to_string());
         let result = path.merged(&reference.value);
         assert_eq!(result.raw(), "spec::sys::mass");
     }
@@ -153,7 +151,7 @@ mod tests {
     #[test]
     fn appends_path_with_reference() {
         let path = Path("spec::sys".to_string());
-        let reference = Reference::new(0.into(), 0.into(), "inner::mass".to_string());
+        let reference = Reference::new("inner::mass".to_string());
         let result = path.appended(&reference.value);
         assert_eq!(result.raw(), "spec::sys::inner::mass");
     }
