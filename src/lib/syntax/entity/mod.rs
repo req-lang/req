@@ -1,24 +1,37 @@
-use super::{NodeId, ReferenceId, expression, markup};
+use super::{expression, markup};
 use crate::{
     children::{Children, ChildrenIter, ChildrenIterMut, ChildrenMut, IntoChildren},
     iter::{NodeIter, UnsafeNodeIterMut},
 };
-use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
-use std::fmt::Display;
+use std::{
+    fmt::Display,
+    hash::{Hash, Hasher},
+};
 use tokenizer::Keyword;
 
 pub mod parser;
 pub mod tokenizer;
 
-#[derive(Serialize, Deserialize, Debug, Clone, Eq)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-#[cfg_attr(feature = "ts", ts(export))]
+#[derive(Debug, Copy, Clone)]
+pub(crate) struct EntityKey<'a>(&'a Entity);
+
+impl Hash for EntityKey<'_> {
+    fn hash<H: Hasher>(&self, s: &mut H) {
+        (self.0 as *const Entity as usize).hash(s);
+    }
+}
+
+impl PartialEq for EntityKey<'_> {
+    fn eq(&self, o: &Self) -> bool {
+        std::ptr::eq(self.0, o.0)
+    }
+}
+
+impl Eq for EntityKey<'_> {}
+
+#[derive(Debug, Clone, Eq)]
 pub struct Entity {
-    pub id: NodeId,
-    #[serde(flatten)]
     pub meta: EntityMeta,
-    #[serde(flatten)]
     pub variant: EntityVariant,
 }
 
@@ -31,7 +44,6 @@ impl PartialEq for Entity {
 impl Default for Entity {
     fn default() -> Self {
         Entity {
-            id: NodeId::default(),
             meta: EntityMeta::default(),
             variant: EntityVariant::Package(Package::default()),
         }
@@ -84,9 +96,8 @@ impl ChildrenIterMut for Entity {
 }
 
 impl Entity {
-    pub fn new(id: NodeId, entity: EntityMeta, variant: EntityVariant) -> Self {
+    pub fn new(entity: EntityMeta, variant: EntityVariant) -> Self {
         Entity {
-            id,
             meta: entity,
             variant,
         }
@@ -266,10 +277,7 @@ impl Entity {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-#[cfg_attr(feature = "ts", ts(export))]
-#[serde(rename_all = "camelCase", tag = "type")]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EntityVariant {
     Part(Part),
     Attribute(Attribute),
@@ -277,9 +285,7 @@ pub enum EntityVariant {
     Requirement(Requirement),
 }
 
-#[derive(Serialize, Deserialize, Default, Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-#[cfg_attr(feature = "ts", ts(export))]
+#[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub struct Part {
     pub imports: Vec<Reference>,
     pub children: Vec<Entity>,
@@ -291,9 +297,7 @@ impl Part {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-#[cfg_attr(feature = "ts", ts(export))]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Attribute {
     pub domain: expression::Expression,
     pub unit: Option<expression::Expression>,
@@ -305,9 +309,7 @@ impl Attribute {
     }
 }
 
-#[derive(Serialize, Deserialize, Default, Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-#[cfg_attr(feature = "ts", ts(export))]
+#[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub struct Package {
     pub imports: Vec<Reference>,
     pub children: Vec<Entity>,
@@ -319,9 +321,7 @@ impl Package {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-#[cfg_attr(feature = "ts", ts(export))]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Requirement {
     pub restriction: Option<Reference>,
     pub allocation: Option<Reference>,
@@ -368,29 +368,20 @@ impl Requirement {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-#[cfg_attr(feature = "ts", ts(export))]
-#[serde(rename_all = "snake_case", tag = "type", content = "value")]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RequirementVariant {
     Formal(expression::Expression),
     Informal(markup::Markup),
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-#[cfg_attr(feature = "ts", ts(export))]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TraceabilityInhibitor {
     Top,
     Bottom,
     Isolated,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-#[cfg_attr(feature = "ts", ts(export))]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TraceabilityKind {
     Specialization,
     Refinement,
@@ -408,11 +399,8 @@ impl TraceabilityKind {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-#[cfg_attr(feature = "ts", ts(export))]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TraceabilityLink {
-    #[serde(rename = "type")]
     pub kind: TraceabilityKind,
     pub target: Reference,
 }
@@ -436,12 +424,8 @@ impl<'a> TryFrom<&'a Keyword> for TraceabilityKind {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialOrd, Ord)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-#[cfg_attr(feature = "ts", ts(export))]
+#[derive(Debug, Clone, Eq, PartialOrd, Ord)]
 pub struct Reference {
-    pub id: NodeId,
-    pub rid: ReferenceId,
     pub value: String,
 }
 
@@ -458,8 +442,8 @@ impl PartialEq for Reference {
 }
 
 impl Reference {
-    pub fn new(id: NodeId, rid: ReferenceId, value: String) -> Self {
-        Reference { id, rid, value }
+    pub fn new(value: String) -> Self {
+        Reference { value }
     }
 
     pub fn len(&self) -> usize {
@@ -481,25 +465,21 @@ impl Reference {
     }
 }
 
-#[derive(Serialize, Deserialize, Default, Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-#[cfg_attr(feature = "ts", ts(export))]
+#[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub struct EntityMeta {
     pub label: String,
     pub tags: Vec<Tag>,
     pub comment: Option<markup::Markup>,
 }
 
-#[derive(Serialize, Deserialize, Default, Debug, Clone, PartialEq, Eq, JsonSchema)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-#[cfg_attr(feature = "ts", ts(export))]
+#[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub struct Tag {
-    pub id: String,
+    pub key: String,
     pub value: Option<String>,
 }
 
 impl Tag {
     pub fn new(id: String, value: Option<String>) -> Self {
-        Self { id, value }
+        Self { key: id, value }
     }
 }

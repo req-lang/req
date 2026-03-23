@@ -7,6 +7,8 @@ use std::{
 use error::Error;
 use serde::{Deserialize, Serialize};
 
+use crate::syntax::entity::EntityKey;
+
 pub mod entity;
 pub mod error;
 pub mod expression;
@@ -155,11 +157,24 @@ impl Context {
     }
 }
 
-pub type ContextMap = HashMap<NodeId, Context>;
+#[derive(Default, Debug, Clone)]
+pub struct SpanNode {
+    pub span: Span,
+    pub children: Vec<Span>,
+}
+
+impl From<Span> for SpanNode {
+    fn from(span: Span) -> Self {
+        Self {
+            span,
+            children: Vec::new(),
+        }
+    }
+}
 
 #[derive(Default, Debug)]
 pub struct NodeParser<'a> {
-    pub context: ContextMap,
+    pub spans: Vec<Span>,
     pub errors: Vec<Error>,
     last_comment: Option<markup::Markup>,
     last_tags: Vec<(&'a str, Option<&'a str>)>,

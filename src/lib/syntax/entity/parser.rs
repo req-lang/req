@@ -1,7 +1,6 @@
 use crate::{
     children::ChildrenMut,
     syntax::{
-        NodeId, ReferenceId,
         entity::{
             self, Attribute, Entity, EntityMeta, EntityVariant, Package, Part, Reference,
             Requirement, TraceabilityInhibitor, TraceabilityKind, TraceabilityLink,
@@ -11,7 +10,7 @@ use crate::{
     },
 };
 use crate::{
-    syntax::{Context, NodeParser, Span, entity::RequirementVariant, error::ErrorKind},
+    syntax::{NodeParser, Span, entity::RequirementVariant, error::ErrorKind},
     visitor::{Visitor, Walk, WalkCustom},
 };
 use std::{iter::Peekable, ops::ControlFlow};
@@ -127,7 +126,7 @@ impl<'a> Walk<&mut Peekable<TokenIterator<'a>>, Error, Entity> for NodeParser<'a
             match token.variant {
                 Reserved(keyword) if self.state == keyword => {
                     let span = Span::new(self.start, token.span.end);
-                    self.context.insert(node.id, Context::new(span));
+                    self.spans.push(span);
                     return ControlFlow::Continue(node);
                 }
 
@@ -144,14 +143,14 @@ impl<'a> Walk<&mut Peekable<TokenIterator<'a>>, Error, Entity> for NodeParser<'a
                     match tokens.peek() {
                         None => {
                             let span = Span::new(self.start, token.span.end);
-                            self.context.insert(node.id, Context::new(span));
+                            self.spans.push(span);
                             break;
                         }
 
                         Some(t) => match t.variant {
                             Reserved(_) | Markup(_) | Tag(_, _) => {
                                 let span = Span::new(self.start, token.span.end);
-                                self.context.insert(node.id, Context::new(span));
+                                self.spans.push(span);
                                 break;
                             }
 
@@ -168,11 +167,9 @@ impl<'a> Walk<&mut Peekable<TokenIterator<'a>>, Error, Entity> for NodeParser<'a
 
             match token.variant {
                 Reserved(Import) => match try_consume_identifier(tokens) {
-                    Ok(ident) => {
-                        let id = node.id;
+                    Ok((ident, _)) => {
                         let imports = node.imports_mut().unwrap();
-                        let rid = ReferenceId::new();
-                        imports.push(Reference::new(id, rid, ident.0.to_string()));
+                        imports.push(Reference::new(ident.to_string()));
                     }
 
                     _ => {
@@ -230,7 +227,6 @@ impl Visitor<&mut Peekable<TokenIterator<'_>>, Error, Entity> for NodeParser<'_>
         use TokenVariant::*;
 
         let mut entity = EntityMeta::default();
-        let id = NodeId::new();
         let tags = std::mem::take(&mut self.last_tags);
         entity.tags = tags
             .into_iter()
@@ -301,7 +297,7 @@ impl Visitor<&mut Peekable<TokenIterator<'_>>, Error, Entity> for NodeParser<'_>
                     _ => None,
                 };
                 let span = Span::new(self.start, end);
-                self.context.insert(id, Context::new(span));
+                self.spans.push(span);
                 EntityVariant::Attribute(attribute)
             }
 
@@ -318,7 +314,7 @@ impl Visitor<&mut Peekable<TokenIterator<'_>>, Error, Entity> for NodeParser<'_>
 
                         Reserved(Keyword::On) => {
                             requirement.restriction = match try_consume_identifier(tokens) {
-                                Ok(r) => Some(Reference::new(id, ReferenceId::new(), r.0.into())),
+                                Ok((r, _)) => Some(Reference::new(r.into())),
                                 Err(Some(tok)) => Break(Error::missing_id(&tok))?,
                                 Err(None) => Break(Error::unterminated(&token))?,
                             };
@@ -326,7 +322,7 @@ impl Visitor<&mut Peekable<TokenIterator<'_>>, Error, Entity> for NodeParser<'_>
 
                         Reserved(Keyword::Via) => {
                             requirement.allocation = match try_consume_identifier(tokens) {
-                                Ok(r) => Some(Reference::new(id, ReferenceId::new(), r.0.into())),
+                                Ok((r, _)) => Some(Reference::new(r.into())),
                                 Err(Some(tok)) => Break(Error::missing_id(&tok))?,
                                 Err(None) => Break(Error::unterminated(&token))?,
                             };
@@ -347,7 +343,7 @@ impl Visitor<&mut Peekable<TokenIterator<'_>>, Error, Entity> for NodeParser<'_>
                         Reserved(ref k) if TraceabilityKind::is_traceability_keyword(&k) => {
                             let kind = TraceabilityKind::try_from(k).unwrap();
                             let target = match try_consume_identifier(tokens) {
-                                Ok(r) => Reference::new(id, ReferenceId::new(), r.0.into()),
+                                Ok((r, _)) => Reference::new(r.into()),
                                 Err(Some(tok)) => Break(Error::missing_id(&tok))?,
                                 Err(None) => Break(Error::unterminated(&token))?,
                             };
@@ -383,7 +379,7 @@ impl Visitor<&mut Peekable<TokenIterator<'_>>, Error, Entity> for NodeParser<'_>
             _ => unreachable!(),
         };
 
-        ControlFlow::Continue(Entity::new(id, entity, variant))
+        ControlFlow::Continue(Entity::new(entity, variant))
     }
 }
 
@@ -394,7 +390,6 @@ mod tests {
         mock::generator::{self, Generate},
         renderer,
         syntax::{
-            NodeId, ReferenceId,
             entity::{Attribute, Entity, EntityVariant, Part, Reference, TraceabilityKind},
             expression,
         },
@@ -427,12 +422,12 @@ mod tests {
         expected.meta.label = "x".to_string();
 
         let mut expr = expression::Expression::default();
-        let reference = Reference::new(NodeId::new(), ReferenceId::new(), "real".to_string());
+        let reference = Reference::new("real".to_string());
         let id = expression::Identifier::new(reference);
         expr.variant = expression::ExpressionVariant::Identifier(id);
 
         let mut unit = expression::Expression::default();
-        let reference = Reference::new(NodeId::new(), ReferenceId::new(), "m".to_string());
+        let reference = Reference::new("m".to_string());
         let id = expression::Identifier::new(reference);
         unit.variant = expression::ExpressionVariant::Identifier(id);
 
@@ -443,7 +438,7 @@ mod tests {
         second.meta.label = "u".to_string();
 
         let mut expr = expression::Expression::default();
-        let reference = Reference::new(NodeId::new(), ReferenceId::new(), "integer".to_string());
+        let reference = Reference::new("integer".to_string());
         let id = expression::Identifier::new(reference);
         expr.variant = expression::ExpressionVariant::Identifier(id);
 

@@ -1,3 +1,5 @@
+use std::hash::{Hash, Hasher};
+
 use super::{Context, Error, NodeId, NodeParser, ReferenceId, entity};
 use crate::{
     children::{ChildrenIter, ChildrenIterMut},
@@ -7,6 +9,23 @@ use parser::Rule;
 use serde::{Deserialize, Serialize};
 
 pub mod parser;
+
+#[derive(Debug, Copy, Clone)]
+pub(crate) struct ExpressionKey<'a>(&'a Expression);
+
+impl Hash for ExpressionKey<'_> {
+    fn hash<H: Hasher>(&self, s: &mut H) {
+        (self.0 as *const Expression as usize).hash(s);
+    }
+}
+
+impl PartialEq for ExpressionKey<'_> {
+    fn eq(&self, o: &Self) -> bool {
+        std::ptr::eq(self.0, o.0)
+    }
+}
+
+impl Eq for ExpressionKey<'_> {}
 
 #[derive(Serialize, Deserialize, Debug, Clone, Eq)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
