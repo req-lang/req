@@ -1,13 +1,10 @@
 use std::{
-    collections::HashMap,
     fmt::Display,
     ops::{Add, Range},
 };
 
 use error::Error;
 use serde::{Deserialize, Serialize};
-
-use crate::syntax::entity::EntityKey;
 
 pub mod entity;
 pub mod error;
@@ -56,6 +53,12 @@ impl From<(pest::error::LineColLocation, pest::error::InputLocation)> for Span {
 
             (_, _) => unreachable!(),
         }
+    }
+}
+
+impl From<(pest::Span<'_>, Position)> for Span {
+    fn from((span, offset): (pest::Span, Position)) -> Self {
+        Span::from(span) + offset
     }
 }
 
@@ -154,21 +157,6 @@ impl Context {
     pub fn parse<R: pest::RuleType>(pair: &pest::iterators::Pair<R>, offset: Position) -> Self {
         let span = Span::from(pair.as_span()) + offset;
         Context { span }
-    }
-}
-
-#[derive(Default, Debug, Clone)]
-pub struct SpanNode {
-    pub span: Span,
-    pub children: Vec<Span>,
-}
-
-impl From<Span> for SpanNode {
-    fn from(span: Span) -> Self {
-        Self {
-            span,
-            children: Vec::new(),
-        }
     }
 }
 

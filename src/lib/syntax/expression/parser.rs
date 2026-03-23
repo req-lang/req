@@ -6,7 +6,10 @@ use pest::{
     pratt_parser::{Assoc, Op, PrattParser},
 };
 
-use crate::{syntax::Span, visitor::Walk};
+use crate::{
+    syntax::{Context, NodeParser, error::Error},
+    visitor::Walk,
+};
 
 use super::*;
 
@@ -35,16 +38,14 @@ impl Walk<Pair<'_, Rule>, Error, Expression> for NodeParser<'_> {
             .map_primary(|primary| {
                 let context = Context::parse(&primary, offset);
                 let mut self_mut = rc.borrow_mut();
-                let id = NodeId::new();
-                self_mut.context.insert(id, context);
+                self_mut.spans.push(context.span);
                 match primary.as_rule() {
                     Rule::ident => {
                         let value = primary.as_str().to_string();
-                        let rid = ReferenceId::new();
-                        let reference = entity::Reference::new(id, rid, value);
+                        let reference = entity::Reference::new(value);
                         let ident = Identifier::new(reference);
                         let variant = ExpressionVariant::Identifier(ident);
-                        ControlFlow::Continue(Expression::new(id, variant))
+                        ControlFlow::Continue(Expression::new(variant))
                     }
 
                     Rule::num => {
@@ -53,18 +54,18 @@ impl Walk<Pair<'_, Rule>, Error, Expression> for NodeParser<'_> {
                         let mut number = Number::new(kind);
                         number.value = value;
                         let variant = ExpressionVariant::Number(number);
-                        ControlFlow::Continue(Expression::new(id, variant))
+                        ControlFlow::Continue(Expression::new(variant))
                     }
 
                     Rule::bool => {
                         let value = primary.into_inner().next().unwrap().as_rule().into();
                         let variant = ExpressionVariant::Boolean(value);
-                        ControlFlow::Continue(Expression::new(id, variant))
+                        ControlFlow::Continue(Expression::new(variant))
                     }
 
                     Rule::undefined => {
                         let variant = ExpressionVariant::Undefined;
-                        ControlFlow::Continue(Expression::new(id, variant))
+                        ControlFlow::Continue(Expression::new(variant))
                     }
 
                     Rule::branch => {
@@ -77,7 +78,7 @@ impl Walk<Pair<'_, Rule>, Error, Expression> for NodeParser<'_> {
                             branch.otherwise = Some(Box::new(self_mut.walk(p)?));
                         }
                         let variant = ExpressionVariant::Branch(branch);
-                        ControlFlow::Continue(Expression::new(id, variant))
+                        ControlFlow::Continue(Expression::new(variant))
                     }
 
                     Rule::when => {
@@ -102,7 +103,7 @@ impl Walk<Pair<'_, Rule>, Error, Expression> for NodeParser<'_> {
                         }
 
                         let variant = ExpressionVariant::When(when);
-                        ControlFlow::Continue(Expression::new(id, variant))
+                        ControlFlow::Continue(Expression::new(variant))
                     }
 
                     Rule::forall => {
@@ -116,7 +117,7 @@ impl Walk<Pair<'_, Rule>, Error, Expression> for NodeParser<'_> {
                         }
 
                         let variant = ExpressionVariant::Forall(Forall::new(set, expression));
-                        ControlFlow::Continue(Expression::new(id, variant))
+                        ControlFlow::Continue(Expression::new(variant))
                     }
 
                     Rule::exists => {
@@ -130,7 +131,7 @@ impl Walk<Pair<'_, Rule>, Error, Expression> for NodeParser<'_> {
                         }
 
                         let variant = ExpressionVariant::Exists(Exists::new(set));
-                        ControlFlow::Continue(Expression::new(id, variant))
+                        ControlFlow::Continue(Expression::new(variant))
                     }
 
                     Rule::select => {
@@ -157,7 +158,7 @@ impl Walk<Pair<'_, Rule>, Error, Expression> for NodeParser<'_> {
                         }
 
                         let variant = ExpressionVariant::Select(select);
-                        ControlFlow::Continue(Expression::new(id, variant))
+                        ControlFlow::Continue(Expression::new(variant))
                     }
 
                     Rule::aggregation => {
@@ -170,7 +171,7 @@ impl Walk<Pair<'_, Rule>, Error, Expression> for NodeParser<'_> {
                         }
 
                         let variant = ExpressionVariant::Aggregation(aggregation);
-                        ControlFlow::Continue(Expression::new(id, variant))
+                        ControlFlow::Continue(Expression::new(variant))
                     }
 
                     Rule::set => {
@@ -182,7 +183,7 @@ impl Walk<Pair<'_, Rule>, Error, Expression> for NodeParser<'_> {
                         }
 
                         let variant = ExpressionVariant::Set(set);
-                        ControlFlow::Continue(Expression::new(id, variant))
+                        ControlFlow::Continue(Expression::new(variant))
                     }
 
                     Rule::expr => self_mut.walk(primary),
@@ -193,47 +194,26 @@ impl Walk<Pair<'_, Rule>, Error, Expression> for NodeParser<'_> {
             .map_infix(|lhs, op, rhs| {
                 let lhs = lhs?;
                 let rhs = rhs?;
-                let span = {
-                    let borrow = rc.borrow();
-                    let ctx_lhs = borrow.context.get(&lhs.id).unwrap();
-                    let ctx_rhs = borrow.context.get(&rhs.id).unwrap();
-                    ctx_lhs.span.merge(ctx_rhs.span)
-                };
-                let context = Context::new(span);
-                let id = NodeId::new();
-                rc.borrow_mut().context.insert(id, context);
+
+                rc.borrow_mut().spans.push(op.as_span().into());
                 let operator = op.as_rule().into();
                 let variant = ExpressionVariant::BinOp(BinOp::new(operator, lhs, rhs));
 
-                ControlFlow::Continue(Expression::new(id, variant))
+                ControlFlow::Continue(Expression::new(variant))
             })
             .map_prefix(|op, operand| {
                 let operand = operand?;
-                let span = {
-                    let borrow = rc.borrow();
-                    let ctx = borrow.context.get(&operand.id).unwrap();
-                    Span::from(op.as_span()).merge(ctx.span)
-                };
-
-                let context = Context::new(span);
-                let id = NodeId::new();
-                rc.borrow_mut().context.insert(id, context);
+                rc.borrow_mut().spans.push(op.as_span().into());
                 let operator = op.as_rule().into();
                 let variant = ExpressionVariant::UnaryOp(UnaryOp::new(operator, operand));
 
-                ControlFlow::Continue(Expression::new(id, variant))
+                ControlFlow::Continue(Expression::new(variant))
             })
             .map_postfix(|operand, op| {
                 let operand = operand?;
-                let span = {
-                    let borrow = rc.borrow();
-                    let ctx = borrow.context.get(&operand.id).unwrap();
-                    Span::from(ctx.span).merge(op.as_span().into())
-                };
-                let context = Context::new(span);
                 let mut self_mut = rc.borrow_mut();
-                let id = NodeId::new();
-                self_mut.context.insert(id, context);
+
+                self_mut.spans.push(op.as_span().into());
                 let variant = match op.as_rule() {
                     Rule::call => {
                         let mut function = Function::new(operand);
@@ -248,7 +228,7 @@ impl Walk<Pair<'_, Rule>, Error, Expression> for NodeParser<'_> {
                     _ => unreachable!(),
                 };
 
-                ControlFlow::Continue(Expression::new(id, variant))
+                ControlFlow::Continue(Expression::new(variant))
             })
             .parse(pair.into_inner());
         node
@@ -288,4 +268,57 @@ fn pratt_parser() -> &'static PrattParser<Rule> {
             .op(Op::postfix(fac))
             .op(Op::postfix(call))
     })
+}
+
+impl From<Rule> for UnaryOperator {
+    fn from(rule: Rule) -> Self {
+        match rule {
+            Rule::plus => UnaryOperator::Plus,
+            Rule::neg => UnaryOperator::Negation,
+            Rule::not => UnaryOperator::Not,
+            Rule::fac => UnaryOperator::Factorial,
+            Rule::previous => UnaryOperator::Previously,
+            Rule::rise => UnaryOperator::Rise,
+            Rule::fall => UnaryOperator::Fall,
+            Rule::event => UnaryOperator::Eventually,
+            Rule::always => UnaryOperator::Always,
+            _ => unreachable!(),
+        }
+    }
+}
+
+impl From<Rule> for BinaryOperator {
+    fn from(rule: Rule) -> Self {
+        match rule {
+            Rule::add => BinaryOperator::Plus,
+            Rule::sub => BinaryOperator::Minus,
+            Rule::mul => BinaryOperator::Multiply,
+            Rule::div => BinaryOperator::Divide,
+            Rule::rem => BinaryOperator::Modulus,
+            Rule::pow => BinaryOperator::Power,
+
+            Rule::and => BinaryOperator::And,
+            Rule::or => BinaryOperator::Or,
+            Rule::xor => BinaryOperator::Xor,
+            Rule::ins => BinaryOperator::In,
+            Rule::implies => BinaryOperator::Implies,
+            Rule::iff => BinaryOperator::Iff,
+
+            Rule::gt => BinaryOperator::GreaterThan,
+            Rule::lt => BinaryOperator::LessThan,
+            Rule::ge => BinaryOperator::GreaterOrEqual,
+            Rule::le => BinaryOperator::LessOrEqual,
+            Rule::neq => BinaryOperator::NotEqual,
+            Rule::eq => BinaryOperator::Equal,
+
+            Rule::uni => BinaryOperator::Union,
+            Rule::inter => BinaryOperator::Intersection,
+            Rule::diff => BinaryOperator::Difference,
+            Rule::comp => BinaryOperator::Complement,
+            Rule::incl => BinaryOperator::Includes,
+
+            Rule::since => BinaryOperator::Since,
+            _ => unreachable!(),
+        }
+    }
 }

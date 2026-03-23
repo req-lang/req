@@ -1,12 +1,11 @@
 use std::hash::{Hash, Hasher};
 
-use super::{Context, Error, NodeId, NodeParser, ReferenceId, entity};
+use super::entity;
 use crate::{
     children::{ChildrenIter, ChildrenIterMut},
     iter::NodeIter,
 };
 use parser::Rule;
-use serde::{Deserialize, Serialize};
 
 pub mod parser;
 
@@ -27,25 +26,14 @@ impl PartialEq for ExpressionKey<'_> {
 
 impl Eq for ExpressionKey<'_> {}
 
-#[derive(Serialize, Deserialize, Debug, Clone, Eq)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-#[cfg_attr(feature = "ts", ts(export))]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Expression {
-    pub id: NodeId,
-    #[serde(flatten)]
     pub variant: ExpressionVariant,
-}
-
-impl PartialEq for Expression {
-    fn eq(&self, other: &Self) -> bool {
-        self.variant == other.variant
-    }
 }
 
 impl Default for Expression {
     fn default() -> Self {
         Expression {
-            id: NodeId::default(),
             variant: ExpressionVariant::Undefined,
         }
     }
@@ -202,8 +190,8 @@ impl ChildrenIterMut for Expression {
 }
 
 impl Expression {
-    pub fn new(id: NodeId, variant: ExpressionVariant) -> Self {
-        Expression { id, variant }
+    pub fn new(variant: ExpressionVariant) -> Self {
+        Expression { variant }
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &Self> {
@@ -246,10 +234,7 @@ impl Expression {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-#[cfg_attr(feature = "ts", ts(export))]
-#[serde(rename_all = "snake_case", tag = "type")]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ExpressionVariant {
     Branch(Branch),
     When(When),
@@ -276,7 +261,7 @@ impl ExpressionVariant {
             ExpressionVariant::BinOp(bin_op) => bin_op.operator.precedence(),
             ExpressionVariant::UnaryOp(unary_op) => unary_op.operator.precedence(),
             ExpressionVariant::Function(_) => 160,
-            _ => 1000, // Highest precedence for literals, identifiers, etc.
+            _ => 1000,
         }
     }
 
@@ -288,9 +273,7 @@ impl ExpressionVariant {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-#[cfg_attr(feature = "ts", ts(export))]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Branch {
     pub case: Case,
     pub otherwise: Option<Box<Expression>>,
@@ -305,9 +288,7 @@ impl Branch {
     }
 }
 
-#[derive(Serialize, Deserialize, Default, Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-#[cfg_attr(feature = "ts", ts(export))]
+#[derive(Default, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct When {
     pub cases: Vec<Case>,
     pub otherwise: Option<Box<Expression>>,
@@ -322,9 +303,7 @@ impl When {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-#[cfg_attr(feature = "ts", ts(export))]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Case {
     pub condition: Box<Expression>,
     pub consequence: Box<Expression>,
@@ -339,9 +318,7 @@ impl Case {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-#[cfg_attr(feature = "ts", ts(export))]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Forall {
     pub set: SetElement,
     pub expression: Box<Expression>,
@@ -356,9 +333,7 @@ impl Forall {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-#[cfg_attr(feature = "ts", ts(export))]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Exists {
     pub set: SetElement,
 }
@@ -369,9 +344,7 @@ impl Exists {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-#[cfg_attr(feature = "ts", ts(export))]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Select {
     pub set: SetElement,
     pub optimizer: Option<Optimizer>,
@@ -386,9 +359,7 @@ impl Select {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-#[cfg_attr(feature = "ts", ts(export))]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Optimizer {
     pub kind: OptimizerKind,
     pub expression: Box<Expression>,
@@ -403,10 +374,7 @@ impl Optimizer {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-#[cfg_attr(feature = "ts", ts(export))]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum OptimizerKind {
     Minimize,
     Maximize,
@@ -422,9 +390,7 @@ impl From<Rule> for OptimizerKind {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-#[cfg_attr(feature = "ts", ts(export))]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct SetElement {
     pub variable: String,
     pub domain: Box<Expression>,
@@ -441,9 +407,7 @@ impl SetElement {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-#[cfg_attr(feature = "ts", ts(export))]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Aggregation {
     pub aggregator: Aggregator,
     pub expressions: Vec<Expression>,
@@ -458,10 +422,7 @@ impl Aggregation {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-#[cfg_attr(feature = "ts", ts(export))]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Aggregator {
     All,
     Any,
@@ -477,9 +438,7 @@ impl From<Rule> for Aggregator {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-#[cfg_attr(feature = "ts", ts(export))]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Identifier {
     pub target: entity::Reference,
 }
@@ -490,9 +449,7 @@ impl Identifier {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-#[cfg_attr(feature = "ts", ts(export))]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct UnaryOp {
     pub operator: UnaryOperator,
     pub operand: Box<Expression>,
@@ -507,10 +464,7 @@ impl UnaryOp {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-#[cfg_attr(feature = "ts", ts(export))]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum UnaryOperator {
     Plus,
     Negation,
@@ -521,23 +475,6 @@ pub enum UnaryOperator {
     Fall,
     Eventually,
     Always,
-}
-
-impl From<Rule> for UnaryOperator {
-    fn from(rule: Rule) -> Self {
-        match rule {
-            Rule::plus => UnaryOperator::Plus,
-            Rule::neg => UnaryOperator::Negation,
-            Rule::not => UnaryOperator::Not,
-            Rule::fac => UnaryOperator::Factorial,
-            Rule::previous => UnaryOperator::Previously,
-            Rule::rise => UnaryOperator::Rise,
-            Rule::fall => UnaryOperator::Fall,
-            Rule::event => UnaryOperator::Eventually,
-            Rule::always => UnaryOperator::Always,
-            _ => unreachable!(),
-        }
-    }
 }
 
 impl UnaryOperator {
@@ -555,9 +492,7 @@ impl UnaryOperator {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-#[cfg_attr(feature = "ts", ts(export))]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct BinOp {
     pub operator: BinaryOperator,
     pub left: Box<Expression>,
@@ -574,16 +509,13 @@ impl BinOp {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Associativity {
     Left,
     Right,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-#[cfg_attr(feature = "ts", ts(export))]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum BinaryOperator {
     Plus,
     Minus,
@@ -613,42 +545,6 @@ pub enum BinaryOperator {
     Includes,
 
     Since,
-}
-
-impl From<Rule> for BinaryOperator {
-    fn from(rule: Rule) -> Self {
-        match rule {
-            Rule::add => BinaryOperator::Plus,
-            Rule::sub => BinaryOperator::Minus,
-            Rule::mul => BinaryOperator::Multiply,
-            Rule::div => BinaryOperator::Divide,
-            Rule::rem => BinaryOperator::Modulus,
-            Rule::pow => BinaryOperator::Power,
-
-            Rule::and => BinaryOperator::And,
-            Rule::or => BinaryOperator::Or,
-            Rule::xor => BinaryOperator::Xor,
-            Rule::ins => BinaryOperator::In,
-            Rule::implies => BinaryOperator::Implies,
-            Rule::iff => BinaryOperator::Iff,
-
-            Rule::gt => BinaryOperator::GreaterThan,
-            Rule::lt => BinaryOperator::LessThan,
-            Rule::ge => BinaryOperator::GreaterOrEqual,
-            Rule::le => BinaryOperator::LessOrEqual,
-            Rule::neq => BinaryOperator::NotEqual,
-            Rule::eq => BinaryOperator::Equal,
-
-            Rule::uni => BinaryOperator::Union,
-            Rule::inter => BinaryOperator::Intersection,
-            Rule::diff => BinaryOperator::Difference,
-            Rule::comp => BinaryOperator::Complement,
-            Rule::incl => BinaryOperator::Includes,
-
-            Rule::since => BinaryOperator::Since,
-            _ => unreachable!(),
-        }
-    }
 }
 
 impl BinaryOperator {
@@ -681,9 +577,7 @@ impl BinaryOperator {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-#[cfg_attr(feature = "ts", ts(export))]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Function {
     pub expression: Box<Expression>,
     pub arguments: Vec<Expression>,
@@ -698,16 +592,12 @@ impl Function {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Default)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-#[cfg_attr(feature = "ts", ts(export))]
+#[derive(Default, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Set {
     pub elements: Vec<Expression>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-#[cfg_attr(feature = "ts", ts(export))]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Number {
     pub kind: NumberKind,
     pub value: String,
@@ -722,10 +612,7 @@ impl Number {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-#[cfg_attr(feature = "ts", ts(export))]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum NumberKind {
     Integer,
     Real,
@@ -743,9 +630,7 @@ impl From<Rule> for NumberKind {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-#[cfg_attr(feature = "ts", ts(export))]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Boolean {
     pub value: bool,
 }

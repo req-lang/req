@@ -424,7 +424,7 @@ impl<'a> TryFrom<&'a Keyword> for TraceabilityKind {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Reference {
     pub value: String,
 }
@@ -432,12 +432,6 @@ pub struct Reference {
 impl Display for Reference {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.value)
-    }
-}
-
-impl PartialEq for Reference {
-    fn eq(&self, other: &Self) -> bool {
-        self.value == other.value
     }
 }
 
