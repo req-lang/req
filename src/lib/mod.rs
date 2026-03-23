@@ -22,7 +22,7 @@ use mapper::{
     id,
     path::{self, PathMap},
 };
-use serde_derive::Serialize;
+use serde::Serialize;
 use syntax::entity::Entity;
 use verifier::{
     definition::{self},

@@ -1,4 +1,4 @@
-use serde_derive::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 use tokenizer::{IntoTokens, Token};
 
 use super::{Context, NodeId, NodeParser, Position, ReferenceId, Span, entity::Reference};

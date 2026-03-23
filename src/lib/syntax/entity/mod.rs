@@ -4,7 +4,7 @@ use crate::{
     iter::{NodeIter, UnsafeNodeIterMut},
 };
 use schemars::JsonSchema;
-use serde_derive::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use tokenizer::Keyword;
 

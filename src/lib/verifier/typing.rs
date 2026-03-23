@@ -1,6 +1,6 @@
 use std::{collections::HashMap, fmt::Display, ops::ControlFlow};
 
-use serde_derive::Serialize;
+use serde::Serialize;
 
 use crate::{
     children::ChildrenIter,

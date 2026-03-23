@@ -1,6 +1,6 @@
 use std::{collections::HashMap, fmt::Display, ops::ControlFlow};
 
-use serde_derive::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 
 use crate::syntax::entity::Reference;
 use crate::{

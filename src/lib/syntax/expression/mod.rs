@@ -4,7 +4,7 @@ use crate::{
     iter::NodeIter,
 };
 use parser::Rule;
-use serde_derive::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 
 pub mod parser;
 

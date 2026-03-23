@@ -3,7 +3,7 @@ use std::{
     fmt::{Debug, Display},
 };
 
-use serde_derive::Serialize;
+use serde::Serialize;
 
 pub type CheckResult<T> = (T, Vec<Issue>);
 

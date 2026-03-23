@@ -5,7 +5,7 @@ use std::{
 };
 
 use error::Error;
-use serde_derive::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 
 pub mod entity;
 pub mod error;
