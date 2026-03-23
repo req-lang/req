@@ -383,6 +383,17 @@ impl Visitor<&mut Peekable<TokenIterator<'_>>, Error, Entity> for NodeParser<'_>
     }
 }
 
+impl TraceabilityKind {
+    pub fn is_traceability_keyword(value: &Keyword) -> bool {
+        match value {
+            Keyword::Refines => true,
+            Keyword::Specializes => true,
+            Keyword::Derives => true,
+            _ => false,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{

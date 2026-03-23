@@ -59,8 +59,8 @@ impl Visitor<&entity::Entity> for Renderer {
 
         for tag in &node.meta.tags {
             match &tag.value {
-                Some(v) => self.push_line(&format!("#{} {}#", tag.key, v)),
-                None => self.push_line(&format!("# {} #", tag.key)),
+                Some(v) => self.push_line(&format!("#{} {}#", tag.id, v)),
+                None => self.push_line(&format!("# {} #", tag.id)),
             }
         }
 

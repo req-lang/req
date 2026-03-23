@@ -92,8 +92,8 @@ impl Visitor<&syntax::entity::Entity> for Renderer<'_> {
             self.push_line(title.to_string());
             for tag in &node.meta.tags {
                 match &tag.value {
-                    Some(v) => self.push_line(format!("# {} -> {}", tag.key, v)),
-                    None => self.push_line(format!("# {}", tag.key)),
+                    Some(v) => self.push_line(format!("# {} -> {}", tag.id, v)),
+                    None => self.push_line(format!("# {}", tag.id)),
                 }
             }
         }

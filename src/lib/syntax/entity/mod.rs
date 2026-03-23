@@ -388,17 +388,6 @@ pub enum TraceabilityKind {
     Derivation,
 }
 
-impl TraceabilityKind {
-    pub fn is_traceability_keyword(value: &Keyword) -> bool {
-        match value {
-            Keyword::Refines => true,
-            Keyword::Specializes => true,
-            Keyword::Derives => true,
-            _ => false,
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TraceabilityLink {
     pub kind: TraceabilityKind,
@@ -468,12 +457,13 @@ pub struct EntityMeta {
 
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub struct Tag {
-    pub key: String,
+    // TODO: To be renammed key
+    pub id: String,
     pub value: Option<String>,
 }
 
 impl Tag {
     pub fn new(id: String, value: Option<String>) -> Self {
-        Self { key: id, value }
+        Self { id, value }
     }
 }
