@@ -1,11 +1,16 @@
 use std::collections::{HashMap, HashSet};
 
+use serde::Serialize;
+
 use crate::{inverse::Inverse, mapper::requirement::RequirementMap, syntax::NodeId};
 
 pub type RestrictionMap = HashMap<NodeId, HashSet<NodeId>>;
 pub type AllocationMap = HashMap<NodeId, HashSet<NodeId>>;
 pub type UsageMap = HashMap<NodeId, HashSet<NodeId>>;
 
+#[derive(Debug, Clone, Default, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct SubjectMap {
     pub restrictions: RestrictionMap,
     pub allocations: AllocationMap,

@@ -35,7 +35,9 @@ impl Visitor<&Entity> for Verifier<'_> {
                 issues.push(Unused);
             }
 
-            if let None = self.smap.restrictions.get(&node.id) {
+            if let None = self.smap.restrictions.get(&node.id)
+                && part.children.is_empty()
+            {
                 issues.push(Unrestricted);
             }
 

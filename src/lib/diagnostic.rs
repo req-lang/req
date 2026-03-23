@@ -97,6 +97,12 @@ pub enum IssueKind {
     MissingForwardTrace,
     #[error("Missing backward traceability")]
     MissingBackwardTrace,
+    #[error("Empty package")]
+    EmptyPackage,
+    #[error("The requirement is allocated but the inhibitor forbids derivation")]
+    InhibitorForbidDerives,
+    #[error("The requirement might be a duplicate of {0}")]
+    PossibleDuplicate(Path),
 }
 
 impl PartialOrd for IssueKind {
@@ -138,8 +144,9 @@ impl From<&IssueKind> for IssueSeverity {
             NotPartOrAttribute(_) => Critical,
             UnexpectedAttribute(_) => Critical,
             NotASet(_) => Critical,
-            MissingRequirementBinding => Critical,
+            InhibitorForbidDerives => Critical,
 
+            MissingRequirementBinding => Severe,
             ConflictingTrace(_) => Severe,
             CircularTrace(_) => Severe,
             SpecializationMismatch(_) => Severe,
@@ -160,6 +167,8 @@ impl From<&IssueKind> for IssueSeverity {
             MissingDerivation => Light,
             MissingForwardTrace => Light,
             MissingBackwardTrace => Light,
+            EmptyPackage => Light,
+            PossibleDuplicate(_) => Light,
         }
     }
 }

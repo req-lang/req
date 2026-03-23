@@ -22,6 +22,10 @@ impl Visitor<&Entity> for Verifier<'_> {
         if let Package(package) = &node.variant {
             let mut issues = Vec::new();
 
+            if package.children.len() == 0 {
+                issues.push(EmptyPackage);
+            }
+
             for child in &package.children {
                 let path = self.paths.get(&child.id).unwrap();
                 if let Attribute(_) = child.variant {

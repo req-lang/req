@@ -330,6 +330,18 @@ pub struct Requirement {
     pub variant: RequirementVariant,
 }
 
+impl From<RequirementVariant> for Requirement {
+    fn from(variant: RequirementVariant) -> Self {
+        Requirement {
+            restriction: None,
+            allocation: None,
+            traceability: Vec::new(),
+            inhibitor: None,
+            variant,
+        }
+    }
+}
+
 impl Requirement {
     pub fn new() -> Self {
         Requirement {

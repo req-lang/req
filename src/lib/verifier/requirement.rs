@@ -62,6 +62,13 @@ impl Visitor<&Entity> for Verifier<'_> {
                     _ => issues.push(NotPartOrAttribute(self.paths.get(vid).unwrap().clone())),
                 };
 
+                match requirement.inhibitor {
+                    Some(TraceabilityInhibitor::Isolated) | Some(TraceabilityInhibitor::Bottom) => {
+                        issues.push(InhibitorForbidDerives)
+                    }
+                    _ => {}
+                }
+
                 match self.map.forward.get(&node.id) {
                     Some(fids) => {
                         let derived = fids.iter().find(|fid| {
@@ -165,7 +172,15 @@ impl Visitor<&Entity> for Verifier<'_> {
                             Specialization if nid != bid => {
                                 issues.push(SpecializationMismatch(bpath.clone()));
                             }
-                            Refinement if !self.ancestors.get(nid).unwrap().contains(bid) => {
+
+                            Refinement if nid == bid => {
+                                issues.push(PossibleDuplicate(bpath.clone()));
+                            }
+
+                            Refinement
+                                if nid != bid
+                                    && !self.ancestors.get(nid).unwrap().contains(bid) =>
+                            {
                                 issues.push(RefinementMismatch(bpath.clone()));
                             }
                             _ => {}

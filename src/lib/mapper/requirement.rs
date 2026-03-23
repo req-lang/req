@@ -3,6 +3,8 @@ use std::{
     ops::ControlFlow,
 };
 
+use serde::Serialize;
+
 use crate::{
     syntax::{
         NodeId,
@@ -19,7 +21,9 @@ pub type RestrictionMap = HashMap<NodeId, NodeId>;
 pub type AllocationMap = HashMap<NodeId, NodeId>;
 pub type UsageMap = HashMap<NodeId, HashSet<NodeId>>;
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "ts", ts(export))]
 pub struct RequirementMap {
     pub restrictions: RestrictionMap,
     pub allocations: AllocationMap,

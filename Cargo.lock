@@ -595,7 +595,6 @@ dependencies = [
  "pest_derive",
  "schemars",
  "serde",
- "serde_derive",
  "thiserror",
  "ts-rs",
  "unindent",

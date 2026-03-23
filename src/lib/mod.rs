@@ -21,7 +21,6 @@ use mapper::{
     ancestors::{self, AncestorsMap},
     id,
     path::{self, PathMap},
-    requirement::TraceabilityMap,
 };
 use serde_derive::Serialize;
 use syntax::entity::Entity;
@@ -35,7 +34,7 @@ use visitor::Walk;
 use crate::{
     detector::cycles,
     mapper::{
-        requirement::UsageMap,
+        requirement::RequirementMap,
         subject::SubjectMap,
         tags::{self, TagMap},
     },
@@ -62,8 +61,8 @@ pub struct Analysis {
     pub ancestors: AncestorsMap,
     pub references: ReferenceMap,
     pub types: TypeMap,
-    pub traceabilities: TraceabilityMap,
-    pub usages: UsageMap,
+    pub requirements: RequirementMap,
+    pub subjects: SubjectMap,
     pub tags: TagMap,
     pub diagnostics: Vec<Issue>,
 }
@@ -130,9 +129,9 @@ impl From<&Entity> for Analysis {
             ancestors,
             references,
             types,
-            traceabilities: rmap.forward,
+            requirements: rmap,
+            subjects: smap,
             diagnostics,
-            usages: smap.usages,
             tags,
         }
     }

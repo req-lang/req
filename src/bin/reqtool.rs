@@ -110,7 +110,7 @@ fn main() {
                 print!("{}", rendered);
             }
 
-            if !tree {
+            if verbose || !tree {
                 for error in &analysis.diagnostics {
                     let context = context.get(&error.id).unwrap();
                     let span = format!("{}", context.span.start).bold().white();

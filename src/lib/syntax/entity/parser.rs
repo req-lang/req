@@ -239,7 +239,7 @@ impl Visitor<&mut Peekable<TokenIterator<'_>>, Error, Entity> for NodeParser<'_>
         entity.comment = std::mem::take(&mut self.last_comment);
 
         match try_consume_identifier(tokens) {
-            Ok((l, span)) if l.contains("if") => Break(Error::from_span(span, BadIdentifier))?,
+            Ok((l, span)) if l.contains("::") => Break(Error::from_span(span, BadIdentifier))?,
             Ok(l) => entity.label = l.0.to_string(),
             Err(Some(tok)) => Break(Error::from_token(&tok, MissingIdentifier))?,
             Err(None) => Break(Error::empty())?,
