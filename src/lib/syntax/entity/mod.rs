@@ -5,17 +5,14 @@ use crate::{
     key::NodeKey,
 };
 use serde::Serialize;
-use std::{
-    fmt::Display,
-    hash::{Hash, Hasher},
-};
+use std::{fmt::Display, hash::Hash};
 
 pub mod parser;
 pub mod tokenizer;
 
 pub const REFERENCE_SEPARATOR: &str = "::";
 
-pub(crate) type EntityKey<'a> = NodeKey<'a, Entity>;
+pub(crate) type EntityKey<'n> = NodeKey<'n, Entity>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Entity {
@@ -384,7 +381,7 @@ impl TraceabilityLink {
     }
 }
 
-pub(crate) type ReferenceKey<'a> = NodeKey<Reference>;
+pub(crate) type ReferenceKey<'a> = NodeKey<'a, Reference>;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
 pub struct Reference {

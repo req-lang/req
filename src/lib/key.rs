@@ -1,7 +1,15 @@
 use std::hash::{Hash, Hasher};
 
-#[derive(Debug, Copy, Clone)]
-pub(crate) struct NodeKey<'a, N>(pub &'a N);
+#[derive(Debug)]
+pub(crate) struct NodeKey<'n, N>(&'n N);
+
+impl<'n, N> Copy for NodeKey<'n, N> {}
+
+impl<'n, N> Clone for NodeKey<'n, N> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
 
 impl<N> Hash for NodeKey<'_, N> {
     fn hash<H: Hasher>(&self, s: &mut H) {
@@ -15,8 +23,8 @@ impl<N> PartialEq for NodeKey<'_, N> {
     }
 }
 
-impl<N> From<&N> for NodeKey<'_, N> {
-    fn from(value: &N) -> Self {
+impl<'n, N> From<&'n N> for NodeKey<'n, N> {
+    fn from(value: &'n N) -> Self {
         Self(&value)
     }
 }

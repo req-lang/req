@@ -1,11 +1,8 @@
 use std::{collections::HashMap, ops::ControlFlow};
 
 use crate::{
-    children::{Children, ChildrenIter},
-    syntax::{
-        entity::{Entity, EntityKey},
-        expression,
-    },
+    children::Children,
+    syntax::entity::{Entity, EntityKey},
     visitor::{Visitor, Walk, WalkCustom},
 };
 
@@ -15,8 +12,8 @@ struct Mapper<'a> {
     map: AncestorsMap<'a>,
 }
 
-impl<'a> Walk<&Entity> for Mapper<'a> {
-    fn walk(&mut self, node: &Entity) -> ControlFlow<()> {
+impl<'a> Walk<&'a Entity> for Mapper<'a> {
+    fn walk(&mut self, node: &'a Entity) -> ControlFlow<()> {
         self.visit(node)?;
 
         self.current.push(node.into());

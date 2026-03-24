@@ -8,13 +8,13 @@ use crate::{
 };
 
 #[derive(Default, Debug)]
-struct Mapper<'a> {
+struct Mapper<'n> {
     current: Vec<String>,
-    map: PathMap<'a>,
+    map: PathMap<'n>,
 }
 
-impl<'a> Walk<&'a Entity> for Mapper<'a> {
-    fn walk(&mut self, node: &'a Entity) -> ControlFlow<()> {
+impl<'n> Walk<&'n Entity> for Mapper<'n> {
+    fn walk(&mut self, node: &'n Entity) -> ControlFlow<()> {
         self.current.push(node.meta.label.clone());
         self.visit(node)?;
         if let Some(children) = node.children() {
@@ -27,21 +27,21 @@ impl<'a> Walk<&'a Entity> for Mapper<'a> {
     }
 }
 
-impl<'a> Visitor<&'a Entity> for Mapper<'a> {
+impl<'n> Visitor<&'n Entity> for Mapper<'n> {
     type WalkKind = WalkCustom;
 
-    fn visit(&mut self, node: &'a Entity) -> ControlFlow<()> {
+    fn visit(&mut self, node: &'n Entity) -> ControlFlow<()> {
         self.map.insert(node.into(), (&self.current).into());
         ControlFlow::Continue(())
     }
 }
 
-impl<'a> From<&'a Entity> for PathMap<'a> {
-    fn from(node: &'a Entity) -> Self {
+impl<'n> From<&'n Entity> for PathMap<'n> {
+    fn from(node: &'n Entity) -> Self {
         let mut mapper = Mapper::default();
         let _ = mapper.walk(node);
         mapper.map
     }
 }
 
-pub type PathMap<'a> = HashMap<EntityKey<'a>, Path>;
+pub type PathMap<'n> = HashMap<EntityKey<'n>, Path>;

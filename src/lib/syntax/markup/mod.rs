@@ -8,6 +8,7 @@ pub mod tokenizer;
 
 pub(crate) type MarkupKey<'a> = NodeKey<'a, Markup>;
 
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum Item {
     Text(String),
     Reference(Reference),
@@ -30,6 +31,7 @@ impl Item {
 }
 
 ///This container own the markdown text associated with markup tokens
+#[derive(Default, Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Markup {
     pub value: Vec<Item>,
 }
@@ -39,12 +41,6 @@ impl From<String> for Markup {
         let tokens = value.char_indices().tokens();
         let value = tokens.map(|token| Item::from_token(token)).collect();
         Self { value }
-    }
-}
-
-impl PartialEq for Markup {
-    fn eq(&self, other: &Self) -> bool {
-        self.value == other.value
     }
 }
 

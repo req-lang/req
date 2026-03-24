@@ -16,12 +16,12 @@
 //
 // For commercial licensing, see COMMERCIAL.md
 
-use diagnostic::{Issue, ResultErr};
 use mapper::{
     ancestors::{self, AncestorsMap},
     id,
     path::PathMap,
 };
+use resulterr::ResultErr;
 use syntax::entity::Entity;
 use verifier::{
     definition::{self},
@@ -32,6 +32,7 @@ use visitor::Walk;
 
 use crate::{
     detector::cycles,
+    issue::Issue,
     mapper::{
         requirement::RequirementMap,
         subject::SubjectMap,
@@ -41,7 +42,6 @@ use crate::{
 
 pub mod children;
 pub mod detector;
-pub mod diagnostic;
 pub mod inverse;
 pub mod issue;
 pub mod iter;
@@ -56,9 +56,6 @@ pub mod upsert;
 pub mod verifier;
 pub mod visitor;
 
-#[derive(Debug, Clone)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-#[cfg_attr(feature = "ts", ts(export))]
 pub struct Analysis<'a> {
     pub paths: PathMap<'a>,
     pub ancestors: AncestorsMap<'a>,
@@ -67,7 +64,7 @@ pub struct Analysis<'a> {
     pub requirements: RequirementMap<'a>,
     pub subjects: SubjectMap<'a>,
     pub tags: TagMap,
-    pub diagnostics: Vec<Issue<'a>>,
+    pub diagnostics: Vec<Box<dyn Issue<'a> + 'a>>,
 }
 
 impl<'a> From<&'a Entity> for Analysis<'a> {
@@ -78,18 +75,27 @@ impl<'a> From<&'a Entity> for Analysis<'a> {
 
         let mut verifier = definition::Verifier::new(&paths);
         let _ = verifier.walk(root);
-        let mut diagnostics = verifier.diagnostics;
+        let mut diagnostics: Vec<Box<dyn Issue<'a> + 'a>> = verifier
+            .diagnostics
+            .into_iter()
+            .map(|e| Box::new(e) as Box<dyn Issue<'a> + 'a>)
+            .collect();
 
         let mut verifier = reference::Verifier::new(&paths);
         let _ = verifier.walk(root);
-        let (references, errs) = verifier.results.into_iter().map(ResultErr).collect();
-        diagnostics.extend(errs);
+        let (references, errs): (_, Vec<_>) =
+            verifier.entities.into_iter().map(ResultErr).collect();
+        diagnostics.extend(errs.into_iter().map(|e| Box::new(e) as Box<dyn Issue<'a>>));
 
         let mut verifier = typing::Verifier::new(&references, &nodes_by_id);
         let _ = verifier.prewalk(root);
         let _ = verifier.walk(root);
-        let (types, errs) = verifier.results.into_iter().map(ResultErr).collect();
-        diagnostics.extend(errs);
+        let (types, errs): (_, Vec<_>) = verifier.results.into_iter().map(ResultErr).collect();
+        diagnostics.extend(
+            errs.into_iter()
+                .filter_map(|e: Option<_>| e)
+                .map(|e| Box::new(e) as Box<dyn Issue<'a>>),
+        );
 
         let mut mapper = mapper::requirement::Mapper::new(&references);
         let _ = mapper.walk(root);
@@ -108,20 +114,40 @@ impl<'a> From<&'a Entity> for Analysis<'a> {
             &ancestors,
         );
         let _ = verifier.walk(root);
-        diagnostics.extend(verifier.issues);
+        diagnostics.extend(
+            verifier
+                .issues
+                .into_iter()
+                .map(|e| Box::new(e) as Box<dyn Issue<'a>>),
+        );
 
         let smap = SubjectMap::from(&rmap);
         let mut verifier = verifier::part::Verifier::new(&smap, &paths);
         let _ = verifier.walk(root);
-        diagnostics.extend(verifier.issues);
+        diagnostics.extend(
+            verifier
+                .issues
+                .into_iter()
+                .map(|e| Box::new(e) as Box<dyn Issue<'a>>),
+        );
 
         let mut verifier = verifier::attribute::Verifier::new(&smap, &types);
         let _ = verifier.walk(root);
-        diagnostics.extend(verifier.issues);
+        diagnostics.extend(
+            verifier
+                .issues
+                .into_iter()
+                .map(|e| Box::new(e) as Box<dyn Issue<'a>>),
+        );
 
         let mut verifier = verifier::package::Verifier::new(&paths);
         let _ = verifier.walk(root);
-        diagnostics.extend(verifier.issues);
+        diagnostics.extend(
+            verifier
+                .issues
+                .into_iter()
+                .map(|e| Box::new(e) as Box<dyn Issue<'a>>),
+        );
 
         let mut mapper = tags::Mapper::default();
         let _ = mapper.walk(root);

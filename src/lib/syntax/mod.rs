@@ -162,6 +162,7 @@ impl Context {
 
 #[derive(Default, Debug)]
 pub struct NodeParser<'a> {
+    // INVARIANT: spans are in dfs parsing order: entity + reference + markup + expression.
     pub spans: Vec<Span>,
     pub errors: Vec<Error>,
     last_comment: Option<markup::Markup>,

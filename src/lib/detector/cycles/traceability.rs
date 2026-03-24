@@ -22,7 +22,7 @@ impl<'a> Detector<'a> {
     }
 
     pub fn detect(&mut self) {
-        let roots: Vec<EntityKey<'a>> = self.forward.keys().copied().collect();
+        let roots: Vec<EntityKey<'a>> = self.forward.keys().cloned().collect();
         for node in roots {
             if !self.visited.contains(&node) {
                 self.dfs(node);
@@ -32,7 +32,7 @@ impl<'a> Detector<'a> {
 
     fn dfs(&mut self, node: EntityKey<'a>) {
         if self.in_path.contains(&node) {
-            let pos = self.path.iter().position(|&n| n == node).unwrap();
+            let pos = self.path.iter().position(|n| *n == node).unwrap();
             self.cycles.push(self.path[pos..].to_vec());
             return;
         }
@@ -41,8 +41,8 @@ impl<'a> Detector<'a> {
             return;
         }
 
-        self.in_path.insert(node);
-        self.path.push(node);
+        self.in_path.insert(node.clone());
+        self.path.push(node.clone());
 
         let neighbors: Vec<EntityKey<'a>> = self
             .forward

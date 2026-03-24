@@ -5,14 +5,8 @@ pub mod entity {
         let mut first = Entity::default();
         let mut second = Entity::default();
         let mut third = Entity::default();
-        let mut fourth = Entity::default();
-        let mut fifth = Entity::default();
-
-        first.id = 1.into();
-        second.id = 2.into();
-        third.id = 3.into();
-        fourth.id = 4.into();
-        fifth.id = 5.into();
+        let fourth = Entity::default();
+        let fifth = Entity::default();
 
         let variant = EntityVariant::Package(Package::new(vec![], vec![fourth]));
         second.variant = variant;
@@ -30,7 +24,7 @@ pub mod entity {
 pub mod generator {
     use crate::children::ChildrenMut;
     use crate::syntax::entity::{Entity, EntityVariant, Requirement, RequirementVariant};
-    use crate::syntax::{NodeId, markup};
+    use crate::syntax::markup;
 
     pub struct ExponentialSizeIterator {
         value: f64,
@@ -69,19 +63,16 @@ pub mod generator {
     impl Generate for Simple {
         fn generate(&self) -> Entity {
             let mut root = Entity::default();
-            root.id = NodeId::new();
             root.meta.label = format!("root");
 
             for p in 0..self.packages {
                 let mut pkg = Entity::default();
-                pkg.id = NodeId::new();
                 pkg.meta.label = format!("package_{p}");
                 root.children_mut().unwrap().push(pkg);
 
                 let mut prev = root.children_mut().unwrap().last_mut().unwrap();
                 for d in 0..self.depth {
                     let mut curr = Entity::default();
-                    curr.id = NodeId::new();
                     curr.meta.label = format!("package_{p}_{d}");
 
                     for r in 0..self.requirements {
@@ -98,7 +89,6 @@ pub mod generator {
                         let mut rq = Requirement::new();
                         rq.variant = variant;
 
-                        req.id = NodeId::new();
                         req.variant = EntityVariant::Requirement(rq);
                         req.meta.label = format!("requirement_{p}_{d}_{r}");
 

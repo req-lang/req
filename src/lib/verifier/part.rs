@@ -1,7 +1,7 @@
 use std::ops::ControlFlow;
 
 use crate::{
-    diagnostic::{Issue, IssueKind},
+    issue::entity::{Issue, IssueKind},
     mapper::{path::PathMap, subject::SubjectMap},
     syntax::entity::{Entity, EntityVariant},
     visitor::{Visitor, WalkPre},
@@ -13,10 +13,10 @@ pub struct Verifier<'a> {
     pub issues: Vec<Issue<'a>>,
 }
 
-impl Visitor<&Entity> for Verifier<'_> {
+impl<'a> Visitor<&'a Entity> for Verifier<'a> {
     type WalkKind = WalkPre;
 
-    fn visit(&mut self, node: &Entity) -> ControlFlow<()> {
+    fn visit(&mut self, node: &'a Entity) -> ControlFlow<()> {
         use EntityVariant::*;
         use IssueKind::*;
 

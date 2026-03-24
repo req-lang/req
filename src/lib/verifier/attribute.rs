@@ -1,9 +1,12 @@
 use std::ops::ControlFlow;
 
 use crate::{
-    diagnostic::{Issue, IssueKind},
+    issue::entity::{Issue, IssueKind},
     mapper::subject::SubjectMap,
-    syntax::entity::{Entity, EntityVariant},
+    syntax::{
+        entity::{Entity, EntityVariant},
+        expression::ExpressionKey,
+    },
     verifier::typing::{TypeKind, TypeMap},
     visitor::{Visitor, WalkPre},
 };
@@ -14,10 +17,10 @@ pub struct Verifier<'a> {
     pub issues: Vec<Issue<'a>>,
 }
 
-impl Visitor<&Entity> for Verifier<'_> {
+impl<'n> Visitor<&'n Entity> for Verifier<'n> {
     type WalkKind = WalkPre;
 
-    fn visit(&mut self, node: &Entity) -> ControlFlow<()> {
+    fn visit(&mut self, node: &'n Entity) -> ControlFlow<()> {
         use EntityVariant::*;
         use IssueKind::*;
 
@@ -36,7 +39,7 @@ impl Visitor<&Entity> for Verifier<'_> {
                 issues.push(Uncommented);
             }
 
-            match self.types.get(&attribute.domain.into()) {
+            match self.types.get(&ExpressionKey::from(&attribute.domain)) {
                 Some(TypeKind::Set(typ)) => {
                     let mut inner = *typ.clone();
                     loop {
@@ -57,7 +60,7 @@ impl Visitor<&Entity> for Verifier<'_> {
                     }
                 }
                 Some(TypeKind::Undefined) | None => issues.push(UntypedAttribute),
-                Some(t) => issues.push(NotASet(t.clone())),
+                Some(_) => issues.push(UntypedAttribute), // TODO: Check if better error possible
             }
 
             let iss = issues.into_iter().map(|i| Issue::new(node.into(), i));

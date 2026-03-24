@@ -1,7 +1,7 @@
 use std::{collections::HashMap, ops::ControlFlow};
 
 use crate::{
-    diagnostic::{Issue, IssueKind},
+    issue::entity::{Issue, IssueKind},
     mapper::{ancestors::AncestorsMap, id::NodeMap, path::PathMap, requirement::RequirementMap},
     syntax::entity::{
         Entity, EntityKey, EntityVariant, RequirementVariant, TraceabilityInhibitor,
@@ -21,11 +21,11 @@ pub struct Verifier<'a> {
     pub issues: Vec<Issue<'a>>,
 }
 
-impl Visitor<&Entity> for Verifier<'_> {
+impl<'a> Visitor<&'a Entity> for Verifier<'a> {
     type WalkKind = WalkPre;
 
     // TODO: Detect circular allocations
-    fn visit(&mut self, node: &Entity) -> ControlFlow<()> {
+    fn visit(&mut self, node: &'a Entity) -> ControlFlow<()> {
         use EntityVariant::*;
         use IssueKind::*;
         use RequirementVariant::*;
@@ -38,10 +38,10 @@ impl Visitor<&Entity> for Verifier<'_> {
             if let Formal(expr) = &requirement.variant {
                 let iss = match self.types.get(&expr.into()) {
                     Some(TypeKind::Boolean) | None => None,
-                    Some(t) => Some(UnexpectedType(TypeKind::Boolean, t.clone())),
+                    Some(_) => Some(NonConstrainingRequirement),
                 };
 
-                let iss = iss.into_iter().map(|i| Issue::new(expr.into(), i));
+                let iss = iss.into_iter().map(|i| Issue::new(node.into(), i));
                 self.issues.extend(iss);
             }
 
@@ -49,14 +49,14 @@ impl Visitor<&Entity> for Verifier<'_> {
                 None => issues.push(MissingRequirementBinding),
                 Some(id) => match self.nodes_by_id.entities.get(id).unwrap().variant {
                     Part(_) | Attribute(_) => {}
-                    _ => issues.push(NotPartOrAttribute(id.into())),
+                    _ => issues.push(NotPartOrAttribute(id.clone())),
                 },
             }
 
             if let Some(vid) = self.map.allocations.get(&node.into()) {
                 match self.nodes_by_id.entities.get(vid).unwrap().variant {
                     Part(_) | Attribute(_) => {}
-                    _ => issues.push(NotPartOrAttribute(vid.into())),
+                    _ => issues.push(NotPartOrAttribute(vid.clone())),
                 };
 
                 match requirement.inhibitor {
@@ -70,7 +70,7 @@ impl Visitor<&Entity> for Verifier<'_> {
                     Some(fids) => {
                         let derived = fids.iter().find(|fid| {
                             let forward = self.nodes_by_id.entities.get(*fid).unwrap();
-                            match self.map.restrictions.get(&forward.into()) {
+                            match self.map.restrictions.get(&(*forward).into()) {
                                 Some(oid) => oid == vid,
                                 None => false,
                             }
@@ -91,8 +91,7 @@ impl Visitor<&Entity> for Verifier<'_> {
 
             for cycle in self.trace_cycles {
                 if cycle.contains(&node.into()) {
-                    let path = cycle.iter().map(|n| self.paths.get(n).unwrap().clone());
-                    issues.push(CircularTrace(path.collect()));
+                    issues.push(CircularTrace(cycle.clone()));
                 }
             }
 
@@ -145,8 +144,8 @@ impl Visitor<&Entity> for Verifier<'_> {
                 for (id, trace) in ids.iter().zip(&requirement.traceability) {
                     match seen.get(id) {
                         Some(first) => match &first.kind {
-                            k if *k == trace.kind => issues.push(DuplicatedTrace(id.into())),
-                            _ => issues.push(ConflictingTrace(id.into())),
+                            k if *k == trace.kind => issues.push(DuplicatedTrace(id.clone())),
+                            _ => issues.push(ConflictingTrace(id.clone())),
                         },
                         None => {
                             seen.insert(id, trace);
@@ -156,27 +155,27 @@ impl Visitor<&Entity> for Verifier<'_> {
                     let back = self.nodes_by_id.entities.get(id).unwrap();
                     match back.variant {
                         Requirement(_) => {}
-                        _ => issues.push(NotARequirement(id.into())),
+                        _ => issues.push(NotARequirement(id.clone())),
                     }
 
                     match (
                         self.map.restrictions.get(&node.into()),
-                        self.map.restrictions.get(&back.into()),
+                        self.map.restrictions.get(&EntityKey::from(*back)),
                     ) {
                         (Some(nid), Some(bid)) => match &trace.kind {
                             Specialization if nid != bid => {
-                                issues.push(SpecializationMismatch(bid.into()));
+                                issues.push(SpecializationMismatch(*bid));
                             }
 
                             Refinement if nid == bid => {
-                                issues.push(PossibleDuplicate(bid.into()));
+                                issues.push(PossibleDuplicate(*bid));
                             }
 
                             Refinement
                                 if nid != bid
                                     && !self.ancestors.get(nid).unwrap().contains(bid) =>
                             {
-                                issues.push(RefinementMismatch(bid.clone()));
+                                issues.push(RefinementMismatch(*bid));
                             }
                             _ => {}
                         },
@@ -186,9 +185,11 @@ impl Visitor<&Entity> for Verifier<'_> {
                     if let Some(nid) = self.map.restrictions.get(&node.into())
                         && trace.kind == Derivation
                     {
-                        match self.map.allocations.get(&back.into()) {
-                            Some(vid) if vid != nid => issues.push(DerivationMismatch(back.into())),
-                            None => issues.push(NoDerivedAllocation(back.into())),
+                        match self.map.allocations.get(&EntityKey::from(*back)) {
+                            Some(vid) if vid != nid => {
+                                issues.push(DerivationMismatch(EntityKey::from(*back)))
+                            }
+                            None => issues.push(NoDerivedAllocation(EntityKey::from(*back))),
                             _ => {}
                         }
                     }

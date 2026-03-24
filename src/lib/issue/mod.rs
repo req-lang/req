@@ -1,12 +1,14 @@
 use crate::syntax::{entity::EntityKey, expression::ExpressionKey, markup::MarkupKey};
 
 pub mod entity;
+pub mod expression;
 
 pub trait Issue<'a> {
-    fn issue(&self) -> IssueLocation<'a>;
+    fn location(&self) -> IssueLocation<'a>;
     fn message(&self) -> String;
     fn hint(&self) -> String;
     fn severity(&self) -> IssueSeverity;
+    fn code(&self) -> IssueCode;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -23,14 +25,4 @@ pub enum IssueLocation<'a> {
     Markup(MarkupKey<'a>),
 }
 
-impl<T: Issue> PartialOrd for T {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.severity().partial_cmp(&other.severity())
-    }
-}
-
-impl<T: Issue> Ord for T {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.severity().cmp(&other.severity())
-    }
-}
+pub struct IssueCode(usize);

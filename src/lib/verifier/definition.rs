@@ -1,29 +1,29 @@
 use std::{collections::HashMap, ops::ControlFlow};
 
 use crate::{
-    diagnostic::{Issue, IssueKind},
+    issue::entity::{Issue, IssueKind},
     mapper::path::PathMap,
     path::Path,
-    syntax::entity::{Entity, EntityKey},
+    syntax::entity::Entity,
     visitor::{Visitor, WalkPre},
 };
 
-pub struct Verifier<'a> {
-    paths: &'a PathMap<'a>,
-    nodes_by_path: HashMap<&'a Path, &'a Entity>,
-    pub diagnostics: Vec<Issue<'a>>,
+pub struct Verifier<'n> {
+    paths: &'n PathMap<'n>,
+    nodes_by_path: HashMap<&'n Path, &'n Entity>,
+    pub diagnostics: Vec<Issue<'n>>,
 }
 
-impl<'a> Visitor<&'a Entity> for Verifier<'a> {
+impl<'n> Visitor<&'n Entity> for Verifier<'n> {
     type WalkKind = WalkPre;
 
-    fn visit(&mut self, node: &'a Entity) -> ControlFlow<()> {
+    fn visit(&mut self, node: &'n Entity) -> ControlFlow<()> {
         use IssueKind::*;
 
-        let path = self.paths.get(&EntityKey(node)).unwrap();
+        let path = self.paths.get(&node.into()).unwrap();
 
         if let Some(duplicate) = self.nodes_by_path.insert(&path, node) {
-            let err = Issue::new(EntityKey(node), RedefinedEntity(EntityKey(duplicate)));
+            let err = Issue::new(node.into(), RedefinedEntity(duplicate.into()));
             self.diagnostics.push(err);
         }
 
@@ -31,8 +31,8 @@ impl<'a> Visitor<&'a Entity> for Verifier<'a> {
     }
 }
 
-impl<'a> Verifier<'a> {
-    pub fn new(paths: &'a PathMap) -> Self {
+impl<'n> Verifier<'n> {
+    pub fn new(paths: &'n PathMap<'n>) -> Self {
         Self {
             paths,
             diagnostics: Vec::default(),
@@ -41,4 +41,4 @@ impl<'a> Verifier<'a> {
     }
 }
 
-pub type PathNodeMap<'a> = HashMap<&'a Path, &'a Entity>;
+pub type PathNodeMap<'n> = HashMap<&'n Path, &'n Entity>;

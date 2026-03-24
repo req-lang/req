@@ -3,8 +3,6 @@ use std::{
     ops::ControlFlow,
 };
 
-use serde::Serialize;
-
 use crate::{
     syntax::{
         entity::{Entity, EntityKey, EntityVariant, RequirementVariant},
@@ -20,9 +18,7 @@ pub type RestrictionMap<'a> = HashMap<EntityKey<'a>, EntityKey<'a>>;
 pub type AllocationMap<'a> = HashMap<EntityKey<'a>, EntityKey<'a>>;
 pub type UsageMap<'a> = HashMap<EntityKey<'a>, HashSet<EntityKey<'a>>>;
 
-#[derive(Debug, Clone, Default, Serialize)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-#[cfg_attr(feature = "ts", ts(export))]
+#[derive(Debug, Clone, Default)]
 pub struct RequirementMap<'a> {
     pub restrictions: RestrictionMap<'a>,
     pub allocations: AllocationMap<'a>,
@@ -37,10 +33,10 @@ pub struct Mapper<'a> {
     pub map: RequirementMap<'a>,
 }
 
-impl Visitor<&Entity> for Mapper<'_> {
+impl<'a> Visitor<&'a Entity> for Mapper<'a> {
     type WalkKind = WalkPre;
 
-    fn visit(&mut self, node: &Entity) -> std::ops::ControlFlow<()> {
+    fn visit(&mut self, node: &'a Entity) -> std::ops::ControlFlow<()> {
         use EntityVariant::*;
         use RequirementVariant::*;
 
@@ -58,7 +54,7 @@ impl Visitor<&Entity> for Mapper<'_> {
             }
 
             for traceability in &requirement.traceability {
-                if let Some(reference) = self.references.get(&traceability.target.into()) {
+                if let Some(reference) = self.references.get(&traceability.target) {
                     let source = *reference;
 
                     self.map.backward.upsert(node.into(), source);
@@ -85,10 +81,10 @@ impl Visitor<&Entity> for Mapper<'_> {
     }
 }
 
-impl Visitor<&Expression> for Mapper<'_> {
+impl<'a> Visitor<&'a Expression> for Mapper<'a> {
     type WalkKind = WalkPre;
 
-    fn visit(&mut self, node: &Expression) -> ControlFlow<(), ()> {
+    fn visit(&mut self, node: &'a Expression) -> ControlFlow<(), ()> {
         use ExpressionVariant::*;
 
         if let Identifier(ident) = &node.variant {

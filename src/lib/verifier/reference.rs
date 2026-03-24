@@ -4,13 +4,13 @@ use itertools::Itertools;
 
 use crate::{
     children::{Children, ChildrenIter},
-    diagnostic::Issue,
+    issue::entity::Issue,
     mapper::path::PathMap,
     path::Path,
     syntax::{
         self,
         entity::{Entity, EntityKey, Reference, ReferenceKey},
-        expression::Expression,
+        expression::{Expression, ExpressionKey},
     },
     visitor::{Visitor, Walk, WalkCustom},
 };
@@ -19,23 +19,26 @@ pub struct Verifier<'a, 'b> {
     paths: &'a PathMap<'a>,
     inverse_paths: HashMap<&'a Path, &'a EntityKey<'a>>,
     parent: Vec<&'a Path>,
-    local: HashMap<&'b str, &'b EntityKey<'a>>,
+    local: HashMap<&'b str, ExpressionKey<'a>>,
     imports: Vec<Vec<&'a Path>>,
-    pub results: HashMap<ReferenceKey<'a>, Result<EntityKey<'a>, Issue<'a>>>,
+    current: Option<&'a Entity>,
+    pub entities: HashMap<ReferenceKey<'a>, Result<EntityKey<'a>, Issue<'a>>>,
+    pub expressions: HashMap<ReferenceKey<'a>, Result<ExpressionKey<'a>, Issue<'a>>>,
 }
 
-impl<'a, 'b> Walk<&'b Entity> for Verifier<'a, 'b> {
-    fn walk(&mut self, node: &'b Entity) -> ControlFlow<()> {
+impl<'a, 'b> Walk<&'a Entity> for Verifier<'a, 'b> {
+    fn walk(&mut self, node: &'a Entity) -> ControlFlow<()> {
         self.visit(node)?;
 
         if let Some(children) = node.children() {
-            self.parent.push(&self.paths.get(node.into()).unwrap());
+            self.parent
+                .push(&self.paths.get(&EntityKey::from(node)).unwrap());
             self.imports.push(
                 node.imports()
                     .into_iter()
                     .flatten()
-                    .filter_map(|r| self.results.get(r.into()).unwrap().as_ref().ok())
-                    .map(|found| self.paths.get(found.into()).unwrap())
+                    .filter_map(|r| self.entities.get(&r.into()).unwrap().as_ref().ok())
+                    .map(|found| self.paths.get(&EntityKey::from(*found)).unwrap())
                     .collect(),
             );
             for n in children {
@@ -52,10 +55,12 @@ impl<'a, 'b> Walk<&'b Entity> for Verifier<'a, 'b> {
 impl<'a, 'b> Visitor<&'b Entity> for Verifier<'a, 'b> {
     type WalkKind = WalkCustom;
 
-    fn visit(&mut self, node: &'b Entity) -> ControlFlow<()> {
+    fn visit(&mut self, node: &'a Entity) -> ControlFlow<()> {
+        self.current = Some(node);
+
         for reference in node.references() {
             let found = self.find(reference);
-            self.results.insert(reference.into(), found);
+            self.entities.insert(reference.into(), found);
         }
 
         for expression in node.expressions() {
@@ -65,7 +70,7 @@ impl<'a, 'b> Visitor<&'b Entity> for Verifier<'a, 'b> {
         for markup in node.markups() {
             for reference in markup.references() {
                 let found = self.find(reference);
-                self.results.insert(reference.into(), found);
+                self.entities.insert(reference.into(), found);
             }
         }
 
@@ -79,7 +84,9 @@ impl<'a, 'b> Walk<&'b Expression> for Verifier<'a, 'b> {
 
         let old = match node.set_element() {
             None => None,
-            Some(set) => self.local.insert(&set.variable, &set.domain.id),
+            Some(set) => self
+                .local
+                .insert(&set.variable, ExpressionKey::from(set.domain.as_ref())),
         };
 
         for child in node.children_iter() {
@@ -106,8 +113,12 @@ impl<'a, 'b> Visitor<&'b Expression> for Verifier<'a, 'b> {
 
         match &node.variant {
             Identifier(ident) if !is_builtin(&ident.target.value) => {
+                if let Some(id) = self.local.get(&ident.target.value[..]) {
+                    self.expressions.insert(ident.target.into(), id.into());
+                }
+
                 let found = self.find(&ident.target);
-                self.results.insert(ident.target.into(), found);
+                self.entities.insert(ident.target.into(), found);
             }
 
             _ => {}
@@ -118,12 +129,8 @@ impl<'a, 'b> Visitor<&'b Expression> for Verifier<'a, 'b> {
 }
 
 impl<'a> Verifier<'a, '_> {
-    fn find(&'a self, reference: &Reference) -> Result<EntityKey<'a>, Issue> {
-        use crate::diagnostic::IssueKind::{AmbiguousReference, ReferenceNotFound};
-
-        if let Some(id) = self.local.get(&reference.value[..]) {
-            return Ok(**id);
-        }
+    fn find(&self, reference: &'a Reference) -> Result<EntityKey<'a>, Issue> {
+        use crate::issue::entity::IssueKind::{AmbiguousReference, ReferenceNotFound};
 
         let path = Path::from(reference.value.to_string());
         let as_path = std::iter::once(path);
@@ -140,7 +147,7 @@ impl<'a> Verifier<'a, '_> {
             .filter_map(|p| self.inverse_paths.get(&Path::from(p)))
             .unique();
 
-        let id = reference.into();
+        let id = self.current.unwrap().into();
         match hypotheses.next() {
             None => Err(Issue::new(id, ReferenceNotFound(reference))),
             Some(found) => match hypotheses.next() {
@@ -159,7 +166,9 @@ impl<'a> Verifier<'a, '_> {
             inverse_paths,
             parent: Vec::new(),
             local: HashMap::new(),
-            results: HashMap::new(),
+            current: None,
+            expressions: HashMap::new(),
+            entities: HashMap::new(),
             imports: vec![Vec::new()],
         }
     }
