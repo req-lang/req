@@ -15,7 +15,7 @@ use super::Render;
 
 pub struct Renderer<'a> {
     indentation: usize,
-    analysis: &'a Analysis,
+    analysis: &'a Analysis<'a>,
     pub result: String,
 }
 
@@ -52,7 +52,7 @@ impl Visitor<&syntax::entity::Entity> for Renderer<'_> {
     fn visit(&mut self, node: &syntax::entity::Entity) -> ControlFlow<()> {
         use syntax::entity::EntityVariant::*;
 
-        let path = &self.analysis.paths.get(&node.id).unwrap();
+        let path = &self.analysis.paths.get(&node.into()).unwrap();
         self.indentation = path.depth() - 1;
         let kind = match node.variant {
             Part(_) => "part",
@@ -62,7 +62,7 @@ impl Visitor<&syntax::entity::Entity> for Renderer<'_> {
         }
         .blue()
         .bold();
-        let id = format!("{}", node.id).purple();
+        let id = format!("{}", node.into()).purple();
         let parent = path.parent().unwrap_or("");
         let label = path.last().white().bold();
         let result = format!("{} {} {} {:<12}", kind, label, parent, id);
@@ -74,7 +74,7 @@ impl Visitor<&syntax::entity::Entity> for Renderer<'_> {
             .analysis
             .diagnostics
             .iter()
-            .filter(|e| e.id == node.id)
+            .filter(|e| e.into() == node.into())
             .collect();
         errors.sort_by_key(|e| &e.kind);
         if !errors.is_empty() {
@@ -82,7 +82,7 @@ impl Visitor<&syntax::entity::Entity> for Renderer<'_> {
             self.push_line(title.to_string());
             for err in errors {
                 let line = format!("- {}", err).bold();
-                let colored = err.severity.colored(&line);
+                let colored = IssueSeverity::from(&err.kind).colored(&line);
                 self.push_line(colored.to_string());
             }
         }
@@ -92,8 +92,8 @@ impl Visitor<&syntax::entity::Entity> for Renderer<'_> {
             self.push_line(title.to_string());
             for tag in &node.meta.tags {
                 match &tag.value {
-                    Some(v) => self.push_line(format!("# {} -> {}", tag.id, v)),
-                    None => self.push_line(format!("# {}", tag.id)),
+                    Some(v) => self.push_line(format!("# {} -> {}", tag.into(), v)),
+                    None => self.push_line(format!("# {}", tag.into())),
                 }
             }
         }
@@ -105,7 +105,7 @@ impl Visitor<&syntax::entity::Entity> for Renderer<'_> {
             self.push_line(title.to_string());
             for reference in references {
                 let raw = &reference.value;
-                let rid = reference.rid;
+                let rid = reference.into();
                 let line = match self.analysis.references.get(&rid) {
                     Some(target) => {
                         let path = self.analysis.paths.get(target).unwrap();
@@ -162,9 +162,9 @@ impl Visitor<&syntax::expression::Expression> for Renderer<'_> {
             Set(_) => "set",
         }
         .blue();
-        let id = format!("{}", node.id).purple();
+        let id = format!("{}", node.into()).purple();
 
-        let typ = match self.analysis.types.get(&node.id) {
+        let typ = match self.analysis.types.get(&node.into()) {
             Some(t) if *t == TypeKind::Undefined => format!("undefined").yellow(),
             Some(t) => format!("{:?}", t).to_lowercase().bright_green(),
             None => format!("unknown").yellow(),
@@ -174,7 +174,7 @@ impl Visitor<&syntax::expression::Expression> for Renderer<'_> {
         let target = match &node.variant {
             Identifier(ident) => {
                 let reference = &ident.target;
-                let rid = reference.rid;
+                let rid = reference.into();
                 match self.analysis.references.get(&rid) {
                     Some(target) => match self.analysis.paths.get(target) {
                         Some(path) => format!(" -> {}", format!("{}", path).bright_green()),
@@ -197,7 +197,7 @@ impl Visitor<&syntax::expression::Expression> for Renderer<'_> {
             .analysis
             .diagnostics
             .iter()
-            .filter(|e| e.id == node.id)
+            .filter(|e| e.into() == node.into())
             .collect();
         if errors.len() > 0 {
             let title = "*** errors ***".red().bold();

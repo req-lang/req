@@ -20,7 +20,7 @@ use diagnostic::{Issue, ResultErr};
 use mapper::{
     ancestors::{self, AncestorsMap},
     id,
-    path::{self, PathMap},
+    path::PathMap,
 };
 use syntax::entity::Entity;
 use verifier::{
@@ -43,10 +43,14 @@ pub mod children;
 pub mod detector;
 pub mod diagnostic;
 pub mod inverse;
+pub mod issue;
 pub mod iter;
+pub mod key;
 pub mod mapper;
 pub mod mock;
+pub mod path;
 pub mod renderer;
+pub mod resulterr;
 pub mod syntax;
 pub mod upsert;
 pub mod verifier;
@@ -57,18 +61,18 @@ pub mod visitor;
 #[cfg_attr(feature = "ts", ts(export))]
 pub struct Analysis<'a> {
     pub paths: PathMap<'a>,
-    pub ancestors: AncestorsMap,
-    pub references: ReferenceMap,
-    pub types: TypeMap,
-    pub requirements: RequirementMap,
-    pub subjects: SubjectMap,
+    pub ancestors: AncestorsMap<'a>,
+    pub references: ReferenceMap<'a>,
+    pub types: TypeMap<'a>,
+    pub requirements: RequirementMap<'a>,
+    pub subjects: SubjectMap<'a>,
     pub tags: TagMap,
-    pub diagnostics: Vec<Issue>,
+    pub diagnostics: Vec<Issue<'a>>,
 }
 
 impl<'a> From<&'a Entity> for Analysis<'a> {
     fn from(root: &'a Entity) -> Self {
-        let paths = path::PathMap::from(root);
+        let paths = mapper::path::PathMap::from(root);
         let nodes_by_id = id::NodeMap::from(root);
         let ancestors = ancestors::AncestorsMap::from(root);
 

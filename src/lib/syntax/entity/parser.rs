@@ -394,6 +394,19 @@ impl TraceabilityKind {
     }
 }
 
+impl<'a> TryFrom<&'a Keyword> for TraceabilityKind {
+    type Error = &'a Keyword;
+
+    fn try_from(value: &'a Keyword) -> Result<Self, Self::Error> {
+        match value {
+            Keyword::Refines => Ok(TraceabilityKind::Refinement),
+            Keyword::Specializes => Ok(TraceabilityKind::Specialization),
+            Keyword::Derives => Ok(TraceabilityKind::Derivation),
+            v => Err(v),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{

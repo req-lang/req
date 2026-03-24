@@ -2,22 +2,22 @@ use std::collections::{HashMap, HashSet};
 
 use serde::Serialize;
 
-use crate::{inverse::Inverse, mapper::requirement::RequirementMap, syntax::NodeId};
+use crate::{inverse::Inverse, mapper::requirement::RequirementMap, syntax::entity::EntityKey};
 
-pub type RestrictionMap = HashMap<NodeId, HashSet<NodeId>>;
-pub type AllocationMap = HashMap<NodeId, HashSet<NodeId>>;
-pub type UsageMap = HashMap<NodeId, HashSet<NodeId>>;
+pub type RestrictionMap<'a> = HashMap<EntityKey<'a>, HashSet<EntityKey<'a>>>;
+pub type AllocationMap<'a> = HashMap<EntityKey<'a>, HashSet<EntityKey<'a>>>;
+pub type UsageMap<'a> = HashMap<EntityKey<'a>, HashSet<EntityKey<'a>>>;
 
 #[derive(Debug, Clone, Default, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "ts", ts(export))]
-pub struct SubjectMap {
-    pub restrictions: RestrictionMap,
-    pub allocations: AllocationMap,
-    pub usages: UsageMap,
+pub struct SubjectMap<'a> {
+    pub restrictions: RestrictionMap<'a>,
+    pub allocations: AllocationMap<'a>,
+    pub usages: UsageMap<'a>,
 }
 
-impl From<&RequirementMap> for SubjectMap {
+impl<'a> From<&RequirementMap<'a>> for SubjectMap<'a> {
     fn from(value: &RequirementMap) -> Self {
         Self {
             restrictions: value.restrictions.inversed(),

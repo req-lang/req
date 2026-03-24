@@ -7,9 +7,9 @@ use crate::{
     diagnostic::{Issue, IssueKind},
     mapper::id::NodeMap,
     syntax::{
-        self, NodeId,
+        self,
         entity::{Entity, EntityVariant},
-        expression::{Case, Expression, ExpressionVariant, SetElement},
+        expression::{Case, Expression, ExpressionKey, ExpressionVariant, SetElement},
     },
     verifier::reference::ReferenceMap,
     visitor::{Visitor, Walk, WalkCustom},
@@ -17,12 +17,12 @@ use crate::{
 
 pub struct Verifier<'a> {
     nodes_by_id: &'a NodeMap<'a>,
-    references: &'a ReferenceMap,
-    pub results: HashMap<NodeId, Result<TypeKind, Issue>>,
+    references: &'a ReferenceMap<'a>,
+    pub results: HashMap<ExpressionKey<'a>, Result<TypeKind, Issue<'a>>>,
 }
 
-impl<'a> Walk<&Entity> for Verifier<'a> {
-    fn walk(&mut self, node: &Entity) -> ControlFlow<()> {
+impl<'a> Walk<&'a Entity> for Verifier<'a> {
+    fn walk(&mut self, node: &'a Entity) -> ControlFlow<()> {
         use EntityVariant::*;
 
         for child in node.children_iter() {
@@ -36,10 +36,10 @@ impl<'a> Walk<&Entity> for Verifier<'a> {
     }
 }
 
-impl<'a> Visitor<&Entity> for Verifier<'a> {
+impl<'a> Visitor<&'a Entity> for Verifier<'a> {
     type WalkKind = WalkCustom;
 
-    fn visit(&mut self, node: &Entity) -> ControlFlow<()> {
+    fn visit(&mut self, node: &'a Entity) -> ControlFlow<()> {
         for expression in node.expressions() {
             self.walk(expression)?;
         }
@@ -47,8 +47,8 @@ impl<'a> Visitor<&Entity> for Verifier<'a> {
     }
 }
 
-impl<'a> Walk<&Expression> for Verifier<'a> {
-    fn walk(&mut self, node: &Expression) -> ControlFlow<()> {
+impl<'a> Walk<&'a Expression> for Verifier<'a> {
+    fn walk(&mut self, node: &'a Expression) -> ControlFlow<()> {
         if let Some(set) = node.set_element() {
             self.walk(set.domain.as_ref())?;
         }
@@ -62,24 +62,24 @@ impl<'a> Walk<&Expression> for Verifier<'a> {
     }
 }
 
-impl<'a> Visitor<&Expression> for Verifier<'a> {
+impl<'a> Visitor<&'a Expression> for Verifier<'a> {
     type WalkKind = WalkCustom;
 
-    fn visit(&mut self, node: &Expression) -> ControlFlow<()> {
+    fn visit(&mut self, node: &'a Expression) -> ControlFlow<()> {
         let result = self.eval(node);
-        self.results.insert(node.id, result);
+        self.results.insert(node.into(), result);
         ControlFlow::Continue(())
     }
 }
 
-impl Verifier<'_> {
+impl<'a> Verifier<'a> {
     #[inline]
     fn get_result(&self, referer: &Expression, node: &Expression) -> Result<TypeKind, Issue> {
         self.results
-            .get(&node.id)
+            .get(&node.into())
             .unwrap()
             .clone()
-            .map_err(|err| Issue::propagated(referer.id, err))
+            .map_err(|err| Issue::propagated(referer.into(), err))
     }
 
     fn check_set_element(&self, node: &Expression, set: &SetElement) -> Result<TypeKind, Issue> {
@@ -90,13 +90,13 @@ impl Verifier<'_> {
         let domain = &set.domain;
         let typ = match self.get_result(node, domain)? {
             Set(t) => t,
-            typ => return Err(Issue::new(domain.id, NotASet(typ))),
+            typ => return Err(Issue::new(domain.into(), NotASet(typ))),
         };
 
         if let Some(filter) = &set.filter {
             let typ = self.get_result(node, filter)?;
             if typ != Boolean {
-                let id = filter.id;
+                let id = filter.into();
                 return Err(Issue::new(id, UnexpectedType(Boolean, typ)));
             }
         }
@@ -115,7 +115,7 @@ impl Verifier<'_> {
 
         let cond = self.get_result(node, &case.condition)?;
         if cond != Boolean {
-            let id = case.condition.id;
+            let id = case.condition.into();
             return Err(Issue::new(id, UnexpectedType(Boolean, cond)));
         }
 
@@ -123,14 +123,14 @@ impl Verifier<'_> {
         match expected {
             Some(t) if cons == *t => Ok(cons),
             Some(t) => {
-                let id = case.consequence.id;
+                let id = case.consequence.into();
                 Err(Issue::new(id, UnexpectedType(t.clone(), cons)))
             }
             None => Ok(cons),
         }
     }
 
-    fn eval(&mut self, node: &Expression) -> Result<TypeKind, Issue> {
+    fn eval(&mut self, node: &'a Expression) -> Result<TypeKind, Issue> {
         {
             use EntityVariant::*;
             use ExpressionVariant::*;
@@ -170,7 +170,7 @@ impl Verifier<'_> {
                     let expr = forall.expression.as_ref();
                     let typ = self.get_result(node, expr)?;
                     if typ != Boolean {
-                        let id = expr.id;
+                        let id = expr.into();
                         return Err(Issue::new(id, UnexpectedType(Boolean, typ)));
                     }
 
@@ -193,7 +193,7 @@ impl Verifier<'_> {
                         Some(opt) => match self.get_result(node, &opt.expression)? {
                             Number => Ok(Number),
                             t => {
-                                let id = opt.expression.id;
+                                let id = opt.expression.into();
                                 Err(Issue::new(id, UnexpectedType(Number, t)))
                             }
                         },
@@ -206,7 +206,7 @@ impl Verifier<'_> {
                     for expression in &aggregation.expressions {
                         let type_expr = self.get_result(node, expression)?;
                         if type_expr != Boolean {
-                            let id = expression.id;
+                            let id = expression.into();
                             return Err(Issue::new(id, UnexpectedType(Boolean, type_expr)));
                         }
                     }
@@ -227,7 +227,7 @@ impl Verifier<'_> {
 
                     match type_op {
                         actual if actual != expected => {
-                            let id = unary_op.operand.id;
+                            let id = unary_op.operand.into();
                             Err(Issue::new(id, UnexpectedType(expected, actual)))
                         }
                         _ => Ok(expected),
@@ -251,38 +251,38 @@ impl Verifier<'_> {
                         }
                         In => match &rhs {
                             TypeKind::Set(rhs) => (*rhs.clone(), Boolean),
-                            _ => return Err(Issue::new(bin_op.right.id, NotASet(rhs))),
+                            _ => return Err(Issue::new(bin_op.right.into(), NotASet(rhs))),
                         },
                         Includes => match &rhs {
                             TypeKind::Set(rhs) => (TypeKind::Set(rhs.clone()), Boolean),
-                            _ => return Err(Issue::new(bin_op.right.id, NotASet(rhs))),
+                            _ => return Err(Issue::new(bin_op.right.into(), NotASet(rhs))),
                         },
                     };
 
                     match (&bin_op.operator, lhs, rhs) {
                         (In, lhs, _) if lhs == expected => Ok(result),
                         (In, lhs, _) => {
-                            let id = bin_op.left.id;
+                            let id = bin_op.left.into();
                             Err(Issue::new(id, UnexpectedType(expected, lhs)))
                         }
                         (Union | Intersection | Includes | Complement | Difference, lhs, _)
                             if !lhs.is_set() =>
                         {
-                            let id = bin_op.left.id;
+                            let id = bin_op.left.into();
                             Err(Issue::new(id, UnexpectedType(expected, lhs)))
                         }
                         (Union | Intersection | Includes | Complement | Difference, _, rhs)
                             if !rhs.is_set() =>
                         {
-                            let id = bin_op.right.id;
+                            let id = bin_op.right.into();
                             Err(Issue::new(id, UnexpectedType(expected, rhs)))
                         }
                         (_, lhs, _) if lhs != expected => {
-                            let id = bin_op.left.id;
+                            let id = bin_op.left.into();
                             Err(Issue::new(id, UnexpectedType(expected, lhs)))
                         }
                         (_, _, rhs) if rhs != expected => {
-                            let id = bin_op.right.id;
+                            let id = bin_op.right.into();
                             Err(Issue::new(id, UnexpectedType(expected, rhs)))
                         }
                         (_, _, _) => Ok(result),
@@ -296,7 +296,7 @@ impl Verifier<'_> {
                     for elem in se {
                         let type_elem = self.get_result(node, &elem)?;
                         if type_elem != type_first {
-                            let id = elem.id;
+                            let id = elem.into();
                             return Err(Issue::new(id, UnexpectedType(type_first, type_elem)));
                         }
                     }
@@ -314,19 +314,21 @@ impl Verifier<'_> {
                     Ok(TypeKind::Set(Box::new(TypeKind::Boolean)))
                 }
 
-                Identifier(ident) => match self.references.get(&ident.target.rid) {
+                Identifier(ident) => match self.references.get(ident.target.into()) {
                     Some(id) => match &self.nodes_by_id.entities.get(id) {
                         Some(entity) => match &entity.variant {
-                            Attribute(attribute) => match self.results.get(&attribute.domain.id) {
-                                Some(Ok(TypeKind::Set(typ))) => Ok(*typ.clone()),
-                                _ => Ok(TypeKind::Undefined),
-                            },
+                            Attribute(attribute) => {
+                                match self.results.get(&attribute.domain.into()) {
+                                    Some(Ok(TypeKind::Set(typ))) => Ok(*typ.clone()),
+                                    _ => Ok(TypeKind::Undefined),
+                                }
+                            }
 
                             _ => Err(Issue::new(*id, NotAnAttribute(ident.target.clone()))),
                         },
 
                         None => match self.nodes_by_id.expressions.get(id) {
-                            Some(expr) => match self.results.get(&expr.id) {
+                            Some(expr) => match self.results.get(&expr.into()) {
                                 Some(Ok(TypeKind::Set(typ))) => Ok(*typ.clone()),
                                 _ => Ok(TypeKind::Undefined),
                             },
@@ -345,7 +347,7 @@ impl Verifier<'_> {
     }
 }
 
-pub type TypeMap = HashMap<NodeId, TypeKind>;
+pub type TypeMap<'a> = HashMap<ExpressionKey<'a>, TypeKind>;
 
 impl<'a> Verifier<'a> {
     pub fn new(references: &'a ReferenceMap, nodes_by_id: &'a NodeMap) -> Self {

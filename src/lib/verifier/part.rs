@@ -8,9 +8,9 @@ use crate::{
 };
 
 pub struct Verifier<'a> {
-    smap: &'a SubjectMap,
-    paths: &'a PathMap,
-    pub issues: Vec<Issue>,
+    smap: &'a SubjectMap<'a>,
+    paths: &'a PathMap<'a>,
+    pub issues: Vec<Issue<'a>>,
 }
 
 impl Visitor<&Entity> for Verifier<'_> {
@@ -24,18 +24,17 @@ impl Visitor<&Entity> for Verifier<'_> {
             let mut issues = Vec::new();
 
             for child in &part.children {
-                let path = self.paths.get(&child.id).unwrap();
                 match &child.variant {
                     Part(_) | Attribute(_) => {}
-                    _ => issues.push(NotPartOrAttribute(path.clone())),
+                    _ => issues.push(NotPartOrAttribute(child.into())),
                 }
             }
 
-            if let None = self.smap.usages.get(&node.id) {
+            if let None = self.smap.usages.get(&node.into()) {
                 issues.push(Unused);
             }
 
-            if let None = self.smap.restrictions.get(&node.id)
+            if let None = self.smap.restrictions.get(&node.into())
                 && part.children.is_empty()
             {
                 issues.push(Unrestricted);
@@ -45,7 +44,7 @@ impl Visitor<&Entity> for Verifier<'_> {
                 issues.push(Uncommented);
             }
 
-            let iss = issues.into_iter().map(|i| Issue::new(node.id, i));
+            let iss = issues.into_iter().map(|i| Issue::new(node.into(), i));
             self.issues.extend(iss);
         }
 

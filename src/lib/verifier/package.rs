@@ -8,8 +8,8 @@ use crate::{
 };
 
 pub struct Verifier<'a> {
-    paths: &'a PathMap,
-    pub issues: Vec<Issue>,
+    paths: &'a PathMap<'a>,
+    pub issues: Vec<Issue<'a>>,
 }
 
 impl Visitor<&Entity> for Verifier<'_> {
@@ -27,13 +27,12 @@ impl Visitor<&Entity> for Verifier<'_> {
             }
 
             for child in &package.children {
-                let path = self.paths.get(&child.id).unwrap();
                 if let Attribute(_) = child.variant {
-                    issues.push(UnexpectedAttribute(path.clone()));
+                    issues.push(UnexpectedAttribute(child.into()));
                 }
             }
 
-            let iss = issues.into_iter().map(|i| Issue::new(node.id, i));
+            let iss = issues.into_iter().map(|i| Issue::new(node.into(), i));
             self.issues.extend(iss);
         }
 

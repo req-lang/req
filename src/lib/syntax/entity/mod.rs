@@ -2,45 +2,25 @@ use super::{expression, markup};
 use crate::{
     children::{Children, ChildrenIter, ChildrenIterMut, ChildrenMut, IntoChildren},
     iter::{NodeIter, UnsafeNodeIterMut},
+    key::NodeKey,
 };
+use serde::Serialize;
 use std::{
     fmt::Display,
     hash::{Hash, Hasher},
 };
-use tokenizer::Keyword;
-
-pub const REFERENCE_SEPARATOR: &str = "::";
 
 pub mod parser;
 pub mod tokenizer;
 
-#[derive(Debug, Copy, Clone)]
-pub(crate) struct EntityKey<'a>(pub &'a Entity);
+pub const REFERENCE_SEPARATOR: &str = "::";
 
-impl Hash for EntityKey<'_> {
-    fn hash<H: Hasher>(&self, s: &mut H) {
-        (self.0 as *const Entity as usize).hash(s);
-    }
-}
+pub(crate) type EntityKey<'a> = NodeKey<'a, Entity>;
 
-impl PartialEq for EntityKey<'_> {
-    fn eq(&self, o: &Self) -> bool {
-        std::ptr::eq(self.0, o.0)
-    }
-}
-
-impl Eq for EntityKey<'_> {}
-
-#[derive(Debug, Clone, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Entity {
     pub meta: EntityMeta,
-    pub variant: EntityVariant,
-}
-
-impl PartialEq for Entity {
-    fn eq(&self, other: &Self) -> bool {
-        self.variant == other.variant && self.meta == other.meta
-    }
+    pub variant: EntityVariant<Entity>,
 }
 
 impl Default for Entity {
@@ -98,7 +78,7 @@ impl ChildrenIterMut for Entity {
 }
 
 impl Entity {
-    pub fn new(entity: EntityMeta, variant: EntityVariant) -> Self {
+    pub fn new(entity: EntityMeta, variant: EntityVariant<Entity>) -> Self {
         Entity {
             meta: entity,
             variant,
@@ -269,7 +249,9 @@ impl Entity {
             _ => None,
         }
     }
+}
 
+impl Entity {
     pub fn iter(&self) -> impl Iterator<Item = &Self> {
         NodeIter::new(self)
     }
@@ -280,21 +262,21 @@ impl Entity {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum EntityVariant {
-    Part(Part),
+pub enum EntityVariant<T = Entity> {
+    Part(Part<T>),
     Attribute(Attribute),
-    Package(Package),
+    Package(Package<T>),
     Requirement(Requirement),
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
-pub struct Part {
+pub struct Part<T = Entity> {
     pub imports: Vec<Reference>,
-    pub children: Vec<Entity>,
+    pub children: Vec<T>,
 }
 
-impl Part {
-    pub fn new(imports: Vec<Reference>, children: Vec<Entity>) -> Self {
+impl<T> Part<T> {
+    pub fn new(imports: Vec<Reference>, children: Vec<T>) -> Self {
         Part { imports, children }
     }
 }
@@ -312,13 +294,13 @@ impl Attribute {
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
-pub struct Package {
+pub struct Package<T = Entity> {
     pub imports: Vec<Reference>,
-    pub children: Vec<Entity>,
+    pub children: Vec<T>,
 }
 
-impl Package {
-    pub fn new(imports: Vec<Reference>, children: Vec<Entity>) -> Self {
+impl<T> Package<T> {
+    pub fn new(imports: Vec<Reference>, children: Vec<T>) -> Self {
         Package { imports, children }
     }
 }
@@ -402,20 +384,9 @@ impl TraceabilityLink {
     }
 }
 
-impl<'a> TryFrom<&'a Keyword> for TraceabilityKind {
-    type Error = &'a Keyword;
+pub(crate) type ReferenceKey<'a> = NodeKey<Reference>;
 
-    fn try_from(value: &'a Keyword) -> Result<Self, Self::Error> {
-        match value {
-            Keyword::Refines => Ok(TraceabilityKind::Refinement),
-            Keyword::Specializes => Ok(TraceabilityKind::Specialization),
-            Keyword::Derives => Ok(TraceabilityKind::Derivation),
-            v => Err(v),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
 pub struct Reference {
     pub value: String,
 }

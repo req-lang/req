@@ -9,9 +9,9 @@ use crate::{
 };
 
 pub struct Verifier<'a> {
-    types: &'a TypeMap,
-    smap: &'a SubjectMap,
-    pub issues: Vec<Issue>,
+    types: &'a TypeMap<'a>,
+    smap: &'a SubjectMap<'a>,
+    pub issues: Vec<Issue<'a>>,
 }
 
 impl Visitor<&Entity> for Verifier<'_> {
@@ -24,11 +24,11 @@ impl Visitor<&Entity> for Verifier<'_> {
         if let Attribute(attribute) = &node.variant {
             let mut issues = Vec::new();
 
-            if let None = self.smap.usages.get(&node.id) {
+            if let None = self.smap.usages.get(&node.into()) {
                 issues.push(Unused);
             }
 
-            if let None = self.smap.restrictions.get(&node.id) {
+            if let None = self.smap.restrictions.get(&node.into()) {
                 issues.push(Unrestricted);
             }
 
@@ -36,7 +36,7 @@ impl Visitor<&Entity> for Verifier<'_> {
                 issues.push(Uncommented);
             }
 
-            match self.types.get(&attribute.domain.id) {
+            match self.types.get(&attribute.domain.into()) {
                 Some(TypeKind::Set(typ)) => {
                     let mut inner = *typ.clone();
                     loop {
@@ -60,7 +60,7 @@ impl Visitor<&Entity> for Verifier<'_> {
                 Some(t) => issues.push(NotASet(t.clone())),
             }
 
-            let iss = issues.into_iter().map(|i| Issue::new(node.id, i));
+            let iss = issues.into_iter().map(|i| Issue::new(node.into(), i));
             self.issues.extend(iss);
         }
 

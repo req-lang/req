@@ -5,22 +5,23 @@ use itertools::Itertools;
 use crate::{
     children::{Children, ChildrenIter},
     diagnostic::Issue,
-    mapper::path::{Path, PathMap},
+    mapper::path::PathMap,
+    path::Path,
     syntax::{
-        self, NodeId, ReferenceId,
-        entity::{Entity, Reference},
+        self,
+        entity::{Entity, EntityKey, Reference, ReferenceKey},
         expression::Expression,
     },
     visitor::{Visitor, Walk, WalkCustom},
 };
 
 pub struct Verifier<'a, 'b> {
-    paths: &'a PathMap,
-    inverse_paths: HashMap<&'a Path, &'a NodeId>,
+    paths: &'a PathMap<'a>,
+    inverse_paths: HashMap<&'a Path, &'a EntityKey<'a>>,
     parent: Vec<&'a Path>,
-    local: HashMap<&'b str, &'b NodeId>,
+    local: HashMap<&'b str, &'b EntityKey<'a>>,
     imports: Vec<Vec<&'a Path>>,
-    pub results: HashMap<ReferenceId, Result<NodeId, Issue>>,
+    pub results: HashMap<ReferenceKey<'a>, Result<EntityKey<'a>, Issue<'a>>>,
 }
 
 impl<'a, 'b> Walk<&'b Entity> for Verifier<'a, 'b> {
@@ -28,13 +29,13 @@ impl<'a, 'b> Walk<&'b Entity> for Verifier<'a, 'b> {
         self.visit(node)?;
 
         if let Some(children) = node.children() {
-            self.parent.push(&self.paths.get(&node.id).unwrap());
+            self.parent.push(&self.paths.get(node.into()).unwrap());
             self.imports.push(
                 node.imports()
                     .into_iter()
                     .flatten()
-                    .filter_map(|r| self.results.get(&r.rid).unwrap().as_ref().ok())
-                    .map(|found| self.paths.get(&found).unwrap())
+                    .filter_map(|r| self.results.get(r.into()).unwrap().as_ref().ok())
+                    .map(|found| self.paths.get(found.into()).unwrap())
                     .collect(),
             );
             for n in children {
@@ -54,7 +55,7 @@ impl<'a, 'b> Visitor<&'b Entity> for Verifier<'a, 'b> {
     fn visit(&mut self, node: &'b Entity) -> ControlFlow<()> {
         for reference in node.references() {
             let found = self.find(reference);
-            self.results.insert(reference.rid, found);
+            self.results.insert(reference.into(), found);
         }
 
         for expression in node.expressions() {
@@ -64,7 +65,7 @@ impl<'a, 'b> Visitor<&'b Entity> for Verifier<'a, 'b> {
         for markup in node.markups() {
             for reference in markup.references() {
                 let found = self.find(reference);
-                self.results.insert(reference.rid, found);
+                self.results.insert(reference.into(), found);
             }
         }
 
@@ -106,7 +107,7 @@ impl<'a, 'b> Visitor<&'b Expression> for Verifier<'a, 'b> {
         match &node.variant {
             Identifier(ident) if !is_builtin(&ident.target.value) => {
                 let found = self.find(&ident.target);
-                self.results.insert(ident.target.rid, found);
+                self.results.insert(ident.target.into(), found);
             }
 
             _ => {}
@@ -116,8 +117,8 @@ impl<'a, 'b> Visitor<&'b Expression> for Verifier<'a, 'b> {
     }
 }
 
-impl Verifier<'_, '_> {
-    fn find(&self, reference: &Reference) -> Result<NodeId, Issue> {
+impl<'a> Verifier<'a, '_> {
+    fn find(&'a self, reference: &Reference) -> Result<EntityKey<'a>, Issue> {
         use crate::diagnostic::IssueKind::{AmbiguousReference, ReferenceNotFound};
 
         if let Some(id) = self.local.get(&reference.value[..]) {
@@ -139,12 +140,12 @@ impl Verifier<'_, '_> {
             .filter_map(|p| self.inverse_paths.get(&Path::from(p)))
             .unique();
 
-        let id = reference.id;
+        let id = reference.into();
         match hypotheses.next() {
-            None => Err(Issue::new(id, ReferenceNotFound(reference.clone()))),
+            None => Err(Issue::new(id, ReferenceNotFound(reference))),
             Some(found) => match hypotheses.next() {
                 None => Ok(**found),
-                Some(_) => Err(Issue::new(id, AmbiguousReference(reference.clone()))),
+                Some(_) => Err(Issue::new(id, AmbiguousReference(reference))),
             },
         }
     }
@@ -164,7 +165,7 @@ impl<'a> Verifier<'a, '_> {
     }
 }
 
-pub type ReferenceMap = HashMap<ReferenceId, NodeId>;
+pub type ReferenceMap<'a> = HashMap<ReferenceKey<'a>, EntityKey<'a>>;
 
 #[inline]
 pub fn is_builtin(val: &str) -> bool {

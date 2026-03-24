@@ -2,21 +2,24 @@ use std::{collections::HashMap, ops::ControlFlow};
 
 use crate::{
     children::{Children, ChildrenIter},
-    syntax::{NodeId, entity, expression},
+    syntax::{
+        entity::{Entity, EntityKey},
+        expression,
+    },
     visitor::{Visitor, Walk, WalkCustom},
 };
 
 #[derive(Default, Debug)]
-struct Mapper {
-    current: Vec<NodeId>,
-    map: AncestorsMap,
+struct Mapper<'a> {
+    current: Vec<EntityKey<'a>>,
+    map: AncestorsMap<'a>,
 }
 
-impl Walk<&entity::Entity> for Mapper {
-    fn walk(&mut self, node: &entity::Entity) -> ControlFlow<()> {
+impl<'a> Walk<&Entity> for Mapper<'a> {
+    fn walk(&mut self, node: &Entity) -> ControlFlow<()> {
         self.visit(node)?;
 
-        self.current.push(node.id);
+        self.current.push(node.into());
         if let Some(children) = node.children() {
             for n in children {
                 self.walk(n)?;
@@ -28,55 +31,28 @@ impl Walk<&entity::Entity> for Mapper {
     }
 }
 
-impl Visitor<&entity::Entity> for Mapper {
+impl<'a> Visitor<&'a Entity> for Mapper<'a> {
     type WalkKind = WalkCustom;
 
-    fn visit(&mut self, node: &entity::Entity) -> ControlFlow<()> {
-        self.map.insert(node.id, self.current.clone());
+    fn visit(&mut self, node: &'a Entity) -> ControlFlow<()> {
+        self.map.insert(node.into(), self.current.clone());
 
-        self.current.push(node.id);
-        for m in node.markups() {
-            self.map.insert(m.id, self.current.clone());
-        }
+        self.current.push(node.into());
 
-        for e in node.expressions() {
-            self.walk(e)?;
-        }
+        // TODO: Retablish expression and proper markup mapper
+
         self.current.pop();
 
         ControlFlow::Continue(())
     }
 }
 
-impl Walk<&expression::Expression> for Mapper {
-    fn walk(&mut self, node: &expression::Expression) -> ControlFlow<()> {
-        self.visit(node)?;
-
-        self.current.push(node.id);
-        for n in node.children_iter() {
-            self.walk(n)?;
-        }
-        self.current.pop();
-
-        ControlFlow::Continue(())
+impl<'a> From<&'a Entity> for AncestorsMap<'a> {
+    fn from(value: &'a Entity) -> Self {
+        let mut ret = Mapper::default();
+        _ = ret.walk(value);
+        ret.map
     }
 }
 
-impl Visitor<&expression::Expression> for Mapper {
-    type WalkKind = WalkCustom;
-
-    fn visit(&mut self, node: &expression::Expression) -> ControlFlow<()> {
-        self.map.insert(node.id, self.current.clone());
-        ControlFlow::Continue(())
-    }
-}
-
-impl From<&entity::Entity> for AncestorsMap {
-    fn from(node: &entity::Entity) -> Self {
-        let mut mapper = Mapper::default();
-        let _ = mapper.walk(node);
-        mapper.map
-    }
-}
-
-pub type AncestorsMap = HashMap<NodeId, Vec<NodeId>>;
+pub type AncestorsMap<'a> = HashMap<EntityKey<'a>, Vec<EntityKey<'a>>>;

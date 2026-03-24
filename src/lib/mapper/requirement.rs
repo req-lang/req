@@ -7,8 +7,7 @@ use serde::Serialize;
 
 use crate::{
     syntax::{
-        NodeId,
-        entity::{Entity, EntityVariant, RequirementVariant},
+        entity::{Entity, EntityKey, EntityVariant, RequirementVariant},
         expression::{Expression, ExpressionVariant},
     },
     upsert::Upsert,
@@ -16,26 +15,26 @@ use crate::{
     visitor::{Visitor, Walk, WalkPre},
 };
 
-pub type TraceabilityMap = HashMap<NodeId, Vec<NodeId>>;
-pub type RestrictionMap = HashMap<NodeId, NodeId>;
-pub type AllocationMap = HashMap<NodeId, NodeId>;
-pub type UsageMap = HashMap<NodeId, HashSet<NodeId>>;
+pub type TraceabilityMap<'a> = HashMap<EntityKey<'a>, Vec<EntityKey<'a>>>;
+pub type RestrictionMap<'a> = HashMap<EntityKey<'a>, EntityKey<'a>>;
+pub type AllocationMap<'a> = HashMap<EntityKey<'a>, EntityKey<'a>>;
+pub type UsageMap<'a> = HashMap<EntityKey<'a>, HashSet<EntityKey<'a>>>;
 
 #[derive(Debug, Clone, Default, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "ts", ts(export))]
-pub struct RequirementMap {
-    pub restrictions: RestrictionMap,
-    pub allocations: AllocationMap,
-    pub forward: TraceabilityMap,
-    pub backward: TraceabilityMap,
-    pub usages: UsageMap,
+pub struct RequirementMap<'a> {
+    pub restrictions: RestrictionMap<'a>,
+    pub allocations: AllocationMap<'a>,
+    pub forward: TraceabilityMap<'a>,
+    pub backward: TraceabilityMap<'a>,
+    pub usages: UsageMap<'a>,
 }
 
 pub struct Mapper<'a> {
-    references: &'a ReferenceMap,
-    current: Option<NodeId>,
-    pub map: RequirementMap,
+    references: &'a ReferenceMap<'a>,
+    current: Option<EntityKey<'a>>,
+    pub map: RequirementMap<'a>,
 }
 
 impl Visitor<&Entity> for Mapper<'_> {
@@ -47,34 +46,34 @@ impl Visitor<&Entity> for Mapper<'_> {
 
         if let Requirement(requirement) = &node.variant {
             if let Some(restricted) = &requirement.restriction {
-                if let Some(reference) = self.references.get(&restricted.rid) {
-                    self.map.restrictions.insert(node.id, *reference);
+                if let Some(reference) = self.references.get(&restricted.into()) {
+                    self.map.restrictions.insert(node.into(), *reference);
                 }
             }
 
             if let Some(allocated) = &requirement.allocation {
-                if let Some(reference) = self.references.get(&allocated.rid) {
-                    self.map.allocations.insert(node.id, *reference);
+                if let Some(reference) = self.references.get(&allocated.into()) {
+                    self.map.allocations.insert(node.into(), *reference);
                 }
             }
 
             for traceability in &requirement.traceability {
-                if let Some(reference) = self.references.get(&traceability.target.rid) {
+                if let Some(reference) = self.references.get(&traceability.target.into()) {
                     let source = *reference;
 
-                    self.map.backward.upsert(node.id, source);
-                    self.map.forward.upsert(source, node.id);
+                    self.map.backward.upsert(node.into(), source);
+                    self.map.forward.upsert(source, node.into());
                 }
             }
 
-            self.current = Some(node.id);
+            self.current = Some(node.into());
             match &requirement.variant {
                 Formal(node) => {
                     self.walk(node)?;
                 }
                 Informal(container) => {
                     for reference in container.references() {
-                        if let Some(id) = self.references.get(&reference.rid) {
+                        if let Some(id) = self.references.get(&reference.into()) {
                             self.map.usages.upsert(self.current.unwrap(), *id);
                         }
                     }
@@ -93,7 +92,7 @@ impl Visitor<&Expression> for Mapper<'_> {
         use ExpressionVariant::*;
 
         if let Identifier(ident) = &node.variant {
-            if let Some(id) = self.references.get(&ident.target.rid) {
+            if let Some(id) = self.references.get(&ident.target.into()) {
                 self.map.usages.upsert(self.current.unwrap(), *id);
             }
         }

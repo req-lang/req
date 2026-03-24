@@ -4,27 +4,13 @@ use super::entity;
 use crate::{
     children::{ChildrenIter, ChildrenIterMut},
     iter::NodeIter,
+    key::NodeKey,
 };
 use parser::Rule;
 
 pub mod parser;
 
-#[derive(Debug, Copy, Clone)]
-pub(crate) struct ExpressionKey<'a>(&'a Expression);
-
-impl Hash for ExpressionKey<'_> {
-    fn hash<H: Hasher>(&self, s: &mut H) {
-        (self.0 as *const Expression as usize).hash(s);
-    }
-}
-
-impl PartialEq for ExpressionKey<'_> {
-    fn eq(&self, o: &Self) -> bool {
-        std::ptr::eq(self.0, o.0)
-    }
-}
-
-impl Eq for ExpressionKey<'_> {}
+pub(crate) type ExpressionKey<'a> = NodeKey<'a, Expression>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Expression {
