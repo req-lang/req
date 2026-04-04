@@ -1,12 +1,14 @@
 use std::rc::Rc;
 
 use crate::{
-    node::{self, ConversionMap, NodeRef, entity::Label},
+    node::{
+        self, NodeRef,
+        entity::{Label, VariableMut},
+    },
     reference::Reference,
     semantics::{
         connection::{expression, graph::Graph, issue::IssueKind, markup},
         reference::WeakNodeRef,
-        typing,
     },
     utils::{children::ChildrenIter, take::Take},
 };
@@ -14,11 +16,11 @@ use crate::{
 pub type Variant = node::entity::Variant<
     NodeRef<Node>,
     Result<WeakNodeRef<Node>, Reference>,
-    Connection<NodeRef<expression::Node>>,
+    NodeRef<expression::Node>,
     markup::Node,
 >;
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 pub struct Node {
     pub inbound: Inbound<Connection<WeakNodeRef<Node>>>,
     pub outbound: Outbound<Connection<WeakNodeRef<Node>>>,
@@ -43,7 +45,27 @@ impl ChildrenIter<NodeRef<Node>> for NodeRef<Node> {
     }
 }
 
-#[derive(Default, Debug)]
+impl
+    VariableMut<
+        NodeRef<Node>,
+        Result<WeakNodeRef<Node>, Reference>,
+        NodeRef<expression::Node>,
+        markup::Node,
+    > for Node
+{
+    fn variant_mut(
+        &mut self,
+    ) -> &mut node::entity::Variant<
+        NodeRef<Node>,
+        Result<WeakNodeRef<Node>, Reference>,
+        NodeRef<expression::Node>,
+        markup::Node,
+    > {
+        &mut self.variant
+    }
+}
+
+#[derive(Default, Debug, Clone)]
 pub struct Connection<R> {
     pub target: R,
     pub issue: Vec<IssueKind>,
@@ -62,7 +84,7 @@ impl<R> From<R> for Connection<R> {
     }
 }
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 pub struct Traceability<R> {
     pub derivations: Vec<R>,
     pub refinements: Vec<R>,
@@ -71,7 +93,7 @@ pub struct Traceability<R> {
 }
 
 // Derived from outbound connections
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 pub struct Inbound<R> {
     // Subject to requirement
     pub usages: Vec<R>,
@@ -83,7 +105,7 @@ pub struct Inbound<R> {
 }
 
 // Explicitely defined in the syntax
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 pub struct Outbound<R> {
     // Requirement to subject
     pub usages: Vec<R>,
@@ -125,24 +147,4 @@ pub(super) fn connect(node: NodeRef<Node>, graph: &mut Graph) {
     for child in node_ref.variant.children_iter() {
         connect(child, graph);
     }
-}
-
-pub(super) fn init_node(
-    node: NodeRef<typing::entity::Node>,
-    entities: &ConversionMap<typing::entity::Node, Node>,
-    expressions: &mut ConversionMap<typing::expression::Node, expression::Node>,
-) -> NodeRef<Node> {
-    let key = Rc::as_ptr(&node);
-    let inner = node::unwrap(node);
-    let variant = inner
-        .variant
-        .mape(|n| Connection::from(expression::init_node(n, entities, expressions)))
-        .mapn(|n| init_node(n, entities, expressions))
-        .mapm(|m| markup::init_node(m, entities))
-        .mapr(|r| r.map(|weak| Rc::downgrade(&entities[&weak.as_ptr()])));
-    let inbound = Inbound::default();
-    let node = entities[&key].clone();
-    node.borrow_mut().variant = variant;
-    node.borrow_mut().inbound = inbound;
-    node
 }

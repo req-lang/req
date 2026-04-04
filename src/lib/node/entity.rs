@@ -17,7 +17,7 @@ pub trait IntoVariable<N, R, E, M> {
 }
 
 pub trait VariableMut<N, R, E, M> {
-    fn variable_mut(&mut self) -> &mut Variant<N, R, E, M>;
+    fn variant_mut(&mut self) -> &mut Variant<N, R, E, M>;
 }
 
 impl<N, R, E, M> Children<N> for Variant<N, R, E, M> {

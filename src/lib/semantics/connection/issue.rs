@@ -2,14 +2,10 @@ use std::{cell::RefCell, collections::HashSet, rc::Rc};
 
 use crate::{
     issue::Severity,
-    node::{self, NodeRef, entity::Attribute},
+    node::{self, NodeRef},
     semantics::{
-        connection::{
-            entity::{Connection, Inbound, Node, Outbound, Traceability},
-            expression, markup,
-        },
+        connection::entity::{Connection, Inbound, Node, Outbound, Traceability},
         reference::WeakNodeRef,
-        typing::expression::TypeKind,
     },
 };
 
@@ -47,8 +43,6 @@ pub enum IssueKind {
     UnrelatedRestriction,
     #[error("Traceability link is part of a cycle")]
     CyclicTrace,
-    #[error("Formal requirement is not expressing a boolean property")]
-    NonBooleanRequirement,
     #[error("Allocation and restriction should be on different subjects")]
     SameAllocationAndRestriction,
     #[error("Requirements are expected to be contained in packages")]
@@ -61,10 +55,6 @@ pub enum IssueKind {
     UnrestrictedSubject,
     #[error("This entity is not the used by any requirement")]
     UnusedSubject,
-    #[error("Attributes expect to have a domain that carry a type")]
-    UntypedAttribute,
-    #[error("Unit definition is incompatible with the domain type")]
-    UnexpectedUnit,
 }
 
 impl From<&IssueKind> for Severity {
@@ -73,7 +63,6 @@ impl From<&IssueKind> for Severity {
         use Severity::*;
 
         match kind {
-            NonBooleanRequirement => Critical,
             InvalidRequirementParent => Critical,
             InvalidPackageParent => Critical,
             InvalidAttributeParent => Critical,
@@ -89,12 +78,10 @@ impl From<&IssueKind> for Severity {
             DerivationMismatch => Severe,
 
             UnrelatedRestriction => Moderate,
-            UnexpectedUnit => Moderate,
             UnrelatedDerivation => Moderate,
             SameAllocationAndRestriction => Moderate,
             ForbiddenTrace => Moderate,
             DuplicatedTrace => Moderate,
-            UntypedAttribute => Moderate,
             NoDerivedAllocation => Moderate,
             UnrestrictedSubject => Moderate,
 
@@ -106,7 +93,6 @@ impl From<&IssueKind> for Severity {
 }
 
 pub(super) fn collect_issues(node: NodeRef<Node>) {
-    use node::entity::RequirementVariant::*;
     use node::entity::Variant::*;
 
     let mut nd = node.borrow_mut();
@@ -115,8 +101,7 @@ pub(super) fn collect_issues(node: NodeRef<Node>) {
         Part(_) => {
             collect_subject_inbound_issues(&mut nd.inbound);
         }
-        Attribute(attr) => {
-            collect_attr_type_issues(attr);
+        Attribute(_) => {
             collect_attr_parent_issues(&mut nd.parent);
             collect_subject_inbound_issues(&mut nd.inbound);
         }
@@ -125,9 +110,6 @@ pub(super) fn collect_issues(node: NodeRef<Node>) {
         }
         Requirement(req) => {
             // TODO: Flag inbound restrictions and allocations
-            if let Formal(conn) = &mut req.variant {
-                collect_requirement_expr_issues(conn);
-            }
 
             let is_bottom = req.inhibitor.bottom;
             let is_top = req.inhibitor.top;
@@ -232,39 +214,39 @@ fn collect_attr_parent_issues(parent: &mut Option<Connection<WeakNodeRef<Node>>>
         }
     }
 }
-
-fn collect_attr_type_issues(
-    attr: &mut Attribute<Connection<NodeRef<expression::Node>>, markup::Node>,
-) {
-    use IssueKind::{UnexpectedUnit, UntypedAttribute};
-
-    match &attr.domain.target.borrow().typ {
-        Ok(TypeKind::Set(typ)) => {
-            let mut inner = *typ.clone();
-            loop {
-                match inner {
-                    TypeKind::Set(typ) => inner = *typ,
-                    typ => {
-                        inner = typ;
-                        break;
-                    }
-                }
-            }
-
-            match inner {
-                TypeKind::Number => {}
-                TypeKind::Undefined => attr.domain.issue.push(UntypedAttribute),
-                _ => match &mut attr.unit {
-                    Some(unit) => unit.issue.push(UnexpectedUnit),
-                    _ => {}
-                },
-            }
-        }
-        Ok(TypeKind::Undefined) => attr.domain.issue.push(UntypedAttribute),
-        _ => {}
-    }
-}
-
+// TODO: Make this happen in the typing section
+// fn collect_attr_type_issues(
+//     attr: &mut Attribute<Connection<NodeRef<expression::Node>>, markup::Node>,
+// ) {
+//     use IssueKind::{UnexpectedUnit, UntypedAttribute};
+//
+//     match &attr.domain.target.borrow().typ {
+//         Ok(TypeKind::Set(typ)) => {
+//             let mut inner = *typ.clone();
+//             loop {
+//                 match inner {
+//                     TypeKind::Set(typ) => inner = *typ,
+//                     typ => {
+//                         inner = typ;
+//                         break;
+//                     }
+//                 }
+//             }
+//
+//             match inner {
+//                 TypeKind::Number => {}
+//                 TypeKind::Undefined => attr.domain.issue.push(UntypedAttribute),
+//                 _ => match &mut attr.unit {
+//                     Some(unit) => unit.issue.push(UnexpectedUnit),
+//                     _ => {}
+//                 },
+//             }
+//         }
+//         Ok(TypeKind::Undefined) => attr.domain.issue.push(UntypedAttribute),
+//         _ => {}
+//     }
+// }
+//
 fn collect_req_parent_issues(parent: &mut Option<Connection<WeakNodeRef<Node>>>) {
     use node::entity::Variant::*;
 
@@ -292,14 +274,15 @@ fn collect_alloc_restr_compatibility_issues(
 }
 
 // TODO: Empty requirement issues
-fn collect_requirement_expr_issues(conn: &mut Connection<NodeRef<expression::Node>>) {
-    if let Ok(TypeKind::Boolean) = conn.target.borrow().typ {
-        return;
-    }
-
-    conn.issue.push(IssueKind::NonBooleanRequirement);
-}
-
+// TODO: Make this happen in the typing module
+// fn collect_requirement_expr_issues(conn: &mut Connection<NodeRef<expression::Node>>) {
+//     if let Ok(TypeKind::Boolean) = conn.target.borrow().typ {
+//         return;
+//     }
+//
+//     conn.issue.push(IssueKind::NonBooleanRequirement);
+// }
+//
 fn collect_traceability_target_variant_issues(conn: &mut Connection<WeakNodeRef<Node>>) {
     use node::entity::Variant::*;
 

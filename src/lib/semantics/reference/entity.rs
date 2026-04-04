@@ -25,7 +25,7 @@ pub(super) struct Ctx {
     imports: Vec<Reference>,
 }
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 pub struct Node {
     pub variant: Variant,
 }

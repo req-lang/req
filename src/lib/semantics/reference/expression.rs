@@ -33,7 +33,7 @@ impl TryFrom<&str> for BuiltinKind {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Target<N, E> {
     Entity(WeakNodeRef<N>),
     Expression(WeakNodeRef<E>),
@@ -43,7 +43,7 @@ pub enum Target<N, E> {
 pub type Variant =
     node::expression::Variant<NodeRef<Node>, super::Result<Target<entity::Node, Node>>>;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Node {
     pub variant: Variant,
 }

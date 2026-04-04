@@ -1,7 +1,10 @@
 use std::rc::Rc;
 
 use crate::{
-    node::{self, NodeRef, entity::VariableMut},
+    node::{
+        self, NodeRef,
+        entity::{IntoVariable, VariableMut},
+    },
     semantics::{
         reference::{self, WeakNodeRef},
         typing::{expression, markup},
@@ -16,7 +19,7 @@ pub type Variant = node::entity::Variant<
     markup::Node,
 >;
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 pub struct Node {
     pub variant: Variant,
 }
@@ -29,7 +32,7 @@ impl
         markup::Node,
     > for Node
 {
-    fn variable_mut(
+    fn variant_mut(
         &mut self,
     ) -> &mut node::entity::Variant<
         NodeRef<Node>,
@@ -38,6 +41,26 @@ impl
         markup::Node,
     > {
         &mut self.variant
+    }
+}
+
+impl
+    IntoVariable<
+        NodeRef<Node>,
+        reference::Result<WeakNodeRef<Node>>,
+        NodeRef<expression::Node>,
+        markup::Node,
+    > for Node
+{
+    fn into_variant(
+        self,
+    ) -> node::entity::Variant<
+        NodeRef<Node>,
+        reference::Result<WeakNodeRef<Node>>,
+        NodeRef<expression::Node>,
+        markup::Node,
+    > {
+        self.variant
     }
 }
 

@@ -1,10 +1,8 @@
-use std::collections::HashMap;
-
 use crate::{
-    node::{NodeRef, build_stub_map},
+    node::NodeRef,
     semantics::{
-        connection::{entity::init_node, graph::Graph},
-        typing,
+        connection::graph::Graph,
+        reference::{self, convert::convert},
     },
     utils::iter::NodeIter,
 };
@@ -16,12 +14,8 @@ pub mod graph;
 pub mod issue;
 pub mod markup;
 
-pub fn connect(node: NodeRef<typing::entity::Node>) -> NodeRef<entity::Node> {
-    let mut entities = HashMap::new();
-    let mut expressions = HashMap::new();
-    build_stub_map(&node, &mut entities);
-
-    let node = init_node(node, &entities, &mut expressions);
+pub fn connect(node: NodeRef<reference::entity::Node>) -> NodeRef<entity::Node> {
+    let node = convert(node);
     let mut graph = Graph::default();
 
     graph::build_graph(node.clone(), &mut graph, None);

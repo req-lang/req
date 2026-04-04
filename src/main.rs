@@ -16,6 +16,7 @@ use reqtool::{
         self,
         parser::{self},
     },
+    utils::iter::NodeIter,
 };
 
 #[derive(clap::Parser)]
@@ -89,14 +90,20 @@ fn main() {
 
             let ast = node::map(root, syntax::entity::Node::from);
             let resolved = reference::resolve(ast);
-            let typed = typing::evaluate(resolved);
-            let connected = connection::connect(typed);
+            let typed = typing::evaluate(resolved.clone());
+            let connected = connection::connect(resolved.clone());
             let elapsed = start.elapsed();
 
             let mut count = 0;
-            for (path, node) in NodePathIter::new(connected) {
-                let nd = node.borrow();
-                let issues: Vec<_> = IssueIterator::from(nd).map(Issue::from).collect();
+            for (((path, conn), res), node) in NodePathIter::new(connected)
+                .zip(NodeIter::new(resolved))
+                .zip(NodeIter::new(typed))
+            {
+                let issues: Vec<_> = IssueIterator::from(node.borrow())
+                    .map(Issue::from)
+                    .chain(IssueIterator::from(conn.borrow()).map(Issue::from))
+                    .chain(IssueIterator::from(res.borrow()).map(Issue::from))
+                    .collect();
                 count += issues.len();
                 if issues.is_empty() {
                     continue;

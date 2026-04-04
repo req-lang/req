@@ -86,7 +86,7 @@ pub(super) fn build_graph(
 
         let rf = Rc::downgrade(&node);
         match &req.variant {
-            Formal(expr) => expression::build_graph(expr.target.clone(), graph, &rf),
+            Formal(expr) => expression::build_graph(expr.clone(), graph, &rf),
             Informal(markup) => markup::build_graph(&markup, graph, &rf),
         }
     }

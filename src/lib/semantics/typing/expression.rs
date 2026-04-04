@@ -2,10 +2,10 @@ use std::{fmt::Display, rc::Rc};
 
 use crate::{
     issue::Severity,
-    node::{self, NodeRef},
+    node::{self, NodeRef, expression::IntoVariable},
     reference::Reference,
     semantics::{
-        reference::expression::Target,
+        reference::{self, expression::Target},
         typing::{entity, evaluate::evaluate_node},
     },
     utils::children::ChildrenIter,
@@ -34,10 +34,16 @@ impl From<&Issue> for Severity {
 pub type Variant =
     node::expression::Variant<NodeRef<Node>, Result<Target<entity::Node, Node>, Reference>>;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Node {
     pub typ: Result<TypeKind, Issue>,
     pub variant: Variant,
+}
+
+impl IntoVariable<NodeRef<Node>, reference::Result<Target<entity::Node, Node>>> for Node {
+    fn into_variant(self) -> Variant {
+        self.variant
+    }
 }
 
 impl From<Variant> for Node {

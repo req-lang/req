@@ -5,7 +5,7 @@ use crate::{
     reference::Reference,
     semantics::{
         connection::{self, entity::Node},
-        reference::WeakNodeRef,
+        reference::{self, WeakNodeRef},
         typing,
     },
     utils::iter::NodeIter,
@@ -42,21 +42,12 @@ pub struct IssueIterator {
     issues: Vec<Issue>,
 }
 
-impl From<Ref<'_, Node>> for IssueIterator {
-    fn from(node: Ref<Node>) -> Self {
+impl From<Ref<'_, typing::entity::Node>> for IssueIterator {
+    fn from(value: Ref<'_, typing::entity::Node>) -> Self {
         let mut issues = Vec::new();
 
-        let variant = &node.variant;
-        let rf_errors = variant.references().filter_map(|r| r.as_ref().err());
-        issues.extend(rf_errors.map(|err| err.into()));
-
-        for mk in variant.markups() {
-            let rf_errors = mk.references().filter_map(|r| r.as_ref().err());
-            issues.extend(rf_errors.map(|err| err.into()));
-        }
-
-        for ex in variant.expressions() {
-            for ex in NodeIter::new(ex.target.clone()) {
+        for ex in value.variant.expressions() {
+            for ex in NodeIter::new(ex.clone()) {
                 let ex_ref = ex.borrow();
 
                 if let Err(typ) = &ex_ref.typ {
@@ -70,6 +61,14 @@ impl From<Ref<'_, Node>> for IssueIterator {
                 }
             }
         }
+
+        Self { issues }
+    }
+}
+
+impl From<Ref<'_, connection::entity::Node>> for IssueIterator {
+    fn from(node: Ref<'_, connection::entity::Node>) -> Self {
+        let mut issues = Vec::new();
 
         let parent = node.parent.iter();
         issues.extend(conn_issues(parent).map(Issue::from));
@@ -96,6 +95,23 @@ impl From<Ref<'_, Node>> for IssueIterator {
         issues.extend(conn_issues(tr.specializations.iter()).map(Issue::from));
         issues.extend(conn_issues(tr.refinements.iter()).map(Issue::from));
         issues.extend(conn_issues(tr.derivations.iter()).map(Issue::from));
+
+        Self { issues }
+    }
+}
+
+impl From<Ref<'_, reference::entity::Node>> for IssueIterator {
+    fn from(node: Ref<reference::entity::Node>) -> Self {
+        let mut issues = Vec::new();
+
+        let variant = &node.variant;
+        let rf_errors = variant.references().filter_map(|r| r.as_ref().err());
+        issues.extend(rf_errors.map(|err| err.into()));
+
+        for mk in variant.markups() {
+            let rf_errors = mk.references().filter_map(|r| r.as_ref().err());
+            issues.extend(rf_errors.map(|err| err.into()));
+        }
 
         Self { issues }
     }

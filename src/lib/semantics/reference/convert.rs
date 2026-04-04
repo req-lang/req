@@ -15,14 +15,15 @@ where
             Result<WeakNodeRef<N>>,
             NodeRef<E>,
             markup::Node<Result<WeakNodeRef<N>>>,
-        > + Debug,
+        > + Debug
+        + Clone,
     O: entity::VariableMut<
             NodeRef<O>,
             Result<WeakNodeRef<O>>,
             NodeRef<G>,
             markup::Node<Result<WeakNodeRef<O>>>,
         > + Default,
-    E: expression::IntoVariable<NodeRef<E>, Result<Target<N, E>>> + Debug,
+    E: expression::IntoVariable<NodeRef<E>, Result<Target<N, E>>> + Debug + Clone,
     G: From<expression::Variant<NodeRef<G>, Result<Target<O, G>>>>,
     NodeRef<N>: ChildrenIter<NodeRef<N>>,
 {
@@ -44,25 +45,25 @@ where
             Result<WeakNodeRef<N>>,
             NodeRef<E>,
             markup::Node<Result<WeakNodeRef<N>>>,
-        > + Debug,
+        > + Clone,
     O: entity::VariableMut<
             NodeRef<O>,
             Result<WeakNodeRef<O>>,
             NodeRef<G>,
             markup::Node<Result<WeakNodeRef<O>>>,
         >,
-    E: expression::IntoVariable<NodeRef<E>, Result<Target<N, E>>> + Debug,
+    E: expression::IntoVariable<NodeRef<E>, Result<Target<N, E>>> + Debug + Clone,
     G: From<expression::Variant<NodeRef<G>, Result<Target<O, G>>>>,
 {
     let key = Rc::as_ptr(&node);
-    let inner = node::unwrap(node);
-    let variant = inner
+    let variant = (*node.borrow())
+        .clone()
         .into_variant()
         .mape(|n| convert_expr(n, entities, expressions))
         .mapn(|n| convert_entity(n, entities, expressions))
         .mapm(|m| convert_markup(m, entities))
         .mapr(|r| r.map(|weak| Rc::downgrade(&entities[&weak.as_ptr()])));
-    *entities[&key].borrow_mut().variable_mut() = variant;
+    *entities[&key].borrow_mut().variant_mut() = variant;
     let node = Rc::clone(&entities[&key]);
     node
 }
@@ -73,12 +74,12 @@ fn convert_expr<N, O, E, G>(
     expressions: &mut ConversionMap<E, G>,
 ) -> NodeRef<G>
 where
-    E: expression::IntoVariable<NodeRef<E>, Result<Target<N, E>>> + Debug,
+    E: expression::IntoVariable<NodeRef<E>, Result<Target<N, E>>> + Debug + Clone,
     G: From<expression::Variant<NodeRef<G>, Result<Target<O, G>>>>,
 {
     let key = Rc::as_ptr(&node);
-    let inner = node::unwrap(node);
-    let variant = inner
+    let variant = (*node.borrow())
+        .clone()
         .into_variant()
         .mape(|child_ref| convert_expr(child_ref, entities, expressions))
         .mapr(|r| r.map(|t| convert_target(t, entities, expressions)));
