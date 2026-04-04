@@ -39,7 +39,7 @@ use crate::{
         tags::{self, TagMap},
     },
 };
-
+pub mod analysis;
 pub mod children;
 pub mod detector;
 pub mod inverse;
@@ -85,7 +85,10 @@ impl<'a> From<&'a Entity> for Analysis<'a> {
         let _ = verifier.walk(root);
         let (references, errs): (_, Vec<_>) =
             verifier.entities.into_iter().map(ResultErr).collect();
-        diagnostics.extend(errs.into_iter().map(|e| Box::new(e) as Box<dyn Issue<'a>>));
+        diagnostics.extend(
+            errs.into_iter()
+                .map(|e| Box::new(e) as Box<dyn Issue<'a> + 'a>),
+        );
 
         let mut verifier = typing::Verifier::new(&references, &nodes_by_id);
         let _ = verifier.prewalk(root);
@@ -94,7 +97,7 @@ impl<'a> From<&'a Entity> for Analysis<'a> {
         diagnostics.extend(
             errs.into_iter()
                 .filter_map(|e: Option<_>| e)
-                .map(|e| Box::new(e) as Box<dyn Issue<'a>>),
+                .map(|e| Box::new(e) as Box<dyn Issue<'a> + 'a>),
         );
 
         let mut mapper = mapper::requirement::Mapper::new(&references);
@@ -118,7 +121,7 @@ impl<'a> From<&'a Entity> for Analysis<'a> {
             verifier
                 .issues
                 .into_iter()
-                .map(|e| Box::new(e) as Box<dyn Issue<'a>>),
+                .map(|e| Box::new(e) as Box<dyn Issue<'a> + 'a>),
         );
 
         let smap = SubjectMap::from(&rmap);
@@ -128,7 +131,7 @@ impl<'a> From<&'a Entity> for Analysis<'a> {
             verifier
                 .issues
                 .into_iter()
-                .map(|e| Box::new(e) as Box<dyn Issue<'a>>),
+                .map(|e| Box::new(e) as Box<dyn Issue<'a> + 'a>),
         );
 
         let mut verifier = verifier::attribute::Verifier::new(&smap, &types);
@@ -137,7 +140,7 @@ impl<'a> From<&'a Entity> for Analysis<'a> {
             verifier
                 .issues
                 .into_iter()
-                .map(|e| Box::new(e) as Box<dyn Issue<'a>>),
+                .map(|e| Box::new(e) as Box<dyn Issue<'a> + 'a>),
         );
 
         let mut verifier = verifier::package::Verifier::new(&paths);
@@ -146,7 +149,7 @@ impl<'a> From<&'a Entity> for Analysis<'a> {
             verifier
                 .issues
                 .into_iter()
-                .map(|e| Box::new(e) as Box<dyn Issue<'a>>),
+                .map(|e| Box::new(e) as Box<dyn Issue<'a> + 'a>),
         );
 
         let mut mapper = tags::Mapper::default();

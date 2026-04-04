@@ -9,9 +9,9 @@ pub mod tokenizer;
 pub(crate) type MarkupKey<'a> = NodeKey<'a, Markup>;
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub enum Item {
+pub enum Item<R = Reference> {
     Text(String),
-    Reference(Reference),
+    Reference(R),
 }
 
 impl Item {
@@ -30,10 +30,10 @@ impl Item {
     }
 }
 
-///This container own the markdown text associated with markup tokens
+/// This container owns the markdown text associated with markup tokens.
 #[derive(Default, Debug, Clone, Eq, PartialEq, Hash)]
-pub struct Markup {
-    pub value: Vec<Item>,
+pub struct Markup<R = Reference> {
+    pub value: Vec<Item<R>>,
 }
 
 impl From<String> for Markup {

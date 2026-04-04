@@ -13,8 +13,8 @@ pub mod parser;
 pub(crate) type ExpressionKey<'a> = NodeKey<'a, Expression>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Expression {
-    pub variant: ExpressionVariant,
+pub struct Expression<R = entity::Reference> {
+    pub variant: ExpressionVariant<R>,
 }
 
 impl Default for Expression {
@@ -25,8 +25,8 @@ impl Default for Expression {
     }
 }
 
-impl ChildrenIter for Expression {
-    fn children_iter(&self) -> impl Iterator<Item = &Expression> {
+impl<R> ChildrenIter for Expression<R> {
+    fn children_iter(&self) -> impl Iterator<Item = &Expression<R>> {
         use ExpressionVariant::*;
 
         let mut children = Vec::new();
@@ -105,8 +105,8 @@ impl ChildrenIter for Expression {
     }
 }
 
-impl ChildrenIterMut for Expression {
-    fn children_iter_mut(&mut self) -> impl Iterator<Item = &mut Expression> {
+impl<R> ChildrenIterMut for Expression<R> {
+    fn children_iter_mut(&mut self) -> impl Iterator<Item = &mut Expression<R>> {
         use ExpressionVariant::*;
 
         let mut children = Vec::new();
@@ -175,16 +175,12 @@ impl ChildrenIterMut for Expression {
     }
 }
 
-impl Expression {
-    pub fn new(variant: ExpressionVariant) -> Self {
+impl<R> Expression<R> {
+    pub fn new(variant: ExpressionVariant<R>) -> Self {
         Expression { variant }
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = &Self> {
-        NodeIter::new(self)
-    }
-
-    pub fn needs_parentheses(&self, parent: &Expression, is_right: bool) -> bool {
+    pub fn needs_parentheses(&self, parent: &Expression<R>, is_right: bool) -> bool {
         let parent_prec = parent.variant.precedence();
         let child_prec = self.variant.precedence();
 
@@ -208,7 +204,7 @@ impl Expression {
         }
     }
 
-    pub fn set_element(&self) -> Option<&SetElement> {
+    pub fn set_element(&self) -> Option<&SetElement<R>> {
         use ExpressionVariant::*;
 
         match &self.variant {
@@ -220,28 +216,34 @@ impl Expression {
     }
 }
 
+impl Expression {
+    pub fn iter(&self) -> impl Iterator<Item = &Self> {
+        NodeIter::new(self)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum ExpressionVariant {
-    Branch(Branch),
-    When(When),
-    Forall(Forall),
-    Exists(Exists),
-    Select(Select),
-    Aggregation(Aggregation),
+pub enum ExpressionVariant<R = entity::Reference> {
+    Branch(Branch<R>),
+    When(When<R>),
+    Forall(Forall<R>),
+    Exists(Exists<R>),
+    Select(Select<R>),
+    Aggregation(Aggregation<R>),
 
-    UnaryOp(UnaryOp),
-    BinOp(BinOp),
-    Function(Function),
+    UnaryOp(UnaryOp<R>),
+    BinOp(BinOp<R>),
+    Function(Function<R>),
 
-    Identifier(Identifier),
+    Identifier(Identifier<R>),
     Number(Number),
     Boolean(Boolean),
     Undefined,
 
-    Set(Set),
+    Set(Set<R>),
 }
 
-impl ExpressionVariant {
+impl<R> ExpressionVariant<R> {
     pub fn precedence(&self) -> i32 {
         match self {
             ExpressionVariant::BinOp(bin_op) => bin_op.operator.precedence(),
@@ -260,9 +262,9 @@ impl ExpressionVariant {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Branch {
-    pub case: Case,
-    pub otherwise: Option<Box<Expression>>,
+pub struct Branch<R = entity::Reference> {
+    pub case: Case<R>,
+    pub otherwise: Option<Box<Expression<R>>>,
 }
 
 impl Branch {
@@ -275,9 +277,9 @@ impl Branch {
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq, Hash)]
-pub struct When {
-    pub cases: Vec<Case>,
-    pub otherwise: Option<Box<Expression>>,
+pub struct When<R = entity::Reference> {
+    pub cases: Vec<Case<R>>,
+    pub otherwise: Option<Box<Expression<R>>>,
 }
 
 impl When {
@@ -290,9 +292,9 @@ impl When {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Case {
-    pub condition: Box<Expression>,
-    pub consequence: Box<Expression>,
+pub struct Case<R = entity::Reference> {
+    pub condition: Box<Expression<R>>,
+    pub consequence: Box<Expression<R>>,
 }
 
 impl Case {
@@ -305,9 +307,9 @@ impl Case {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Forall {
-    pub set: SetElement,
-    pub expression: Box<Expression>,
+pub struct Forall<R = entity::Reference> {
+    pub set: SetElement<R>,
+    pub expression: Box<Expression<R>>,
 }
 
 impl Forall {
@@ -320,8 +322,8 @@ impl Forall {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Exists {
-    pub set: SetElement,
+pub struct Exists<R = entity::Reference> {
+    pub set: SetElement<R>,
 }
 
 impl Exists {
@@ -331,9 +333,9 @@ impl Exists {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Select {
-    pub set: SetElement,
-    pub optimizer: Option<Optimizer>,
+pub struct Select<R = entity::Reference> {
+    pub set: SetElement<R>,
+    pub optimizer: Option<Optimizer<R>>,
 }
 
 impl Select {
@@ -346,9 +348,9 @@ impl Select {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Optimizer {
+pub struct Optimizer<R = entity::Reference> {
     pub kind: OptimizerKind,
-    pub expression: Box<Expression>,
+    pub expression: Box<Expression<R>>,
 }
 
 impl Optimizer {
@@ -377,10 +379,10 @@ impl From<Rule> for OptimizerKind {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct SetElement {
+pub struct SetElement<R = entity::Reference> {
     pub variable: String,
-    pub domain: Box<Expression>,
-    pub filter: Option<Box<Expression>>,
+    pub domain: Box<Expression<R>>,
+    pub filter: Option<Box<Expression<R>>>,
 }
 
 impl SetElement {
@@ -394,9 +396,9 @@ impl SetElement {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Aggregation {
+pub struct Aggregation<R = entity::Reference> {
     pub aggregator: Aggregator,
-    pub expressions: Vec<Expression>,
+    pub expressions: Vec<Expression<R>>,
 }
 
 impl Aggregation {
@@ -425,8 +427,8 @@ impl From<Rule> for Aggregator {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Identifier {
-    pub target: entity::Reference,
+pub struct Identifier<R = entity::Reference> {
+    pub target: R,
 }
 
 impl Identifier {
@@ -436,9 +438,9 @@ impl Identifier {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct UnaryOp {
+pub struct UnaryOp<R = entity::Reference> {
     pub operator: UnaryOperator,
-    pub operand: Box<Expression>,
+    pub operand: Box<Expression<R>>,
 }
 
 impl UnaryOp {
@@ -479,10 +481,10 @@ impl UnaryOperator {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct BinOp {
+pub struct BinOp<R = entity::Reference> {
     pub operator: BinaryOperator,
-    pub left: Box<Expression>,
-    pub right: Box<Expression>,
+    pub left: Box<Expression<R>>,
+    pub right: Box<Expression<R>>,
 }
 
 impl BinOp {
@@ -564,9 +566,9 @@ impl BinaryOperator {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Function {
-    pub expression: Box<Expression>,
-    pub arguments: Vec<Expression>,
+pub struct Function<R = entity::Reference> {
+    pub expression: Box<Expression<R>>,
+    pub arguments: Vec<Expression<R>>,
 }
 
 impl Function {
@@ -579,8 +581,8 @@ impl Function {
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Set {
-    pub elements: Vec<Expression>,
+pub struct Set<R = entity::Reference> {
+    pub elements: Vec<Expression<R>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

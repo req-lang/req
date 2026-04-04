@@ -15,9 +15,9 @@ pub const REFERENCE_SEPARATOR: &str = "::";
 pub(crate) type EntityKey<'n> = NodeKey<'n, Entity>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Entity {
-    pub meta: EntityMeta,
-    pub variant: EntityVariant<Entity>,
+pub struct Entity<R = Reference> {
+    pub meta: EntityMeta<R>,
+    pub variant: EntityVariant<Entity<R>, R>,
 }
 
 impl Default for Entity {
@@ -259,29 +259,29 @@ impl Entity {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum EntityVariant<T = Entity> {
-    Part(Part<T>),
-    Attribute(Attribute),
-    Package(Package<T>),
-    Requirement(Requirement),
+pub enum EntityVariant<N = Entity, R = Reference> {
+    Part(Part<N, R>),
+    Attribute(Attribute<R>),
+    Package(Package<N, R>),
+    Requirement(Requirement<R>),
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
-pub struct Part<T = Entity> {
-    pub imports: Vec<Reference>,
-    pub children: Vec<T>,
+pub struct Part<N = Entity, R = Reference> {
+    pub imports: Vec<R>,
+    pub children: Vec<N>,
 }
 
-impl<T> Part<T> {
-    pub fn new(imports: Vec<Reference>, children: Vec<T>) -> Self {
+impl Part {
+    pub fn new(imports: Vec<Reference>, children: Vec<Entity>) -> Self {
         Part { imports, children }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Attribute {
-    pub domain: expression::Expression,
-    pub unit: Option<expression::Expression>,
+pub struct Attribute<R = Reference> {
+    pub domain: expression::Expression<R>,
+    pub unit: Option<expression::Expression<R>>,
 }
 
 impl Attribute {
@@ -291,28 +291,33 @@ impl Attribute {
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
-pub struct Package<T = Entity> {
-    pub imports: Vec<Reference>,
-    pub children: Vec<T>,
+pub struct Package<N = Entity, R = Reference, P = ()> {
+    pub payload: P,
+    pub imports: Vec<R>,
+    pub children: Vec<N>,
 }
 
-impl<T> Package<T> {
-    pub fn new(imports: Vec<Reference>, children: Vec<T>) -> Self {
-        Package { imports, children }
+impl<N> Package<N> {
+    pub fn new(imports: Vec<Reference>, children: Vec<N>) -> Self {
+        Package {
+            payload: (),
+            imports,
+            children,
+        }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Requirement {
-    pub restriction: Option<Reference>,
-    pub allocation: Option<Reference>,
-    pub traceability: Vec<TraceabilityLink>,
+pub struct Requirement<R = Reference> {
+    pub restriction: Option<R>,
+    pub allocation: Option<R>,
+    pub traceability: Vec<TraceabilityLink<R>>,
     pub inhibitor: Option<TraceabilityInhibitor>,
-    pub variant: RequirementVariant,
+    pub variant: RequirementVariant<R>,
 }
 
-impl From<RequirementVariant> for Requirement {
-    fn from(variant: RequirementVariant) -> Self {
+impl<R> From<RequirementVariant<R>> for Requirement<R> {
+    fn from(variant: RequirementVariant<R>) -> Self {
         Requirement {
             restriction: None,
             allocation: None,
@@ -350,9 +355,9 @@ impl Requirement {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum RequirementVariant {
-    Formal(expression::Expression),
-    Informal(markup::Markup),
+pub enum RequirementVariant<R> {
+    Formal(expression::Expression<R>),
+    Informal(markup::Markup<R>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -370,20 +375,20 @@ pub enum TraceabilityKind {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TraceabilityLink {
+pub struct TraceabilityLink<R = Reference> {
     pub kind: TraceabilityKind,
-    pub target: Reference,
+    pub target: R,
 }
 
-impl TraceabilityLink {
-    pub fn new(kind: TraceabilityKind, target: Reference) -> Self {
+impl<R> TraceabilityLink<R> {
+    pub fn new(kind: TraceabilityKind, target: R) -> Self {
         TraceabilityLink { kind, target }
     }
 }
 
 pub(crate) type ReferenceKey<'a> = NodeKey<'a, Reference>;
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
+#[derive(Default, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
 pub struct Reference {
     pub value: String,
 }
@@ -419,10 +424,10 @@ impl Reference {
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
-pub struct EntityMeta {
+pub struct EntityMeta<R = Reference> {
     pub label: String,
     pub tags: Vec<Tag>,
-    pub comment: Option<markup::Markup>,
+    pub comment: Option<markup::Markup<R>>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq)]

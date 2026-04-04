@@ -30,3 +30,10 @@ impl<'n, N> From<&'n N> for NodeKey<'n, N> {
 }
 
 impl<N> Eq for NodeKey<'_, N> {}
+
+impl<N> std::ops::Deref for NodeKey<'_, N> {
+    type Target = N;
+    fn deref(&self) -> &N {
+        self.0
+    }
+}
