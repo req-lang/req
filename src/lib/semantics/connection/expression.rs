@@ -1,11 +1,11 @@
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::rc::Rc;
 
 use crate::{
-    node::{self, NodeRef},
+    node::{self, ConversionMap, NodeRef},
     reference::Reference,
     semantics::{
         connection::entity,
-        reference::expression::Target,
+        reference::expression::{Target, convert_target},
         typing::{
             self,
             expression::{Issue, TypeKind},
@@ -34,12 +34,10 @@ impl ChildrenIter<NodeRef<Node>> for NodeRef<Node> {
     }
 }
 
-pub(super) type Map = HashMap<*const RefCell<typing::expression::Node>, NodeRef<Node>>;
-
 pub(super) fn init_node(
     node: NodeRef<typing::expression::Node>,
-    entities: &entity::Map,
-    expressions: &mut Map,
+    entities: &ConversionMap<typing::entity::Node, entity::Node>,
+    expressions: &mut ConversionMap<typing::expression::Node, Node>,
 ) -> NodeRef<Node> {
     let typ = node.borrow().typ.clone();
     let key = Rc::as_ptr(&node);
@@ -51,18 +49,4 @@ pub(super) fn init_node(
     let node = node::new(Node { variant, typ });
     expressions.insert(key, node.clone());
     node
-}
-
-fn convert_target(
-    target: Target<typing::entity::Node, typing::expression::Node>,
-    entities: &entity::Map,
-    expressions: &Map,
-) -> Target<entity::Node, Node> {
-    use Target::*;
-
-    match target {
-        Builtin(kind) => Builtin(kind),
-        Entity(weak) => Entity(Rc::downgrade(&entities[&weak.as_ptr()])),
-        Expression(weak) => Expression(Rc::downgrade(&expressions[&weak.as_ptr()])),
-    }
 }

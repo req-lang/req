@@ -1,7 +1,7 @@
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::rc::Rc;
 
 use crate::{
-    node::{self, NodeRef},
+    node::{self, ConversionMap, NodeRef},
     reference::Reference,
     semantics::{
         reference::{self, WeakNodeRef},
@@ -17,7 +17,7 @@ pub type Variant = node::entity::Variant<
     markup::Node,
 >;
 
-#[derive(Debug)]
+#[derive(Default, Debug)]
 pub struct Node {
     pub variant: Variant,
 }
@@ -33,8 +33,6 @@ impl ChildrenIter<NodeRef<Node>> for NodeRef<Node> {
     }
 }
 
-pub(super) type Map = HashMap<*const RefCell<reference::entity::Node>, NodeRef<Node>>;
-
 pub(super) fn evaluate(node: NodeRef<Node>) {
     for child in node.borrow().variant.children_iter() {
         evaluate(child);
@@ -45,22 +43,10 @@ pub(super) fn evaluate(node: NodeRef<Node>) {
     }
 }
 
-pub(super) fn build_entity_map(node: &NodeRef<reference::entity::Node>, map: &mut Map) {
-    let key = Rc::as_ptr(node);
-    let stub = node::new(Node {
-        variant: Variant::default(),
-    });
-    map.insert(key, stub);
-    let children: Vec<_> = node.borrow().variant.children_iter().collect();
-    for child in children {
-        build_entity_map(&child, map);
-    }
-}
-
 pub(super) fn init_node(
     node: NodeRef<reference::entity::Node>,
-    entities: &Map,
-    expressions: &mut expression::Map,
+    entities: &ConversionMap<reference::entity::Node, Node>,
+    expressions: &mut ConversionMap<reference::expression::Node, expression::Node>,
 ) -> NodeRef<Node> {
     let key = Rc::as_ptr(&node);
 

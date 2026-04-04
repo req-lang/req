@@ -1,7 +1,7 @@
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::rc::Rc;
 
 use crate::{
-    node::{self, NodeRef, entity::Label},
+    node::{self, ConversionMap, NodeRef, entity::Label},
     reference::Reference,
     semantics::{
         connection::{expression, graph::Graph, issue::IssueKind, markup},
@@ -18,7 +18,7 @@ pub type Variant = node::entity::Variant<
     markup::Node,
 >;
 
-#[derive(Debug)]
+#[derive(Default, Debug)]
 pub struct Node {
     pub inbound: Inbound<Connection<WeakNodeRef<Node>>>,
     pub outbound: Outbound<Connection<WeakNodeRef<Node>>>,
@@ -127,27 +127,10 @@ pub(super) fn connect(node: NodeRef<Node>, graph: &mut Graph) {
     }
 }
 
-pub(super) type Map = HashMap<*const RefCell<typing::entity::Node>, NodeRef<Node>>;
-
-pub(super) fn build_entity_map(node: &NodeRef<typing::entity::Node>, map: &mut Map) {
-    let key = Rc::as_ptr(node);
-    let stub = node::new(Node {
-        variant: Variant::default(),
-        inbound: Inbound::default(),
-        outbound: Outbound::default(),
-        parent: None,
-    });
-    map.insert(key, stub);
-    let children: Vec<_> = node.borrow().variant.children_iter().collect();
-    for child in children {
-        build_entity_map(&child, map);
-    }
-}
-
 pub(super) fn init_node(
     node: NodeRef<typing::entity::Node>,
-    entities: &Map,
-    expressions: &mut expression::Map,
+    entities: &ConversionMap<typing::entity::Node, Node>,
+    expressions: &mut ConversionMap<typing::expression::Node, expression::Node>,
 ) -> NodeRef<Node> {
     let key = Rc::as_ptr(&node);
     let inner = node::unwrap(node);

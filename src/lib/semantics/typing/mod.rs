@@ -1,21 +1,22 @@
 use std::collections::HashMap;
 
 use crate::{
-    node::NodeRef,
+    node::{NodeRef, build_stub_map},
     semantics::{
         reference,
-        typing::entity::{Map, Node, build_entity_map, init_node},
+        typing::entity::{Node, init_node},
     },
 };
 
 pub mod entity;
+pub mod evaluate;
 pub mod expression;
 pub mod markup;
 
 pub fn evaluate(node: NodeRef<reference::entity::Node>) -> NodeRef<Node> {
-    let mut entities: Map = HashMap::new();
-    let mut expressions: expression::Map = HashMap::new();
-    build_entity_map(&node, &mut entities);
+    let mut entities = HashMap::new();
+    let mut expressions = HashMap::new();
+    build_stub_map(&node, &mut entities);
     let node = init_node(node, &entities, &mut expressions);
     entity::evaluate(node.clone());
     node

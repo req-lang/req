@@ -30,6 +30,17 @@ pub struct Node {
     pub variant: Variant,
 }
 
+impl ChildrenIter<NodeRef<Node>> for NodeRef<Node> {
+    fn children_iter(&self) -> impl Iterator<Item = NodeRef<Node>> {
+        self.borrow()
+            .variant
+            .children_iter()
+            .map(|n| n.clone())
+            .collect::<Vec<_>>()
+            .into_iter()
+    }
+}
+
 pub(super) struct SubPaths<'a> {
     pub entity: &'a Paths,
     pub ctx: &'a Ctx,
