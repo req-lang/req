@@ -1,111 +1,28 @@
-use std::fmt::Display;
+use crate::{node::entity::Label, reference::Reference, utils::children::ChildrenIter};
 
-use crate::syntax::entity::{REFERENCE_SEPARATOR, Reference};
+pub struct NodePathIter<N> {
+    stack: Vec<(Reference, N)>,
+}
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Path(pub String);
-
-impl Display for Path {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let Self(raw) = self;
-        write!(f, "{}", raw)
+impl<N: Label> NodePathIter<N> {
+    pub fn new(node: N) -> Self {
+        NodePathIter {
+            stack: vec![(Reference::new(node.label()), node)],
+        }
     }
 }
 
-impl PartialEq<str> for Path {
-    fn eq(&self, other: &str) -> bool {
-        let Self(self_raw) = self;
-        other == self_raw
-    }
-}
+impl<N> Iterator for NodePathIter<N>
+where
+    N: ChildrenIter<N> + Label,
+{
+    type Item = (Reference, N);
 
-impl From<&Vec<String>> for Path {
-    fn from(labels: &Vec<String>) -> Self {
-        Path(labels.join(REFERENCE_SEPARATOR))
-    }
-}
-
-impl From<String> for Path {
-    fn from(label: String) -> Self {
-        Path(label)
-    }
-}
-
-impl From<Reference> for Path {
-    fn from(reference: Reference) -> Self {
-        Path(reference.value)
-    }
-}
-
-impl Path {
-    pub fn is_prefix(&self, other: &Path) -> bool {
-        let Self(s) = self;
-        let Self(o) = other;
-        o.starts_with(s)
-    }
-
-    pub fn intersects(&self, other: &Path) -> bool {
-        let Self(s) = self;
-        let Self(o) = other;
-        s.starts_with(o) || o.starts_with(s)
-    }
-
-    pub fn depth(&self) -> usize {
-        let Self(raw) = self;
-        raw.split("::").count()
-    }
-
-    pub fn raw(&self) -> &str {
-        let Self(raw) = self;
-        &raw[..]
-    }
-
-    pub fn last(&self) -> &str {
-        let Self(raw) = self;
-        raw.rsplit("::").next().unwrap()
-    }
-
-    pub fn first(&self) -> &str {
-        let Self(raw) = self;
-        raw.split("::").next().unwrap()
-    }
-
-    pub fn parent(&self) -> Option<&str> {
-        let Self(raw) = self;
-        let slice_idx = raw.rfind("::")?;
-        Some(&raw[..slice_idx])
-    }
-
-    pub fn merged(&self, reference: &str) -> Self {
-        let Self(raw) = self;
-        let slice_idx = raw.rfind("::").unwrap_or(raw.len());
-        let parent = &raw[..slice_idx];
-        Path(format!("{}::{}", parent, reference))
-    }
-
-    pub fn appended(&self, reference: &str) -> Self {
-        let Self(raw) = self;
-        Path(format!("{}::{}", raw, reference))
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn merges_path_with_reference() {
-        let path = Path("spec::sys".to_string());
-        let reference = Reference::new("sys::mass".to_string());
-        let result = path.merged(&reference.value);
-        assert_eq!(result.raw(), "spec::sys::mass");
-    }
-
-    #[test]
-    fn appends_path_with_reference() {
-        let path = Path("spec::sys".to_string());
-        let reference = Reference::new("inner::mass".to_string());
-        let result = path.appended(&reference.value);
-        assert_eq!(result.raw(), "spec::sys::inner::mass");
+    fn next(&mut self) -> Option<Self::Item> {
+        let (path, node) = self.stack.pop()?;
+        let children = node.children_iter().collect::<Vec<_>>().into_iter().rev();
+        let with_paths = children.map(|child| (&path + &child.label()[..], child));
+        self.stack.extend(with_paths);
+        Some((path, node))
     }
 }

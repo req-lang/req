@@ -1,5 +1,5 @@
 pub mod formatter;
 
 pub trait Render<N> {
-    fn render(self, node: &N) -> String;
+    fn render(self, node: N) -> String;
 }

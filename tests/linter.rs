@@ -1,19 +1,14 @@
-use reqtool::{
-    renderer::{Render, formatter::Renderer},
-    *,
-};
+use reqtool::{syntax::entity::Node, *};
 
 pub const PATH_ROOT: &str = "tests/data/valid";
 
 fn assert_isomorphic_formatter(filename: &str) {
     let path = std::path::PathBuf::from(PATH_ROOT).join(filename);
     let input = std::fs::read_to_string(path).unwrap();
-    let mut parser = syntax::NodeParser::default();
-    let expected = parser.parse(&input).unwrap();
+    let expected = node::map(syntax::parser::parse(&input).unwrap(), Node::from);
 
-    let output = Renderer::new().render(&expected);
-    let mut parser = syntax::NodeParser::default();
-    let actual = parser.parse(&output).unwrap();
+    let output = renderer::formatter::format_string(expected.borrow(), 0);
+    let actual = node::map(syntax::parser::parse(&output).unwrap(), Node::from);
 
     if actual != expected {
         eprintln!("*** INPUT ***\n{}\n\n", input);

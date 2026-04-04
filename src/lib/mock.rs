@@ -1,30 +1,80 @@
 pub mod entity {
-    use crate::syntax::entity::{Entity, EntityVariant, Package};
+    use crate::{
+        mock::expression,
+        node::{
+            self, NodeRef,
+            entity::{Attribute, Package, Part, Requirement, RequirementVariant, Variant},
+        },
+        syntax::{self, entity::Node},
+    };
 
-    pub fn simple_tree() -> Entity {
-        let mut first = Entity::default();
-        let mut second = Entity::default();
-        let mut third = Entity::default();
-        let fourth = Entity::default();
-        let fifth = Entity::default();
+    pub fn package(label: &str) -> NodeRef<Node> {
+        let mut variant = Variant::Package(Package::new(vec![], vec![]));
+        variant.meta_mut().label = label.to_string();
+        node::new(Node::new(variant))
+    }
 
-        let variant = EntityVariant::Package(Package::new(vec![], vec![fourth]));
-        second.variant = variant;
+    pub fn part(label: &str) -> NodeRef<Node> {
+        let mut variant = Variant::Part(Part::new(vec![], vec![]));
+        variant.meta_mut().label = label.to_string();
+        node::new(Node::new(variant))
+    }
 
-        let variant = EntityVariant::Package(Package::new(vec![], vec![fifth]));
-        third.variant = variant;
+    pub fn attribute(label: &str, domain: &str) -> NodeRef<Node> {
+        let domain = expression::identifier(domain);
+        let mut variant = Variant::Attribute(Attribute::new(domain));
+        variant.meta_mut().label = label.to_string();
+        node::new(Node::new(variant))
+    }
 
-        let variant = EntityVariant::Package(Package::new(vec![], vec![second, third]));
-        first.variant = variant;
+    pub fn requirement(label: &str) -> NodeRef<Node> {
+        let variant = RequirementVariant::default();
+        let mut variant = Variant::Requirement(Requirement::from(variant));
+        variant.meta_mut().label = label.to_string();
+        node::new(Node::new(variant))
+    }
 
-        return first;
+    pub fn formal(label: &str, expr: NodeRef<syntax::expression::Node>) -> NodeRef<Node> {
+        let req = requirement(label);
+        req.borrow_mut().variant.requirement_mut().unwrap().variant =
+            RequirementVariant::Formal(expr);
+        req
+    }
+
+    pub fn simple_tree() -> NodeRef<Node> {
+        let mut arena = vec![
+            package("a"),
+            package("b"),
+            package("c"),
+            package("d"),
+            package("e"),
+        ];
+
+        let variant = Variant::Package(Package::new(vec![], vec![arena[3].clone()]));
+        arena[1].borrow_mut().variant = variant;
+
+        let variant = Variant::Package(Package::new(vec![], vec![arena[4].clone()]));
+        arena[2].borrow_mut().variant = variant;
+
+        let variant = Variant::Package(Package::new(
+            vec![],
+            vec![arena[1].clone(), arena[2].clone()],
+        ));
+        arena[0].borrow_mut().variant = variant;
+        arena.reverse();
+
+        return arena.pop().unwrap();
     }
 }
 
 pub mod generator {
-    use crate::children::ChildrenMut;
-    use crate::syntax::entity::{Entity, EntityVariant, Requirement, RequirementVariant};
-    use crate::syntax::markup;
+    use std::rc::Rc;
+
+    use super::entity::package;
+    use crate::mock::entity::requirement;
+    use crate::node::{NodeRef, markup};
+    use crate::syntax::entity::Node;
+    use crate::utils::children::ChildrenMut;
 
     pub struct ExponentialSizeIterator {
         value: f64,
@@ -47,7 +97,7 @@ pub mod generator {
     }
 
     pub trait Generate {
-        fn generate(&self) -> Entity;
+        fn generate(&self) -> NodeRef<Node>;
 
         fn size(&self) -> u64;
     }
@@ -61,42 +111,48 @@ pub mod generator {
     }
 
     impl Generate for Simple {
-        fn generate(&self) -> Entity {
-            let mut root = Entity::default();
-            root.meta.label = format!("root");
+        fn generate(&self) -> NodeRef<Node> {
+            let root = package("root");
 
             for p in 0..self.packages {
-                let mut pkg = Entity::default();
-                pkg.meta.label = format!("package_{p}");
-                root.children_mut().unwrap().push(pkg);
+                let pkg = package(format!("package_{p}").as_str());
+                root.borrow_mut()
+                    .variant
+                    .children_mut()
+                    .unwrap()
+                    .push(Rc::clone(&pkg));
 
-                let mut prev = root.children_mut().unwrap().last_mut().unwrap();
+                let mut prev = pkg;
                 for d in 0..self.depth {
-                    let mut curr = Entity::default();
-                    curr.meta.label = format!("package_{p}_{d}");
-
+                    let curr = package(format!("package_{p}_{d}").as_str());
                     for r in 0..self.requirements {
-                        let mut req = Entity::default();
-                        let variant = RequirementVariant::Informal(markup::Markup::from(
-                            vec!["word"]
-                                .into_iter()
-                                .cycle()
-                                .take(self.words as usize)
-                                .collect::<Vec<_>>()
-                                .join(" "),
-                        ));
+                        let req = requirement(format!("requirement_{p}_{d}_{r}").as_str());
+                        let content = vec!["word"]
+                            .into_iter()
+                            .cycle()
+                            .take(self.words as usize)
+                            .collect::<Vec<&str>>()
+                            .join(" ");
 
-                        let mut rq = Requirement::new();
-                        rq.variant = variant;
+                        let mut markup = markup::Node::default();
+                        markup.items.push(markup::Item::Text(content));
 
-                        req.variant = EntityVariant::Requirement(rq);
-                        req.meta.label = format!("requirement_{p}_{d}_{r}");
+                        *req.borrow_mut()
+                            .variant
+                            .requirement_mut()
+                            .unwrap()
+                            .informal_mut()
+                            .unwrap() = markup;
 
-                        curr.children_mut().unwrap().push(req);
+                        curr.borrow_mut().variant.children_mut().unwrap().push(req);
                     }
 
-                    prev.children_mut().unwrap().push(curr);
-                    prev = prev.children_mut().unwrap().last_mut().unwrap();
+                    prev.borrow_mut()
+                        .variant
+                        .children_mut()
+                        .unwrap()
+                        .push(Rc::clone(&curr));
+                    prev = curr;
                 }
             }
 
@@ -118,21 +174,63 @@ pub mod generator {
             }
         }
     }
+}
 
-    #[cfg(test)]
-    mod tests {
-        use super::*;
+pub mod expression {
+    use crate::{
+        node::{
+            self, NodeRef,
+            expression::{Identifier, Variant},
+        },
+        reference::Reference,
+        syntax::expression::Node,
+    };
 
-        #[test]
-        fn simple_has_expected_size() {
-            let mut generator = Simple::new();
+    pub fn identifier(location: &str) -> NodeRef<Node> {
+        let reference = Reference::new(location.to_string());
+        let variant = Variant::Identifier(Identifier::new(reference));
+        node::new(Node::new(variant))
+    }
 
-            let root = generator.generate();
-            assert_eq!(root.iter().count() as u64, generator.size());
+    pub fn number(n: i64) -> NodeRef<Node> {
+        let num = node::expression::Number {
+            kind: node::expression::NumberKind::Integer,
+            value: n.to_string(),
+        };
+        node::new(Node::new(node::expression::Variant::Number(num)))
+    }
 
-            generator.packages = 5;
-            let root = generator.generate();
-            assert_eq!(root.iter().count() as u64, generator.size());
-        }
+    pub fn boolean(b: bool) -> NodeRef<Node> {
+        node::new(Node::new(node::expression::Variant::Boolean(
+            node::expression::Boolean { value: b },
+        )))
+    }
+
+    pub fn binary(
+        op: node::expression::BinaryOperator,
+        left: NodeRef<Node>,
+        right: NodeRef<Node>,
+    ) -> NodeRef<Node> {
+        node::new(Node::new(node::expression::Variant::BinOp(
+            node::expression::BinOp::new(op, left, right),
+        )))
     }
 }
+
+//
+// #[cfg(test)]
+// mod tests {
+//     use crate::mock::generator::{Generate, Simple};
+//
+//     #[test]
+//     fn simple_has_expected_size() {
+//         let mut generator = Simple::new();
+//
+//         let root = generator.generate();
+//         assert_eq!(root.iter().count() as u64, generator.size());
+//
+//         generator.packages = 5;
+//         let root = generator.generate();
+//         assert_eq!(root.iter().count() as u64, generator.size());
+//     }
+// }

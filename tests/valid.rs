@@ -1,23 +1,38 @@
-use reqtool::{syntax::entity::Entity, *};
+use reqtool::{
+    issue::IssueIterator,
+    node::{self, NodeRef},
+    semantics::{
+        connection::{self, entity::Node},
+        reference, typing,
+    },
+    syntax,
+    utils::iter::NodeIter,
+};
 
 pub const PATH_ROOT: &str = "tests/data/valid";
 
-fn assert_valid_parsing_and_analysis(filename: &str) -> Entity {
+fn assert_valid_parsing_and_analysis(filename: &str) -> NodeRef<Node> {
     let path = std::path::PathBuf::from(PATH_ROOT).join(filename);
     let input = std::fs::read_to_string(path).unwrap();
-    let mut parser = syntax::NodeParser::default();
-    let result = parser.parse(&input);
+    let result = syntax::parser::parse(&input);
+
     assert!(result.is_ok());
 
-    let root = result.unwrap();
-    let analysis = Analysis::from(&root);
+    let ast = node::map(result.unwrap(), syntax::entity::Node::from);
+    let resolved = reference::resolve(ast);
+    let typed = typing::evaluate(resolved);
+    let connected = connection::connect(typed);
+    let issues: Vec<_> = NodeIter::new(connected.clone())
+        .map(|n| IssueIterator::from(n.borrow()))
+        .flatten()
+        .collect();
 
-    for diagnostic in &analysis.diagnostics {
-        eprintln!("{}", diagnostic);
+    for issue in &issues {
+        eprintln!("{:?}", issue);
     }
-    assert!(analysis.diagnostics.is_empty());
+    assert!(issues.is_empty());
 
-    root
+    connected
 }
 
 mod valid {

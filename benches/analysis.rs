@@ -1,13 +1,24 @@
 use criterion::*;
-use reqtool::{
-    mock::generator::{self, Generate},
-    Analysis,
-};
+use reqtool::mock::generator::{self, Generate};
 
 pub mod simple {
-    use reqtool::mock::generator::ExponentialSizeIterator;
+    use std::cell::RefCell;
+
+    use reqtool::{
+        mock::generator::ExponentialSizeIterator,
+        node::{self, NodeRef},
+        semantics::{connection, reference, typing},
+        syntax,
+    };
 
     use super::*;
+
+    fn complete_pipeline(root: NodeRef<syntax::entity::Node>) -> NodeRef<connection::entity::Node> {
+        let ast = node::map(root, syntax::entity::Node::from);
+        let resolved = reference::resolve(ast);
+        let typed = typing::evaluate(resolved);
+        connection::connect(typed)
+    }
 
     pub fn package(c: &mut Criterion) {
         let mut group = c.benchmark_group("analysis::simple::package");
@@ -16,11 +27,14 @@ pub mod simple {
             let mut generator = generator::Simple::new();
             generator.packages = size;
 
-            let root = generator.generate();
             let id = BenchmarkId::from_parameter(size);
             group.throughput(Throughput::Elements(generator.size()));
-            group.bench_with_input(id, &root, |b, root| {
-                b.iter(|| Analysis::from(std::hint::black_box(root)));
+            group.bench_function(id, |b| {
+                b.iter_batched(
+                    || generator.generate(),
+                    complete_pipeline,
+                    BatchSize::SmallInput,
+                );
             });
         }
         group.finish();
@@ -33,11 +47,14 @@ pub mod simple {
             let mut generator = generator::Simple::new();
             generator.depth = size;
 
-            let root = generator.generate();
             let id = BenchmarkId::from_parameter(size);
             group.throughput(Throughput::Elements(generator.size()));
-            group.bench_with_input(id, &root, |b, root| {
-                b.iter(|| Analysis::from(std::hint::black_box(root)));
+            group.bench_function(id, |b| {
+                b.iter_batched(
+                    || generator.generate(),
+                    complete_pipeline,
+                    BatchSize::SmallInput,
+                );
             });
         }
         group.finish();

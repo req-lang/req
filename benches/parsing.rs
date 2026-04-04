@@ -2,7 +2,7 @@ use criterion::*;
 use reqtool::mock::generator::{self, Generate};
 
 pub mod simple {
-    use reqtool::{mock::generator::ExponentialSizeIterator, renderer, syntax, visitor::Walk};
+    use reqtool::{mock::generator::ExponentialSizeIterator, renderer, syntax};
 
     use super::*;
 
@@ -13,14 +13,12 @@ pub mod simple {
             let mut generator = generator::Simple::new();
             generator.packages = size;
             let root = generator.generate();
-            let mut renderer = renderer::formatter::Renderer::new();
-            let _ = renderer.walk(&root);
-            let input = renderer.source;
+            let input = renderer::formatter::format_string(root.borrow(), 0);
 
             let id = BenchmarkId::from_parameter(size);
             group.throughput(Throughput::Elements(generator.size()));
             group.bench_with_input(id, &input, |b, input| {
-                b.iter(|| syntax::NodeParser::default().parse(std::hint::black_box(input)))
+                b.iter(|| syntax::parser::parse(std::hint::black_box(input)))
             });
         }
         group.finish();
@@ -33,14 +31,12 @@ pub mod simple {
             let mut generator = generator::Simple::new();
             generator.depth = size;
             let root = generator.generate();
-            let mut renderer = renderer::formatter::Renderer::new();
-            let _ = renderer.walk(&root);
-            let input = renderer.source;
+            let input = renderer::formatter::format_string(root.borrow(), 0);
 
             let id = BenchmarkId::from_parameter(size);
             group.throughput(Throughput::Elements(generator.size()));
             group.bench_with_input(id, &input, |b, input| {
-                b.iter(|| syntax::NodeParser::default().parse(std::hint::black_box(input)))
+                b.iter(|| syntax::parser::parse(std::hint::black_box(input)))
             });
         }
         group.finish();
@@ -53,14 +49,12 @@ pub mod simple {
             let mut generator = generator::Simple::new();
             generator.words = size;
             let root = generator.generate();
-            let mut renderer = renderer::formatter::Renderer::new();
-            let _ = renderer.walk(&root);
-            let input = renderer.source;
-
+            let input = renderer::formatter::format_string(root.borrow(), 0);
             let id = BenchmarkId::from_parameter(size);
+
             group.throughput(Throughput::BytesDecimal(input.len() as u64));
             group.bench_with_input(id, &input, |b, input| {
-                b.iter(|| syntax::NodeParser::default().parse(std::hint::black_box(input)))
+                b.iter(|| syntax::parser::parse(std::hint::black_box(input)))
             });
         }
         group.finish();
