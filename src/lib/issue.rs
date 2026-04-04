@@ -109,7 +109,7 @@ impl From<Ref<'_, reference::entity::Node>> for IssueIterator {
         issues.extend(rf_errors.map(|err| err.into()));
 
         for mk in variant.markups() {
-            let rf_errors = mk.references().filter_map(|r| r.as_ref().err());
+            let rf_errors = mk.container.references().filter_map(|r| r.as_ref().err());
             issues.extend(rf_errors.map(|err| err.into()));
         }
 

@@ -2,7 +2,6 @@ use criterion::*;
 use reqtool::mock::generator::{self, Generate};
 
 pub mod simple {
-    use std::cell::RefCell;
 
     use reqtool::{
         mock::generator::ExponentialSizeIterator,
@@ -16,8 +15,8 @@ pub mod simple {
     fn complete_pipeline(root: NodeRef<syntax::entity::Node>) -> NodeRef<connection::entity::Node> {
         let ast = node::map(root, syntax::entity::Node::from);
         let resolved = reference::resolve(ast);
-        let typed = typing::evaluate(resolved);
-        connection::connect(typed)
+        let _ = typing::evaluate(resolved.clone());
+        connection::connect(resolved)
     }
 
     pub fn package(c: &mut Criterion) {

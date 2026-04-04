@@ -72,8 +72,9 @@ pub mod generator {
 
     use super::entity::package;
     use crate::mock::entity::requirement;
-    use crate::node::{NodeRef, markup};
+    use crate::node::NodeRef;
     use crate::syntax::entity::Node;
+    use crate::syntax::parser::{self, markup};
     use crate::utils::children::ChildrenMut;
 
     pub struct ExponentialSizeIterator {
@@ -134,7 +135,7 @@ pub mod generator {
                             .collect::<Vec<&str>>()
                             .join(" ");
 
-                        let mut markup = markup::Node::default();
+                        let mut markup = markup::Container::default();
                         markup.items.push(markup::Item::Text(content));
 
                         *req.borrow_mut()
@@ -142,7 +143,7 @@ pub mod generator {
                             .requirement_mut()
                             .unwrap()
                             .informal_mut()
-                            .unwrap() = markup;
+                            .unwrap() = parser::markup::Node { container: markup };
 
                         curr.borrow_mut().variant.children_mut().unwrap().push(req);
                     }

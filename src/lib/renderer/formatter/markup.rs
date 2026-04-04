@@ -6,7 +6,7 @@ pub fn format<W: std::io::Write>(node: &Node, indent: usize, out: &mut W) -> std
     writeln!(out, "{}@@", pad(indent))?;
 
     write!(out, "{}", pad(indent))?;
-    for item in &node.items {
+    for item in &node.container.items {
         match item {
             Text(text) => write!(out, "{}", text)?,
             Reference(reference) => write!(out, "{{{}}}", reference)?,

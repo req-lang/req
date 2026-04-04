@@ -143,7 +143,7 @@ mod markup {
     pub(super) fn build_graph(node: &Node, graph: &mut Graph, parent: &WeakNodeRef<entity::Node>) {
         let ptr = parent.as_ptr();
 
-        for rf in node.references() {
+        for rf in node.container.references() {
             if let Ok(src) = rf {
                 // SAFETY: into_raw transfers ownership; from_raw in connect reclaims it
                 graph.inbound.usages.upsert(src.as_ptr(), parent.clone());

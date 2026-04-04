@@ -38,7 +38,7 @@ mod tests {
         node::{self, NodeRef, entity as entity_node, expression as expr_node, markup},
         reference::Reference,
         semantics::reference::{entity::Node, expression, resolve},
-        syntax,
+        syntax::{self, parser},
         utils::children::{ChildrenIter, ChildrenMut},
     };
 
@@ -273,17 +273,18 @@ mod tests {
     fn resolves_markup_reference() {
         let p = mock::entity::package("p");
         {
-            let mut comment = markup::Node::default();
+            let mut comment = markup::Container::default();
             comment
                 .items
                 .push(markup::Item::Reference(Reference::new("p".to_string())));
-            p.borrow_mut().variant.meta_mut().comment = Some(comment);
+            p.borrow_mut().variant.meta_mut().comment =
+                Some(parser::markup::Node { container: comment });
         }
 
         let resolved = resolve(p);
 
         let markup = resolved.borrow().variant.markups().next().cloned().unwrap();
-        let rf = markup.references().next().cloned().unwrap();
+        let rf = markup.container.references().next().cloned().unwrap();
         assert!(rf.is_ok());
         assert_eq!(
             rf.unwrap().upgrade().unwrap().borrow().variant.meta().label,

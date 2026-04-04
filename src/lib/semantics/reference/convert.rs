@@ -1,30 +1,24 @@
 use std::{cell::RefCell, collections::HashMap, fmt::Debug, rc::Rc};
 
 use crate::{
-    node::{self, NodeRef, WeakNodeRef, entity, expression, markup},
+    node::{
+        self, NodeRef, WeakNodeRef, entity, expression,
+        markup::{self, Container},
+    },
     semantics::reference::{Result, expression::Target},
     utils::children::ChildrenIter,
 };
 
 pub(crate) type ConversionMap<N, O> = HashMap<*const RefCell<N>, NodeRef<O>>;
 
-pub fn convert<N, O, E, G>(node: NodeRef<N>) -> NodeRef<O>
+pub fn convert<N, O, E, G, M, H>(node: NodeRef<N>) -> NodeRef<O>
 where
-    N: entity::IntoVariable<
-            NodeRef<N>,
-            Result<WeakNodeRef<N>>,
-            NodeRef<E>,
-            markup::Node<Result<WeakNodeRef<N>>>,
-        > + Debug
-        + Clone,
-    O: entity::VariableMut<
-            NodeRef<O>,
-            Result<WeakNodeRef<O>>,
-            NodeRef<G>,
-            markup::Node<Result<WeakNodeRef<O>>>,
-        > + Default,
+    N: entity::IntoVariable<NodeRef<N>, Result<WeakNodeRef<N>>, NodeRef<E>, M> + Debug + Clone,
+    O: entity::VariableMut<NodeRef<O>, Result<WeakNodeRef<O>>, NodeRef<G>, H> + Default,
     E: expression::IntoVariable<NodeRef<E>, Result<Target<N, E>>> + Debug + Clone,
     G: From<expression::Variant<NodeRef<G>, Result<Target<O, G>>>>,
+    M: Clone + markup::IntoItems<Result<WeakNodeRef<N>>>,
+    H: From<markup::Container<Result<WeakNodeRef<O>>>>,
     NodeRef<N>: ChildrenIter<NodeRef<N>>,
 {
     let mut entities = HashMap::new();
@@ -34,26 +28,18 @@ where
     convert_entity(node, &entities, &mut expressions)
 }
 
-fn convert_entity<N, O, E, G>(
+fn convert_entity<N, O, E, G, M, H>(
     node: NodeRef<N>,
     entities: &ConversionMap<N, O>,
     expressions: &mut ConversionMap<E, G>,
 ) -> NodeRef<O>
 where
-    N: entity::IntoVariable<
-            NodeRef<N>,
-            Result<WeakNodeRef<N>>,
-            NodeRef<E>,
-            markup::Node<Result<WeakNodeRef<N>>>,
-        > + Clone,
-    O: entity::VariableMut<
-            NodeRef<O>,
-            Result<WeakNodeRef<O>>,
-            NodeRef<G>,
-            markup::Node<Result<WeakNodeRef<O>>>,
-        >,
+    N: entity::IntoVariable<NodeRef<N>, Result<WeakNodeRef<N>>, NodeRef<E>, M> + Clone,
+    O: entity::VariableMut<NodeRef<O>, Result<WeakNodeRef<O>>, NodeRef<G>, H>,
     E: expression::IntoVariable<NodeRef<E>, Result<Target<N, E>>> + Debug + Clone,
     G: From<expression::Variant<NodeRef<G>, Result<Target<O, G>>>>,
+    M: Clone + markup::IntoItems<Result<WeakNodeRef<N>>>,
+    H: From<markup::Container<Result<WeakNodeRef<O>>>>,
 {
     let key = Rc::as_ptr(&node);
     let variant = (*node.borrow())
@@ -88,11 +74,19 @@ where
     node
 }
 
-fn convert_markup<N, O>(
-    node: node::markup::Node<Result<WeakNodeRef<N>>>,
-    ctx: &ConversionMap<N, O>,
-) -> node::markup::Node<Result<WeakNodeRef<O>>> {
-    node.mapr(|r| r.map(|weak| Rc::downgrade(&ctx[&weak.as_ptr()])))
+fn convert_markup<N, O, M, H>(node: M, ctx: &ConversionMap<N, O>) -> H
+where
+    M: Clone + markup::IntoItems<Result<WeakNodeRef<N>>>,
+    H: From<markup::Container<Result<WeakNodeRef<O>>>>,
+{
+    Container {
+        items: node
+            .into_items()
+            .into_iter()
+            .map(|r| r.mapr(|r| r.map(|weak| Rc::downgrade(&ctx[&weak.as_ptr()]))))
+            .collect(),
+    }
+    .into()
 }
 
 pub(crate) fn convert_target<N, O, E, G>(

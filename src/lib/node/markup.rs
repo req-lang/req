@@ -19,13 +19,17 @@ impl<R> Item<R> {
     }
 }
 
+pub trait IntoItems<R> {
+    fn into_items(self) -> Vec<Item<R>>;
+}
+
 /// This container owns the markdown text associated with markup tokens.
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct Node<R> {
+pub struct Container<R> {
     pub items: Vec<Item<R>>,
 }
 
-impl<R> Default for Node<R> {
+impl<R> Default for Container<R> {
     fn default() -> Self {
         Self {
             items: Default::default(),
@@ -33,12 +37,12 @@ impl<R> Default for Node<R> {
     }
 }
 
-impl<R> Node<R> {
-    pub fn mapr<F, S>(self, f: F) -> Node<S>
+impl<R> Container<R> {
+    pub fn mapr<F, S>(self, f: F) -> Container<S>
     where
         F: Fn(R) -> S,
     {
-        Node {
+        Container {
             items: self.items.into_iter().map(|i| i.mapr(|x| f(x))).collect(),
         }
     }
