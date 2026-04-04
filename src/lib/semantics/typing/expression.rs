@@ -1,14 +1,11 @@
-use std::{cell::RefCell, collections::HashMap, fmt::Display, rc::Rc};
+use std::{fmt::Display, rc::Rc};
 
 use crate::{
     issue::Severity,
-    node::{self, ConversionMap, NodeRef},
+    node::{self, NodeRef},
     reference::Reference,
     semantics::{
-        reference::{
-            self,
-            expression::{Target, convert_target},
-        },
+        reference::expression::Target,
         typing::{entity, evaluate::evaluate_node},
     },
     utils::children::ChildrenIter,
@@ -41,6 +38,15 @@ pub type Variant =
 pub struct Node {
     pub typ: Result<TypeKind, Issue>,
     pub variant: Variant,
+}
+
+impl From<Variant> for Node {
+    fn from(variant: Variant) -> Self {
+        Node {
+            typ: Ok(TypeKind::Undefined),
+            variant,
+        }
+    }
 }
 
 impl ChildrenIter<NodeRef<Node>> for NodeRef<Node> {
@@ -83,25 +89,6 @@ pub(super) fn evaluate(node: NodeRef<Node>) {
     }
 
     node.borrow_mut().typ = evaluate_node(node.borrow());
-}
-
-pub(super) fn init_node(
-    node: NodeRef<reference::expression::Node>,
-    entities: &ConversionMap<reference::entity::Node, entity::Node>,
-    expressions: &mut ConversionMap<reference::expression::Node, Node>,
-) -> NodeRef<Node> {
-    let key = Rc::as_ptr(&node);
-    let inner = node::unwrap(node);
-    let variant = inner
-        .variant
-        .mape(|child_ref| init_node(child_ref, entities, expressions))
-        .mapr(|r| r.map(|t| convert_target(t, entities, expressions)));
-    let node = node::new(Node {
-        variant,
-        typ: Ok(TypeKind::Undefined),
-    });
-    expressions.insert(key, Rc::clone(&node));
-    node
 }
 
 #[derive(PartialEq, Eq, Debug, Clone)]

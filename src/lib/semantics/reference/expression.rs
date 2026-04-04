@@ -1,7 +1,7 @@
 use std::{collections::HashMap, rc::Rc};
 
 use crate::{
-    node::{self, ConversionMap, NodeRef},
+    node::{self, NodeRef, expression::IntoVariable},
     reference::Reference,
     semantics::reference::{
         WeakNodeRef,
@@ -40,26 +40,18 @@ pub enum Target<N, E> {
     Builtin(BuiltinKind),
 }
 
-pub fn convert_target<N, O, E, G>(
-    target: Target<N, E>,
-    entities: &ConversionMap<N, O>,
-    expressions: &ConversionMap<E, G>,
-) -> Target<O, G> {
-    use Target::*;
-
-    match target {
-        Builtin(kind) => Builtin(kind),
-        Entity(weak) => Entity(Rc::downgrade(&entities[&weak.as_ptr()])),
-        Expression(weak) => Expression(Rc::downgrade(&expressions[&weak.as_ptr()])),
-    }
-}
-
 pub type Variant =
-    node::expression::Variant<NodeRef<Node>, Result<Target<entity::Node, Node>, Reference>>;
+    node::expression::Variant<NodeRef<Node>, super::Result<Target<entity::Node, Node>>>;
 
 #[derive(Debug)]
 pub struct Node {
     pub variant: Variant,
+}
+
+impl IntoVariable<NodeRef<Node>, super::Result<Target<entity::Node, Node>>> for Node {
+    fn into_variant(self) -> Variant {
+        self.variant
+    }
 }
 
 pub(super) fn link(

@@ -7,11 +7,13 @@ use crate::{
     syntax,
 };
 
+pub mod convert;
 pub mod entity;
 pub mod expression;
 pub mod markup;
 
 pub type WeakNodeRef<T> = Weak<RefCell<T>>;
+pub type Result<N> = std::result::Result<N, Reference>;
 
 pub fn resolve(syntax: NodeRef<syntax::entity::Node>) -> NodeRef<Node> {
     let node = node::map(syntax, init_nodes);

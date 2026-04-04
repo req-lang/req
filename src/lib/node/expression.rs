@@ -1,5 +1,30 @@
 use crate::utils::children::ChildrenIter;
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Variant<N, R> {
+    Branch(Branch<N>),
+    When(When<N>),
+    Forall(Forall<N>),
+    Exists(Exists<N>),
+    Select(Select<N>),
+    Aggregation(Aggregation<N>),
+
+    UnaryOp(UnaryOp<N>),
+    BinOp(BinOp<N>),
+    Function(Function<N>),
+
+    Identifier(Identifier<R>),
+    Number(Number),
+    Boolean(Boolean),
+    Undefined,
+
+    Set(Set<N>),
+}
+
+pub trait IntoVariable<N, R> {
+    fn into_variant(self) -> Variant<N, R>;
+}
+
 impl<N: Clone, R> ChildrenIter<N> for Variant<N, R> {
     fn children_iter(&self) -> impl Iterator<Item = N> {
         use Variant::*;
@@ -78,26 +103,6 @@ impl<N: Clone, R> ChildrenIter<N> for Variant<N, R> {
 
         children.into_iter().cloned()
     }
-}
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum Variant<N, R> {
-    Branch(Branch<N>),
-    When(When<N>),
-    Forall(Forall<N>),
-    Exists(Exists<N>),
-    Select(Select<N>),
-    Aggregation(Aggregation<N>),
-
-    UnaryOp(UnaryOp<N>),
-    BinOp(BinOp<N>),
-    Function(Function<N>),
-
-    Identifier(Identifier<R>),
-    Number(Number),
-    Boolean(Boolean),
-    Undefined,
-
-    Set(Set<N>),
 }
 
 impl<N, R> Default for Variant<N, R> {

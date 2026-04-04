@@ -1,23 +1,12 @@
-use std::{cell::RefCell, collections::HashMap, fmt::Display, rc::Rc};
-
 use crate::{
-    issue::Severity,
     node::{
-        self, ConversionMap, NodeRef,
+        self, NodeRef,
         expression::{Case, SetElement},
     },
-    reference::Reference,
     semantics::{
-        reference::{
-            self,
-            expression::{BuiltinKind, Target, convert_target},
-        },
-        typing::{
-            entity,
-            expression::{Issue, Node, TypeKind},
-        },
+        reference::expression::{BuiltinKind, Target},
+        typing::expression::{Issue, Node, TypeKind},
     },
-    utils::children::ChildrenIter,
 };
 
 pub(super) fn evaluate_node(node: std::cell::Ref<Node>) -> Result<TypeKind, Issue> {

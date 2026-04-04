@@ -5,16 +5,16 @@ use std::{
 };
 
 use crate::{
-    node::{self, NodeRef},
+    node::{self, NodeRef, entity::IntoVariable},
     reference::Reference,
-    semantics::reference::{WeakNodeRef, expression, markup},
+    semantics::reference::{Result, WeakNodeRef, expression, markup},
     syntax::{self},
     utils::children::ChildrenIter,
 };
 
 pub type Variant = node::entity::Variant<
     NodeRef<Node>,
-    Result<WeakNodeRef<Node>, Reference>,
+    Result<WeakNodeRef<Node>>,
     NodeRef<expression::Node>,
     markup::Node,
 >;
@@ -25,9 +25,24 @@ pub(super) struct Ctx {
     imports: Vec<Reference>,
 }
 
-#[derive(Debug)]
+#[derive(Default, Debug)]
 pub struct Node {
     pub variant: Variant,
+}
+
+impl IntoVariable<NodeRef<Node>, Result<WeakNodeRef<Node>>, NodeRef<expression::Node>, markup::Node>
+    for Node
+{
+    fn into_variant(
+        self,
+    ) -> node::entity::Variant<
+        NodeRef<Node>,
+        Result<WeakNodeRef<Node>>,
+        NodeRef<expression::Node>,
+        markup::Node,
+    > {
+        self.variant
+    }
 }
 
 impl ChildrenIter<NodeRef<Node>> for NodeRef<Node> {

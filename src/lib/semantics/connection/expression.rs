@@ -1,11 +1,14 @@
 use std::rc::Rc;
 
 use crate::{
-    node::{self, ConversionMap, NodeRef},
+    node::{self, NodeRef},
     reference::Reference,
     semantics::{
         connection::entity,
-        reference::expression::{Target, convert_target},
+        reference::{
+            convert::{ConversionMap, convert_target},
+            expression::Target,
+        },
         typing::{
             self,
             expression::{Issue, TypeKind},

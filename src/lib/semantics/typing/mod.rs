@@ -1,10 +1,8 @@
-use std::collections::HashMap;
-
 use crate::{
-    node::{NodeRef, build_stub_map},
+    node::NodeRef,
     semantics::{
-        reference,
-        typing::entity::{Node, init_node},
+        reference::{self, convert::convert},
+        typing::entity::Node,
     },
 };
 
@@ -14,10 +12,7 @@ pub mod expression;
 pub mod markup;
 
 pub fn evaluate(node: NodeRef<reference::entity::Node>) -> NodeRef<Node> {
-    let mut entities = HashMap::new();
-    let mut expressions = HashMap::new();
-    build_stub_map(&node, &mut entities);
-    let node = init_node(node, &entities, &mut expressions);
+    let node = convert(node);
     entity::evaluate(node.clone());
     node
 }
