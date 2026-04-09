@@ -1,22 +1,20 @@
 use crate::{
-    node::{self, NodeRef},
-    reference::Reference,
-    semantics::{connection::entity, link::expression::Target},
+    node::{NodeRef, expression::Variant},
+    semantics::{
+        connection::entity,
+        link::{self},
+    },
     utils::children::ChildrenIter,
 };
 use reqlang_derive::ChildrenIter;
 
-pub type Variant =
-    node::expression::Variant<NodeRef<Node>, Result<Target<entity::Node, Node>, Reference>>;
-
 #[derive(Debug, Clone, ChildrenIter)]
 pub struct Node {
-    pub variant:
-        node::expression::Variant<NodeRef<Node>, Result<Target<entity::Node, Node>, Reference>>,
+    pub variant: Variant<NodeRef<Node>, link::ResultTgt<entity::Node, Node>>,
 }
 
-impl From<Variant> for Node {
-    fn from(variant: Variant) -> Self {
+impl From<Variant<NodeRef<Node>, link::ResultTgt<entity::Node, Node>>> for Node {
+    fn from(variant: Variant<NodeRef<Node>, link::ResultTgt<entity::Node, Node>>) -> Self {
         Node { variant }
     }
 }

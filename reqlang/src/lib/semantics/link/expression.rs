@@ -1,7 +1,10 @@
 use std::{collections::HashMap, rc::Rc};
 
 use crate::{
-    node::{self, NodeRef, expression::IntoVariable},
+    node::{
+        self, NodeRef,
+        expression::{IntoVariable, Variant},
+    },
     reference::Reference,
     semantics::link::{
         WeakNodeRef,
@@ -36,15 +39,14 @@ impl TryFrom<&str> for BuiltinKind {
 
 #[derive(Debug, Clone)]
 pub enum Target<N, E> {
-    Entity(WeakNodeRef<N>),
-    Expression(WeakNodeRef<E>),
+    Entity(N),
+    Expression(E),
     Builtin(BuiltinKind),
 }
 
 #[derive(Debug, Clone, IntoExpressionVariable)]
 pub struct Node {
-    pub variant:
-        node::expression::Variant<NodeRef<Node>, super::Result<Target<entity::Node, Node>>>,
+    pub variant: Variant<NodeRef<Node>, super::ResultTgt<entity::Node, Node>>,
 }
 
 pub(super) fn link(
@@ -74,7 +76,7 @@ fn find(
     paths: &entity::SubPaths,
     local: &HashMap<String, WeakNodeRef<Node>>,
     rf: &Reference,
-) -> Option<Target<entity::Node, Node>> {
+) -> Option<Target<WeakNodeRef<entity::Node>, WeakNodeRef<Node>>> {
     if let Ok(builtin) = BuiltinKind::try_from(&rf.value[..]) {
         return Some(Target::Builtin(builtin));
     }

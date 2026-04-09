@@ -2,10 +2,12 @@ use std::{fmt::Display, rc::Rc};
 
 use crate::{
     issue::Severity,
-    node::{self, NodeRef, expression::IntoVariable},
-    reference::Reference,
+    node::{
+        self, NodeRef,
+        expression::{IntoVariable, Variant},
+    },
     semantics::{
-        link::expression::Target,
+        link::{self, expression::Target},
         typing::{entity, evaluate::evaluate_node},
     },
     utils::children::ChildrenIter,
@@ -32,18 +34,14 @@ impl From<&Issue> for Severity {
     }
 }
 
-pub type Variant =
-    node::expression::Variant<NodeRef<Node>, Result<Target<entity::Node, Node>, Reference>>;
-
 #[derive(Debug, Clone, ChildrenIter, IntoExpressionVariable)]
 pub struct Node {
     pub typ: Result<TypeKind, Issue>,
-    pub variant:
-        node::expression::Variant<NodeRef<Node>, Result<Target<entity::Node, Node>, Reference>>,
+    pub variant: Variant<NodeRef<Node>, link::ResultTgt<entity::Node, Node>>,
 }
 
-impl From<Variant> for Node {
-    fn from(variant: Variant) -> Self {
+impl From<Variant<NodeRef<Node>, link::ResultTgt<entity::Node, Node>>> for Node {
+    fn from(variant: Variant<NodeRef<Node>, link::ResultTgt<entity::Node, Node>>) -> Self {
         Node {
             typ: Ok(TypeKind::Undefined),
             variant,

@@ -5,7 +5,7 @@ use crate::{
         self, NodeRef, WeakNodeRef, entity, expression,
         markup::{self, Container},
     },
-    semantics::link::{Result, expression::Target},
+    semantics::link::{Result, ResultTgt, expression::Target},
     utils::children::ChildrenIter,
 };
 
@@ -15,8 +15,8 @@ pub fn convert<N, O, E, G, M, H>(node: NodeRef<N>) -> NodeRef<O>
 where
     N: entity::IntoVariable<NodeRef<N>, Result<WeakNodeRef<N>>, NodeRef<E>, M> + Debug + Clone,
     O: entity::VariableMut<NodeRef<O>, Result<WeakNodeRef<O>>, NodeRef<G>, H> + Default,
-    E: expression::IntoVariable<NodeRef<E>, Result<Target<N, E>>> + Debug + Clone,
-    G: From<expression::Variant<NodeRef<G>, Result<Target<O, G>>>>,
+    E: expression::IntoVariable<NodeRef<E>, ResultTgt<N, E>> + Debug + Clone,
+    G: From<expression::Variant<NodeRef<G>, ResultTgt<O, G>>>,
     M: Clone + markup::IntoItems<Result<WeakNodeRef<N>>>,
     H: From<markup::Container<Result<WeakNodeRef<O>>>>,
     N: ChildrenIter<NodeRef<N>>,
@@ -36,8 +36,8 @@ fn convert_entity<N, O, E, G, M, H>(
 where
     N: entity::IntoVariable<NodeRef<N>, Result<WeakNodeRef<N>>, NodeRef<E>, M> + Clone,
     O: entity::VariableMut<NodeRef<O>, Result<WeakNodeRef<O>>, NodeRef<G>, H>,
-    E: expression::IntoVariable<NodeRef<E>, Result<Target<N, E>>> + Debug + Clone,
-    G: From<expression::Variant<NodeRef<G>, Result<Target<O, G>>>>,
+    E: expression::IntoVariable<NodeRef<E>, ResultTgt<N, E>> + Debug + Clone,
+    G: From<expression::Variant<NodeRef<G>, ResultTgt<O, G>>>,
     M: Clone + markup::IntoItems<Result<WeakNodeRef<N>>>,
     H: From<markup::Container<Result<WeakNodeRef<O>>>>,
 {
@@ -60,8 +60,8 @@ fn convert_expr<N, O, E, G>(
     expressions: &mut ConversionMap<E, G>,
 ) -> NodeRef<G>
 where
-    E: expression::IntoVariable<NodeRef<E>, Result<Target<N, E>>> + Debug + Clone,
-    G: From<expression::Variant<NodeRef<G>, Result<Target<O, G>>>>,
+    E: expression::IntoVariable<NodeRef<E>, ResultTgt<N, E>> + Debug + Clone,
+    G: From<expression::Variant<NodeRef<G>, ResultTgt<O, G>>>,
 {
     let key = Rc::as_ptr(&node);
     let variant = (*node.borrow())
@@ -90,10 +90,10 @@ where
 }
 
 pub(crate) fn convert_target<N, O, E, G>(
-    target: Target<N, E>,
+    target: Target<WeakNodeRef<N>, WeakNodeRef<E>>,
     entities: &ConversionMap<N, O>,
     expressions: &ConversionMap<E, G>,
-) -> Target<O, G> {
+) -> Target<WeakNodeRef<O>, WeakNodeRef<G>> {
     use Target::*;
 
     match target {
