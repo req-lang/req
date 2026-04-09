@@ -1,7 +1,7 @@
 [package]
-name = "reqtool"
+name = "reqlang"
 version = "1.0.0"
-description = "Main compiler for the req language and tools associated"
+description = "req language official core library"
 edition = "2024"
 
 [package.metadata]
@@ -9,17 +9,15 @@ author = "Sami Dahoux <sami@qitab.io>"
 copyright = "© 2025-2026. All rights reserved. Sami Dahoux"
 
 [dependencies]
-clap = { version = "4.6.0", features = ["derive"] }
-colored = "3.1.1"
 itertools = "0.14.0"
 pest = "2.7.9"
 pest_derive = "2.7.9"
-pretty_assertions = "1.4.1"
 thiserror = "2.0.18"
 unindent = "0.2.4"
 
 [dev-dependencies]
 criterion = { version = "0.6", features = ["html_reports"] }
+pretty_assertions = "1.4.1"
 
 [[bench]]
 name = "analysis"
