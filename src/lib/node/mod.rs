@@ -33,12 +33,12 @@ pub type ConversionMap<N, O> = HashMap<*const RefCell<N>, NodeRef<O>>;
 pub fn build_stub_map<N, O>(node: &NodeRef<N>, map: &mut ConversionMap<N, O>)
 where
     O: Default,
-    NodeRef<N>: ChildrenIter<NodeRef<N>>,
+    N: ChildrenIter<NodeRef<N>>,
 {
     let key = Rc::as_ptr(node);
     let stub = new(O::default());
     map.insert(key, stub);
-    for child in node.children_iter() {
+    for child in node.borrow().children_iter() {
         build_stub_map(&child, map);
     }
 }

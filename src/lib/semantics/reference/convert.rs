@@ -19,7 +19,7 @@ where
     G: From<expression::Variant<NodeRef<G>, Result<Target<O, G>>>>,
     M: Clone + markup::IntoItems<Result<WeakNodeRef<N>>>,
     H: From<markup::Container<Result<WeakNodeRef<O>>>>,
-    NodeRef<N>: ChildrenIter<NodeRef<N>>,
+    N: ChildrenIter<NodeRef<N>>,
 {
     let mut entities = HashMap::new();
     let mut expressions = HashMap::new();
@@ -106,12 +106,12 @@ pub(crate) fn convert_target<N, O, E, G>(
 fn build_stub_map<N, O>(node: &NodeRef<N>, map: &mut ConversionMap<N, O>)
 where
     O: Default,
-    NodeRef<N>: ChildrenIter<NodeRef<N>>,
+    N: ChildrenIter<NodeRef<N>>,
 {
     let key = Rc::as_ptr(node);
     let stub = node::new(O::default());
     map.insert(key, stub);
-    for child in node.children_iter() {
+    for child in node.borrow().children_iter() {
         build_stub_map(&child, map);
     }
 }

@@ -28,16 +28,15 @@ pub struct Node {
     pub variant: Variant,
 }
 
-impl Label for NodeRef<Node> {
+impl Label for Node {
     fn label(&self) -> String {
-        self.borrow().variant.meta().label.clone()
+        self.variant.meta().label.clone()
     }
 }
 
-impl ChildrenIter<NodeRef<Node>> for NodeRef<Node> {
+impl ChildrenIter<NodeRef<Node>> for Node {
     fn children_iter(&self) -> impl Iterator<Item = NodeRef<Node>> {
-        self.borrow()
-            .variant
+        self.variant
             .children_iter()
             .map(|n| n.clone())
             .collect::<Vec<_>>()

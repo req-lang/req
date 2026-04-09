@@ -64,10 +64,9 @@ impl
     }
 }
 
-impl ChildrenIter<NodeRef<Node>> for NodeRef<Node> {
+impl ChildrenIter<NodeRef<Node>> for Node {
     fn children_iter(&self) -> impl Iterator<Item = NodeRef<Node>> {
-        self.borrow()
-            .variant
+        self.variant
             .children_iter()
             .map(|n| n.clone())
             .collect::<Vec<_>>()
