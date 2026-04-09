@@ -1,0 +1,37 @@
+[package]
+name = "reqlang"
+version = "1.0.0"
+description = "req language official core library"
+edition = "2024"
+
+[package.metadata]
+author = "Sami Dahoux <sami@qitab.io>"
+copyright = "© 2025-2026. All rights reserved. Sami Dahoux"
+
+[dependencies]
+itertools = "0.14.0"
+pest = "2.7.9"
+pest_derive = "2.7.9"
+thiserror = "2.0.18"
+unindent = "0.2.4"
+
+[dev-dependencies]
+criterion = { version = "0.6", features = ["html_reports"] }
+pretty_assertions = "1.4.1"
+
+[[bench]]
+name = "analysis"
+harness = false
+
+[[bench]]
+name = "parsing"
+harness = false
+
+[lib]
+name = "reqtool"
+path = "src/lib/mod.rs"
+crate-type = ["lib"]
+
+[profile.profiling]
+inherits = "release"
+debug = true
