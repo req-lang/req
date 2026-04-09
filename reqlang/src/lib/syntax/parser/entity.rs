@@ -16,10 +16,12 @@ use crate::{
     },
     utils::children::ChildrenIter,
 };
+use reqlang_derive::ChildrenIter;
 
 type ParserVariant = Variant<NodeRef<Node>, Reference, NodeRef<expression::Node>, markup::Node>;
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, ChildrenIter)]
+#[children_iter(NodeRef<Node>)]
 pub struct Node {
     pub span: Span,
     pub variant: ParserVariant,
@@ -34,16 +36,6 @@ impl Node {
 impl Label for Node {
     fn label(&self) -> String {
         self.variant.meta().label.clone()
-    }
-}
-
-impl ChildrenIter<NodeRef<Node>> for Node {
-    fn children_iter(&self) -> impl Iterator<Item = NodeRef<Node>> {
-        self.variant
-            .children_iter()
-            .map(|n| n.clone())
-            .collect::<Vec<_>>()
-            .into_iter()
     }
 }
 

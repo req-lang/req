@@ -11,6 +11,7 @@ use crate::{
     },
     utils::children::ChildrenIter,
 };
+use reqlang_derive::ChildrenIter;
 
 pub type Variant = node::entity::Variant<
     NodeRef<Node>,
@@ -19,7 +20,8 @@ pub type Variant = node::entity::Variant<
     markup::Node,
 >;
 
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Clone, ChildrenIter)]
+#[children_iter(NodeRef<Node>)]
 pub struct Node {
     pub variant: Variant,
 }
@@ -61,16 +63,6 @@ impl
         markup::Node,
     > {
         self.variant
-    }
-}
-
-impl ChildrenIter<NodeRef<Node>> for Node {
-    fn children_iter(&self) -> impl Iterator<Item = NodeRef<Node>> {
-        self.variant
-            .children_iter()
-            .map(|n| n.clone())
-            .collect::<Vec<_>>()
-            .into_iter()
     }
 }
 

@@ -1,4 +1,4 @@
-use reqtool::{syntax::entity::Node, *};
+use reqlang::{syntax::entity::Node, *};
 
 pub const PATH_ROOT: &str = "tests/data/valid";
 

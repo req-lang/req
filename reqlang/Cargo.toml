@@ -9,6 +9,7 @@ author = "Sami Dahoux <sami@qitab.io>"
 copyright = "© 2025-2026. All rights reserved. Sami Dahoux"
 
 [dependencies]
+reqlang_derive = { path = "../reqlang_derive" }
 itertools = "0.14.0"
 pest = "2.7.9"
 pest_derive = "2.7.9"

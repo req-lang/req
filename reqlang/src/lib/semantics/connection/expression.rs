@@ -4,11 +4,13 @@ use crate::{
     semantics::{connection::entity, reference::expression::Target},
     utils::children::ChildrenIter,
 };
+use reqlang_derive::ChildrenIter;
 
 pub type Variant =
     node::expression::Variant<NodeRef<Node>, Result<Target<entity::Node, Node>, Reference>>;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, ChildrenIter)]
+#[children_iter(NodeRef<Node>)]
 pub struct Node {
     pub variant: Variant,
 }
@@ -19,12 +21,3 @@ impl From<Variant> for Node {
     }
 }
 
-impl ChildrenIter<NodeRef<Node>> for Node {
-    fn children_iter(&self) -> impl Iterator<Item = NodeRef<Node>> {
-        self.variant
-            .children_iter()
-            .map(|n| n.clone())
-            .collect::<Vec<_>>()
-            .into_iter()
-    }
-}

@@ -1,4 +1,4 @@
-use reqtool::{
+use reqlang::{
     issue::IssueIterator,
     node::{self, NodeRef},
     semantics::{

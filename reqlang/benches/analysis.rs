@@ -1,9 +1,9 @@
 use criterion::*;
-use reqtool::mock::generator::{self, Generate};
+use reqlang::mock::generator::{self, Generate};
 
 pub mod simple {
 
-    use reqtool::{
+    use reqlang::{
         mock::generator::ExponentialSizeIterator,
         node::{self, NodeRef},
         semantics::{connection, reference, typing},

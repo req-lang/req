@@ -10,6 +10,7 @@ use crate::{
     },
     utils::children::ChildrenIter,
 };
+use reqlang_derive::ChildrenIter;
 
 #[derive(Eq, PartialEq, Debug, Clone, thiserror::Error)]
 pub enum Issue {
@@ -34,7 +35,8 @@ impl From<&Issue> for Severity {
 pub type Variant =
     node::expression::Variant<NodeRef<Node>, Result<Target<entity::Node, Node>, Reference>>;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, ChildrenIter)]
+#[children_iter(NodeRef<Node>)]
 pub struct Node {
     pub typ: Result<TypeKind, Issue>,
     pub variant: Variant,
@@ -52,16 +54,6 @@ impl From<Variant> for Node {
             typ: Ok(TypeKind::Undefined),
             variant,
         }
-    }
-}
-
-impl ChildrenIter<NodeRef<Node>> for Node {
-    fn children_iter(&self) -> impl Iterator<Item = NodeRef<Node>> {
-        self.variant
-            .children_iter()
-            .map(|n| n.clone())
-            .collect::<Vec<_>>()
-            .into_iter()
     }
 }
 

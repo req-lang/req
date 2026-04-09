@@ -1,8 +1,8 @@
 use criterion::*;
-use reqtool::mock::generator::{self, Generate};
+use reqlang::mock::generator::{self, Generate};
 
 pub mod simple {
-    use reqtool::{mock::generator::ExponentialSizeIterator, renderer, syntax};
+    use reqlang::{mock::generator::ExponentialSizeIterator, renderer, syntax};
 
     use super::*;
 
