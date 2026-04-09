@@ -25,7 +25,10 @@ pub struct Node {
 }
 
 impl Node {
-    pub fn new(span: Span, variant: Variant<NodeRef<Node>, Reference, NodeRef<expression::Node>, markup::Node>) -> Self {
+    pub fn new(
+        span: Span,
+        variant: Variant<NodeRef<Node>, Reference, NodeRef<expression::Node>, markup::Node>,
+    ) -> Self {
         Self { span, variant }
     }
 }

@@ -5,7 +5,7 @@ use crate::{
         self, NodeRef, WeakNodeRef, entity, expression,
         markup::{self, Container},
     },
-    semantics::reference::{Result, expression::Target},
+    semantics::link::{Result, expression::Target},
     utils::children::ChildrenIter,
 };
 

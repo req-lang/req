@@ -6,7 +6,7 @@ use crate::{
         entity::{IntoVariable, VariableMut},
     },
     semantics::{
-        reference::{self, WeakNodeRef},
+        link::{self, WeakNodeRef},
         typing::{expression, markup},
     },
     utils::children::ChildrenIter,
@@ -15,7 +15,12 @@ use reqlang_derive::{ChildrenIter, EntityVariableMut, IntoEntityVariable};
 
 #[derive(Default, Debug, Clone, ChildrenIter, IntoEntityVariable, EntityVariableMut)]
 pub struct Node {
-    pub variant: node::entity::Variant<NodeRef<Node>, reference::Result<WeakNodeRef<Node>>, NodeRef<expression::Node>, markup::Node>,
+    pub variant: node::entity::Variant<
+        NodeRef<Node>,
+        link::Result<WeakNodeRef<Node>>,
+        NodeRef<expression::Node>,
+        markup::Node,
+    >,
 }
 
 pub(super) fn evaluate(node: NodeRef<Node>) {

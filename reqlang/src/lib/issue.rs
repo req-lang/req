@@ -5,7 +5,7 @@ use crate::{
     reference::Reference,
     semantics::{
         connection::{self, entity::Node},
-        reference::{self, WeakNodeRef},
+        link::{self, WeakNodeRef},
         typing,
     },
     utils::iter::NodeIter,
@@ -100,8 +100,8 @@ impl From<Ref<'_, connection::entity::Node>> for IssueIterator {
     }
 }
 
-impl From<Ref<'_, reference::entity::Node>> for IssueIterator {
-    fn from(node: Ref<reference::entity::Node>) -> Self {
+impl From<Ref<'_, link::entity::Node>> for IssueIterator {
+    fn from(node: Ref<link::entity::Node>) -> Self {
         let mut issues = Vec::new();
 
         let variant = &node.variant;

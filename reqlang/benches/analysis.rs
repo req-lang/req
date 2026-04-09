@@ -14,7 +14,7 @@ pub mod simple {
 
     fn complete_pipeline(root: NodeRef<syntax::entity::Node>) -> NodeRef<connection::entity::Node> {
         let ast = node::map(root, syntax::entity::Node::from);
-        let resolved = reference::resolve(ast);
+        let resolved = link::resolve(ast);
         let _ = typing::evaluate(resolved.clone());
         connection::connect(resolved)
     }

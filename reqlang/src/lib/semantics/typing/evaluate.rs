@@ -4,7 +4,7 @@ use crate::{
         expression::{Case, SetElement},
     },
     semantics::{
-        reference::expression::{BuiltinKind, Target},
+        link::expression::{BuiltinKind, Target},
         typing::expression::{Issue, Node, TypeKind},
     },
 };

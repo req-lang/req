@@ -3,7 +3,7 @@ use std::{cell::RefCell, rc::Weak};
 use crate::{
     node::{self, NodeRef},
     reference::Reference,
-    semantics::reference::entity::{Ctx, Node, Paths, build_paths, init_nodes, link},
+    semantics::link::entity::{Ctx, Node, Paths, build_paths, init_nodes, link},
     syntax,
 };
 
@@ -14,6 +14,7 @@ pub mod markup;
 
 pub type WeakNodeRef<T> = Weak<RefCell<T>>;
 pub type Result<N> = std::result::Result<N, Reference>;
+pub type ResultRef<N> = Result<WeakNodeRef<N>>;
 
 pub fn resolve(syntax: NodeRef<syntax::entity::Node>) -> NodeRef<Node> {
     let node = node::map(syntax, init_nodes);
@@ -37,7 +38,7 @@ mod tests {
         mock,
         node::{self, NodeRef, entity as entity_node, expression as expr_node, markup},
         reference::Reference,
-        semantics::reference::{entity::Node, expression, resolve},
+        semantics::link::{entity::Node, expression, resolve},
         syntax::{self, parser},
         utils::children::{ChildrenIter, ChildrenMut},
     };

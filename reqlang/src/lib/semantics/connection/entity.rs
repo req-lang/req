@@ -7,7 +7,7 @@ use crate::{
     },
     semantics::{
         connection::{expression, graph::Graph, issue::IssueKind, markup},
-        reference::{self, WeakNodeRef},
+        link::{self, WeakNodeRef},
     },
     utils::{children::ChildrenIter, take::Take},
 };
@@ -18,7 +18,7 @@ pub struct Node {
     pub neighbors: Neighbors<WeakNodeRef<Node>>,
     pub variant: node::entity::Variant<
         NodeRef<Node>,
-        reference::Result<WeakNodeRef<Node>>,
+        link::Result<WeakNodeRef<Node>>,
         NodeRef<expression::Node>,
         markup::Node,
     >,

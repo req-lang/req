@@ -33,6 +33,3 @@ name = "reqlang"
 path = "src/lib/mod.rs"
 crate-type = ["lib"]
 
-[profile.profiling]
-inherits = "release"
-debug = true

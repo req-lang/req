@@ -2,7 +2,7 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::{
     node::{self, NodeRef},
-    semantics::{connection::entity::Node, reference::WeakNodeRef},
+    semantics::{connection::entity::Node, link::WeakNodeRef},
     utils::{children::ChildrenIter, upsert::Upsert},
 };
 
@@ -102,7 +102,7 @@ mod expression {
         semantics::{
             self,
             connection::{Graph, entity, expression::Node},
-            reference::WeakNodeRef,
+            link::WeakNodeRef,
         },
         utils::{children::ChildrenIter, upsert::Upsert},
     };
@@ -113,7 +113,7 @@ mod expression {
         parent: &WeakNodeRef<entity::Node>,
     ) {
         use node::expression::Variant::*;
-        use semantics::reference::expression::Target::*;
+        use semantics::link::expression::Target::*;
 
         let ptr = parent.as_ptr();
 
@@ -135,7 +135,7 @@ mod markup {
     use crate::{
         semantics::{
             connection::{Graph, entity, markup::Node},
-            reference::WeakNodeRef,
+            link::WeakNodeRef,
         },
         utils::upsert::Upsert,
     };

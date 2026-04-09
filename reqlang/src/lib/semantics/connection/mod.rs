@@ -2,7 +2,7 @@ use crate::{
     node::NodeRef,
     semantics::{
         connection::graph::Graph,
-        reference::{self, convert::convert},
+        link::{self, convert::convert},
     },
     utils::iter::NodeIter,
 };
@@ -14,7 +14,7 @@ pub mod graph;
 pub mod issue;
 pub mod markup;
 
-pub fn connect(node: NodeRef<reference::entity::Node>) -> NodeRef<entity::Node> {
+pub fn connect(node: NodeRef<link::entity::Node>) -> NodeRef<entity::Node> {
     let node = convert(node);
     let mut graph = Graph::default();
 

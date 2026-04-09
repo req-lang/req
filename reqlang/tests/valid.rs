@@ -3,7 +3,7 @@ use reqlang::{
     node::{self, NodeRef},
     semantics::{
         connection::{self, entity::Node},
-        reference, typing,
+        link, typing,
     },
     syntax,
     utils::iter::NodeIter,
@@ -19,7 +19,7 @@ fn assert_valid_parsing_and_analysis(filename: &str) -> NodeRef<Node> {
     assert!(result.is_ok());
 
     let ast = node::map(result.unwrap(), syntax::entity::Node::from);
-    let resolved = reference::resolve(ast);
+    let resolved = link::resolve(ast);
     let typed = typing::evaluate(resolved.clone());
     let connected = connection::connect(resolved.clone());
 

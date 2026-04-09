@@ -5,7 +5,7 @@ use crate::{
     node::{self, NodeRef, expression::IntoVariable},
     reference::Reference,
     semantics::{
-        reference::{expression::Target},
+        link::expression::Target,
         typing::{entity, evaluate::evaluate_node},
     },
     utils::children::ChildrenIter,
@@ -38,7 +38,8 @@ pub type Variant =
 #[derive(Debug, Clone, ChildrenIter, IntoExpressionVariable)]
 pub struct Node {
     pub typ: Result<TypeKind, Issue>,
-    pub variant: node::expression::Variant<NodeRef<Node>, Result<Target<entity::Node, Node>, Reference>>,
+    pub variant:
+        node::expression::Variant<NodeRef<Node>, Result<Target<entity::Node, Node>, Reference>>,
 }
 
 impl From<Variant> for Node {

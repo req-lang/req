@@ -9,7 +9,7 @@ use reqlang::{
     renderer::formatter,
     semantics::{
         connection::{self},
-        reference::{self},
+        link::{self},
         typing::{self},
     },
     syntax::{
@@ -89,7 +89,7 @@ fn main() {
                 .collect();
 
             let ast = node::map(root, syntax::entity::Node::from);
-            let resolved = reference::resolve(ast);
+            let resolved = link::resolve(ast);
             let typed = typing::evaluate(resolved.clone());
             let connected = connection::connect(resolved.clone());
             let elapsed = start.elapsed();

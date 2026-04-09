@@ -7,7 +7,7 @@ use std::{
 use crate::{
     node::{self, NodeRef, entity::IntoVariable},
     reference::Reference,
-    semantics::reference::{Result, WeakNodeRef, expression, markup},
+    semantics::link::{Result, WeakNodeRef, expression, markup},
     syntax::{self},
     utils::children::ChildrenIter,
 };
@@ -21,7 +21,12 @@ pub(super) struct Ctx {
 
 #[derive(Default, Debug, Clone, ChildrenIter, IntoEntityVariable)]
 pub struct Node {
-    pub variant: node::entity::Variant<NodeRef<Node>, Result<WeakNodeRef<Node>>, NodeRef<expression::Node>, markup::Node>,
+    pub variant: node::entity::Variant<
+        NodeRef<Node>,
+        Result<WeakNodeRef<Node>>,
+        NodeRef<expression::Node>,
+        markup::Node,
+    >,
 }
 
 pub(super) struct SubPaths<'a> {

@@ -1,26 +1,20 @@
+use reqlang_derive::IntoItems;
+
 use crate::{
+    node::markup::Container,
     node::{self, markup::IntoItems},
     reference::Reference,
-    semantics::reference::{self, WeakNodeRef, entity},
+    semantics::link::{self, WeakNodeRef, entity},
     syntax::{self},
 };
 
-pub type Container = node::markup::Container<Result<WeakNodeRef<entity::Node>, Reference>>;
-pub type Item = node::markup::Item<Result<WeakNodeRef<entity::Node>, Reference>>;
-
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Clone, IntoItems)]
 pub struct Node {
-    pub container: Container,
+    pub container: Container<link::ResultRef<entity::Node>>,
 }
 
-impl IntoItems<reference::Result<WeakNodeRef<entity::Node>>> for Node {
-    fn into_items(self) -> Vec<node::markup::Item<reference::Result<WeakNodeRef<entity::Node>>>> {
-        self.container.items
-    }
-}
-
-impl From<Container> for Node {
-    fn from(container: Container) -> Self {
+impl From<Container<link::ResultRef<entity::Node>>> for Node {
+    fn from(container: Container<link::ResultRef<entity::Node>>) -> Self {
         Self { container }
     }
 }

@@ -2,14 +2,7 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::{DeriveInput, GenericArgument, parse_macro_input};
 
-/// Extracts the generic arguments from the `variant` field's type.
-///
-/// For example, if the struct has:
-///   `pub variant: node::entity::Variant<NodeRef<Node>, R, E, M>`
-///
-/// This returns `[NodeRef<Node>, R, E, M]`, which the derive macros use
-/// to build the trait impl without any helper attributes.
-fn variant_args(input: &DeriveInput) -> Vec<GenericArgument> {
+fn generic_field_args(input: &DeriveInput, fieldname: &str) -> Vec<GenericArgument> {
     let fields = match &input.data {
         syn::Data::Struct(s) => &s.fields,
         _ => panic!("Only structs are supported"),
@@ -17,12 +10,12 @@ fn variant_args(input: &DeriveInput) -> Vec<GenericArgument> {
 
     let field = fields
         .iter()
-        .find(|f| f.ident.as_ref().is_some_and(|i| i == "variant"))
-        .expect("Struct must have a `variant` field");
+        .find(|f| f.ident.as_ref().is_some_and(|i| i == fieldname))
+        .expect(&format!("Struct must have a `{fieldname}` field"));
 
     let path = match &field.ty {
         syn::Type::Path(tp) => &tp.path,
-        _ => panic!("`variant` field must be a path type, not a type alias"),
+        _ => panic!("`{fieldname}` field must be a path type, not a type alias"),
     };
 
     let last = path.segments.last().expect("Empty path");
@@ -30,11 +23,36 @@ fn variant_args(input: &DeriveInput) -> Vec<GenericArgument> {
     match &last.arguments {
         syn::PathArguments::AngleBracketed(args) => args.args.iter().cloned().collect(),
         _ => panic!(
-            "`variant` field type must carry generic arguments — \
+            "`{fieldname}` field type must carry generic arguments — \
              use the full type (e.g. `node::entity::Variant<N, R, E, M>`) \
              instead of a type alias"
         ),
     }
+}
+
+/// Derives `IntoItems<R>` where `R` is the first generic arg of the `container` field type.
+///
+/// ```ignore
+/// #[derive(IntoItems)]
+/// pub struct Node {
+///     pub container: node::markup::Container<R>,
+/// }
+/// ```
+#[proc_macro_derive(IntoItems)]
+pub fn derive_into_items(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    let struct_name = &input.ident;
+    let args = generic_field_args(&input, "container");
+    let n = &args[0];
+
+    quote! {
+        impl IntoItems<#n> for #struct_name {
+            fn into_items(self) -> Vec<node::markup::Item<#n>> {
+                self.container.items
+            }
+        }
+    }
+    .into()
 }
 
 /// Derives `ChildrenIter<N>` where `N` is the first generic arg of the `variant` field type.
@@ -49,7 +67,7 @@ fn variant_args(input: &DeriveInput) -> Vec<GenericArgument> {
 pub fn derive_children_iter(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let struct_name = &input.ident;
-    let args = variant_args(&input);
+    let args = generic_field_args(&input, "variant");
     let n = &args[0];
 
     quote! {
@@ -79,8 +97,12 @@ pub fn derive_children_iter(input: TokenStream) -> TokenStream {
 pub fn derive_into_entity_variable(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let struct_name = &input.ident;
-    let args = variant_args(&input);
-    assert_eq!(args.len(), 4, "entity Variant expects 4 type args: N, R, E, M");
+    let args = generic_field_args(&input, "variant");
+    assert_eq!(
+        args.len(),
+        4,
+        "entity Variant expects 4 type args: N, R, E, M"
+    );
     let (n, r, e, m) = (&args[0], &args[1], &args[2], &args[3]);
 
     quote! {
@@ -106,8 +128,12 @@ pub fn derive_into_entity_variable(input: TokenStream) -> TokenStream {
 pub fn derive_into_expression_variable(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let struct_name = &input.ident;
-    let args = variant_args(&input);
-    assert_eq!(args.len(), 2, "expression Variant expects 2 type args: N, R");
+    let args = generic_field_args(&input, "variant");
+    assert_eq!(
+        args.len(),
+        2,
+        "expression Variant expects 2 type args: N, R"
+    );
     let (n, r) = (&args[0], &args[1]);
 
     quote! {
@@ -133,8 +159,12 @@ pub fn derive_into_expression_variable(input: TokenStream) -> TokenStream {
 pub fn derive_entity_variable_mut(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let struct_name = &input.ident;
-    let args = variant_args(&input);
-    assert_eq!(args.len(), 4, "entity Variant expects 4 type args: N, R, E, M");
+    let args = generic_field_args(&input, "variant");
+    assert_eq!(
+        args.len(),
+        4,
+        "entity Variant expects 4 type args: N, R, E, M"
+    );
     let (n, r, e, m) = (&args[0], &args[1], &args[2], &args[3]);
 
     quote! {

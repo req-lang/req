@@ -3,7 +3,7 @@ use std::{collections::HashMap, rc::Rc};
 use crate::{
     node::{self, NodeRef, expression::IntoVariable},
     reference::Reference,
-    semantics::reference::{
+    semantics::link::{
         WeakNodeRef,
         entity::{self},
     },
@@ -43,7 +43,8 @@ pub enum Target<N, E> {
 
 #[derive(Debug, Clone, IntoExpressionVariable)]
 pub struct Node {
-    pub variant: node::expression::Variant<NodeRef<Node>, super::Result<Target<entity::Node, Node>>>,
+    pub variant:
+        node::expression::Variant<NodeRef<Node>, super::Result<Target<entity::Node, Node>>>,
 }
 
 pub(super) fn link(

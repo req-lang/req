@@ -5,7 +5,7 @@ use crate::{
     node::{self, NodeRef},
     semantics::{
         connection::entity::{Connection, Inbound, Node, Outbound, Traceability},
-        reference::WeakNodeRef,
+        link::WeakNodeRef,
     },
 };
 

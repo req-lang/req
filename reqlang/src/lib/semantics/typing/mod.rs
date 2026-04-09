@@ -1,7 +1,7 @@
 use crate::{
     node::NodeRef,
     semantics::{
-        reference::{self, convert::convert},
+        link::{self, convert::convert},
         typing::entity::Node,
     },
 };
@@ -11,7 +11,7 @@ pub mod evaluate;
 pub mod expression;
 pub mod markup;
 
-pub fn evaluate(node: NodeRef<reference::entity::Node>) -> NodeRef<Node> {
+pub fn evaluate(node: NodeRef<link::entity::Node>) -> NodeRef<Node> {
     let node = convert(node);
     entity::evaluate(node.clone());
     node
@@ -25,7 +25,7 @@ mod tests {
         mock::{entity::*, expression::*},
         node::{self, NodeRef, expression::BinaryOperator::*, expression::Variant::*},
         semantics::{
-            reference,
+            link,
             typing::{
                 entity, evaluate,
                 expression::{Issue, TypeKind},
@@ -36,7 +36,7 @@ mod tests {
     };
 
     fn resolve_and_evaluate(syn: NodeRef<syntax::entity::Node>) -> NodeRef<entity::Node> {
-        let resolved = reference::resolve(syn);
+        let resolved = link::resolve(syn);
         let typed = evaluate(resolved);
         typed
     }
