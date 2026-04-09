@@ -70,10 +70,10 @@ impl From<Ref<'_, connection::entity::Node>> for IssueIterator {
     fn from(node: Ref<'_, connection::entity::Node>) -> Self {
         let mut issues = Vec::new();
 
-        let parent = node.parent.iter();
+        let parent = node.neighbors.parent.iter();
         issues.extend(conn_issues(parent).map(Issue::from));
 
-        let ib = &node.inbound;
+        let ib = &node.neighbors.inbound;
         issues.extend(ib.issues.iter().map(|i| i.into()));
         issues.extend(conn_issues(ib.usages.iter()).map(Issue::from));
         issues.extend(conn_issues(ib.allocations.iter()).map(Issue::from));
@@ -85,7 +85,7 @@ impl From<Ref<'_, connection::entity::Node>> for IssueIterator {
         issues.extend(conn_issues(tr.refinements.iter()).map(Issue::from));
         issues.extend(conn_issues(tr.derivations.iter()).map(Issue::from));
 
-        let ob = &node.outbound;
+        let ob = &node.neighbors.outbound;
 
         issues.extend(conn_issues(ob.usages.iter()).map(Issue::from));
         issues.extend(conn_issues(ob.allocation.iter()).map(Issue::from));

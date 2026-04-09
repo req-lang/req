@@ -28,7 +28,7 @@ name = "parsing"
 harness = false
 
 [lib]
-name = "reqtool"
+name = "reqlang"
 path = "src/lib/mod.rs"
 crate-type = ["lib"]
 

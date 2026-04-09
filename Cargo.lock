@@ -564,6 +564,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "reqlang_derive"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "reqtool"
 version = "1.0.0"
 dependencies = [

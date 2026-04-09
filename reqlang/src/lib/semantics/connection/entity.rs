@@ -22,9 +22,7 @@ pub type Variant = node::entity::Variant<
 
 #[derive(Default, Debug, Clone)]
 pub struct Node {
-    pub inbound: Inbound<Connection<WeakNodeRef<Node>>>,
-    pub outbound: Outbound<Connection<WeakNodeRef<Node>>>,
-    pub parent: Option<Connection<WeakNodeRef<Node>>>,
+    pub neighbors: Neighbors<WeakNodeRef<Node>>,
     pub variant: Variant,
 }
 
@@ -62,6 +60,13 @@ impl
     > {
         &mut self.variant
     }
+}
+
+#[derive(Default, Debug, Clone)]
+pub struct Neighbors<R> {
+    pub inbound: Inbound<Connection<R>>,
+    pub outbound: Outbound<Connection<R>>,
+    pub parent: Option<Connection<R>>,
 }
 
 #[derive(Default, Debug, Clone)]
@@ -118,8 +123,8 @@ pub(super) fn connect(node: NodeRef<Node>, graph: &mut Graph) {
     let ptr = Rc::as_ptr(&node);
     let mut node_ref = node.borrow_mut();
 
-    node_ref.parent = graph.parent.remove(&ptr).map(Connection::from);
-    node_ref.inbound = Inbound {
+    node_ref.neighbors.parent = graph.parent.remove(&ptr).map(Connection::from);
+    node_ref.neighbors.inbound = Inbound {
         restrictions: from_vec(graph.inbound.restrictions.take(&ptr)),
         allocations: from_vec(graph.inbound.allocations.take(&ptr)),
         usages: from_vec(graph.inbound.usages.take(&ptr)),
@@ -131,7 +136,7 @@ pub(super) fn connect(node: NodeRef<Node>, graph: &mut Graph) {
         },
         issues: Vec::new(),
     };
-    node_ref.outbound = Outbound {
+    node_ref.neighbors.outbound = Outbound {
         restriction: Connection::from(graph.outbound.restriction.take(&ptr)),
         allocation: graph.outbound.allocation.remove(&ptr).map(Connection::from),
         usages: from_vec(graph.outbound.usages.take(&ptr)),

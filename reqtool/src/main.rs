@@ -2,7 +2,7 @@ use std::{collections::HashMap, fs, io, path::PathBuf, process};
 
 use clap::Parser;
 use colored::Colorize;
-use reqtool::{
+use reqlang::{
     issue::{self, IssueIterator, Severity},
     node::{self},
     path::NodePathIter,
@@ -100,9 +100,9 @@ fn main() {
                 .zip(NodeIter::new(typed))
             {
                 let issues: Vec<_> = IssueIterator::from(node.borrow())
+                    .chain(IssueIterator::from(conn.borrow()))
+                    .chain(IssueIterator::from(res.borrow()))
                     .map(Issue::from)
-                    .chain(IssueIterator::from(conn.borrow()).map(Issue::from))
-                    .chain(IssueIterator::from(res.borrow()).map(Issue::from))
                     .collect();
                 count += issues.len();
                 if issues.is_empty() {

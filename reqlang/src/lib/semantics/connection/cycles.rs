@@ -73,7 +73,7 @@ fn traceability_neighbors(node: &NodeRef<Node>) -> Vec<(NodeRef<Node>, Traceabil
     use TraceabilityKind::*;
 
     let nd = node.borrow();
-    let ib = &nd.inbound.traceability;
+    let ib = &nd.neighbors.inbound.traceability;
 
     let derivations = ib
         .derivations
@@ -105,9 +105,9 @@ fn mark_cycle(path: &[(NodeRef<Node>, TraceabilityKind)]) {
 
         let mut nd = node.borrow_mut();
         let conns = match kind {
-            Derivation => &mut nd.inbound.traceability.derivations,
-            Refinement => &mut nd.inbound.traceability.refinements,
-            Specialization => &mut nd.inbound.traceability.specializations,
+            Derivation => &mut nd.neighbors.inbound.traceability.derivations,
+            Refinement => &mut nd.neighbors.inbound.traceability.refinements,
+            Specialization => &mut nd.neighbors.inbound.traceability.specializations,
         };
         if let Some(conn) = conns.iter_mut().find(|c| c.target.as_ptr() == next_ptr) {
             conn.issue.push(IssueKind::CyclicTrace);
