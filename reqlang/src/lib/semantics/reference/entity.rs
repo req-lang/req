@@ -11,7 +11,7 @@ use crate::{
     syntax::{self},
     utils::children::ChildrenIter,
 };
-use reqlang_derive::ChildrenIter;
+use reqlang_derive::{ChildrenIter, IntoEntityVariable};
 
 pub type Variant = node::entity::Variant<
     NodeRef<Node>,
@@ -26,25 +26,11 @@ pub(super) struct Ctx {
     imports: Vec<Reference>,
 }
 
-#[derive(Default, Debug, Clone, ChildrenIter)]
+#[derive(Default, Debug, Clone, ChildrenIter, IntoEntityVariable)]
 #[children_iter(NodeRef<Node>)]
+#[into_entity_variable(NodeRef<Node>, Result<WeakNodeRef<Node>>, NodeRef<expression::Node>, markup::Node)]
 pub struct Node {
     pub variant: Variant,
-}
-
-impl IntoVariable<NodeRef<Node>, Result<WeakNodeRef<Node>>, NodeRef<expression::Node>, markup::Node>
-    for Node
-{
-    fn into_variant(
-        self,
-    ) -> node::entity::Variant<
-        NodeRef<Node>,
-        Result<WeakNodeRef<Node>>,
-        NodeRef<expression::Node>,
-        markup::Node,
-    > {
-        self.variant
-    }
 }
 
 pub(super) struct SubPaths<'a> {

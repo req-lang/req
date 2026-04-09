@@ -12,7 +12,7 @@ use crate::{
     },
     utils::{children::ChildrenIter, take::Take},
 };
-use reqlang_derive::ChildrenIter;
+use reqlang_derive::{ChildrenIter, EntityVariableMut};
 
 pub type Variant = node::entity::Variant<
     NodeRef<Node>,
@@ -21,8 +21,9 @@ pub type Variant = node::entity::Variant<
     markup::Node,
 >;
 
-#[derive(Default, Debug, Clone, ChildrenIter)]
+#[derive(Default, Debug, Clone, ChildrenIter, EntityVariableMut)]
 #[children_iter(NodeRef<Node>)]
+#[entity_variable_mut(NodeRef<Node>, Result<WeakNodeRef<Node>, Reference>, NodeRef<expression::Node>, markup::Node)]
 pub struct Node {
     pub neighbors: Neighbors<WeakNodeRef<Node>>,
     pub variant: Variant,
@@ -31,26 +32,6 @@ pub struct Node {
 impl Label for Node {
     fn label(&self) -> String {
         self.variant.meta().label.clone()
-    }
-}
-
-impl
-    VariableMut<
-        NodeRef<Node>,
-        Result<WeakNodeRef<Node>, Reference>,
-        NodeRef<expression::Node>,
-        markup::Node,
-    > for Node
-{
-    fn variant_mut(
-        &mut self,
-    ) -> &mut node::entity::Variant<
-        NodeRef<Node>,
-        Result<WeakNodeRef<Node>, Reference>,
-        NodeRef<expression::Node>,
-        markup::Node,
-    > {
-        &mut self.variant
     }
 }
 

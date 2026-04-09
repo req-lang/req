@@ -11,7 +11,7 @@ use crate::{
     },
     utils::children::ChildrenIter,
 };
-use reqlang_derive::ChildrenIter;
+use reqlang_derive::{ChildrenIter, EntityVariableMut, IntoEntityVariable};
 
 pub type Variant = node::entity::Variant<
     NodeRef<Node>,
@@ -20,50 +20,12 @@ pub type Variant = node::entity::Variant<
     markup::Node,
 >;
 
-#[derive(Default, Debug, Clone, ChildrenIter)]
+#[derive(Default, Debug, Clone, ChildrenIter, IntoEntityVariable, EntityVariableMut)]
 #[children_iter(NodeRef<Node>)]
+#[into_entity_variable(NodeRef<Node>, reference::Result<WeakNodeRef<Node>>, NodeRef<expression::Node>, markup::Node)]
+#[entity_variable_mut(NodeRef<Node>, reference::Result<WeakNodeRef<Node>>, NodeRef<expression::Node>, markup::Node)]
 pub struct Node {
     pub variant: Variant,
-}
-
-impl
-    VariableMut<
-        NodeRef<Node>,
-        reference::Result<WeakNodeRef<Node>>,
-        NodeRef<expression::Node>,
-        markup::Node,
-    > for Node
-{
-    fn variant_mut(
-        &mut self,
-    ) -> &mut node::entity::Variant<
-        NodeRef<Node>,
-        reference::Result<WeakNodeRef<Node>>,
-        NodeRef<expression::Node>,
-        markup::Node,
-    > {
-        &mut self.variant
-    }
-}
-
-impl
-    IntoVariable<
-        NodeRef<Node>,
-        reference::Result<WeakNodeRef<Node>>,
-        NodeRef<expression::Node>,
-        markup::Node,
-    > for Node
-{
-    fn into_variant(
-        self,
-    ) -> node::entity::Variant<
-        NodeRef<Node>,
-        reference::Result<WeakNodeRef<Node>>,
-        NodeRef<expression::Node>,
-        markup::Node,
-    > {
-        self.variant
-    }
 }
 
 pub(super) fn evaluate(node: NodeRef<Node>) {

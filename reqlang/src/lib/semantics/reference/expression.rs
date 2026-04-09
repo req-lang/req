@@ -10,6 +10,7 @@ use crate::{
     syntax,
     utils::children::ChildrenIter,
 };
+use reqlang_derive::IntoExpressionVariable;
 
 #[derive(Debug, Clone, Copy)]
 pub enum BuiltinKind {
@@ -43,15 +44,10 @@ pub enum Target<N, E> {
 pub type Variant =
     node::expression::Variant<NodeRef<Node>, super::Result<Target<entity::Node, Node>>>;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, IntoExpressionVariable)]
+#[into_expression_variable(NodeRef<Node>, super::Result<Target<entity::Node, Node>>)]
 pub struct Node {
     pub variant: Variant,
-}
-
-impl IntoVariable<NodeRef<Node>, super::Result<Target<entity::Node, Node>>> for Node {
-    fn into_variant(self) -> Variant {
-        self.variant
-    }
 }
 
 pub(super) fn link(

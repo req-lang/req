@@ -10,7 +10,7 @@ use crate::{
     },
     utils::children::ChildrenIter,
 };
-use reqlang_derive::ChildrenIter;
+use reqlang_derive::{ChildrenIter, IntoExpressionVariable};
 
 #[derive(Eq, PartialEq, Debug, Clone, thiserror::Error)]
 pub enum Issue {
@@ -35,17 +35,12 @@ impl From<&Issue> for Severity {
 pub type Variant =
     node::expression::Variant<NodeRef<Node>, Result<Target<entity::Node, Node>, Reference>>;
 
-#[derive(Debug, Clone, ChildrenIter)]
+#[derive(Debug, Clone, ChildrenIter, IntoExpressionVariable)]
 #[children_iter(NodeRef<Node>)]
+#[into_expression_variable(NodeRef<Node>, reference::Result<Target<entity::Node, Node>>)]
 pub struct Node {
     pub typ: Result<TypeKind, Issue>,
     pub variant: Variant,
-}
-
-impl IntoVariable<NodeRef<Node>, reference::Result<Target<entity::Node, Node>>> for Node {
-    fn into_variant(self) -> Variant {
-        self.variant
-    }
 }
 
 impl From<Variant> for Node {
