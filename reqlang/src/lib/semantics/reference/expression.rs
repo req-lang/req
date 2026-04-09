@@ -41,13 +41,9 @@ pub enum Target<N, E> {
     Builtin(BuiltinKind),
 }
 
-pub type Variant =
-    node::expression::Variant<NodeRef<Node>, super::Result<Target<entity::Node, Node>>>;
-
 #[derive(Debug, Clone, IntoExpressionVariable)]
-#[into_expression_variable(NodeRef<Node>, super::Result<Target<entity::Node, Node>>)]
 pub struct Node {
-    pub variant: Variant,
+    pub variant: node::expression::Variant<NodeRef<Node>, super::Result<Target<entity::Node, Node>>>,
 }
 
 pub(super) fn link(

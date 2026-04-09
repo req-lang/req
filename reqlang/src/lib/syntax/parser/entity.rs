@@ -18,17 +18,14 @@ use crate::{
 };
 use reqlang_derive::ChildrenIter;
 
-type ParserVariant = Variant<NodeRef<Node>, Reference, NodeRef<expression::Node>, markup::Node>;
-
 #[derive(Default, Debug, ChildrenIter)]
-#[children_iter(NodeRef<Node>)]
 pub struct Node {
     pub span: Span,
-    pub variant: ParserVariant,
+    pub variant: Variant<NodeRef<Node>, Reference, NodeRef<expression::Node>, markup::Node>,
 }
 
 impl Node {
-    pub fn new(span: Span, variant: ParserVariant) -> Self {
+    pub fn new(span: Span, variant: Variant<NodeRef<Node>, Reference, NodeRef<expression::Node>, markup::Node>) -> Self {
         Self { span, variant }
     }
 }

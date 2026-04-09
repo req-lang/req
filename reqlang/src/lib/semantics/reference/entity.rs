@@ -13,13 +13,6 @@ use crate::{
 };
 use reqlang_derive::{ChildrenIter, IntoEntityVariable};
 
-pub type Variant = node::entity::Variant<
-    NodeRef<Node>,
-    Result<WeakNodeRef<Node>>,
-    NodeRef<expression::Node>,
-    markup::Node,
->;
-
 #[derive(Default, Clone)]
 pub(super) struct Ctx {
     path: Reference,
@@ -27,10 +20,8 @@ pub(super) struct Ctx {
 }
 
 #[derive(Default, Debug, Clone, ChildrenIter, IntoEntityVariable)]
-#[children_iter(NodeRef<Node>)]
-#[into_entity_variable(NodeRef<Node>, Result<WeakNodeRef<Node>>, NodeRef<expression::Node>, markup::Node)]
 pub struct Node {
-    pub variant: Variant,
+    pub variant: node::entity::Variant<NodeRef<Node>, Result<WeakNodeRef<Node>>, NodeRef<expression::Node>, markup::Node>,
 }
 
 pub(super) struct SubPaths<'a> {

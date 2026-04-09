@@ -1,34 +1,56 @@
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{DeriveInput, Token, Type, parse_macro_input, punctuated::Punctuated};
+use syn::{DeriveInput, GenericArgument, parse_macro_input};
 
-fn parse_type_params(input: &DeriveInput, attr_name: &str) -> Vec<Type> {
-    let attr = input
-        .attrs
+/// Extracts the generic arguments from the `variant` field's type.
+///
+/// For example, if the struct has:
+///   `pub variant: node::entity::Variant<NodeRef<Node>, R, E, M>`
+///
+/// This returns `[NodeRef<Node>, R, E, M]`, which the derive macros use
+/// to build the trait impl without any helper attributes.
+fn variant_args(input: &DeriveInput) -> Vec<GenericArgument> {
+    let fields = match &input.data {
+        syn::Data::Struct(s) => &s.fields,
+        _ => panic!("Only structs are supported"),
+    };
+
+    let field = fields
         .iter()
-        .find(|a| a.path().is_ident(attr_name))
-        .unwrap_or_else(|| panic!("#[derive] requires a #[{attr_name}(...)] attribute"));
+        .find(|f| f.ident.as_ref().is_some_and(|i| i == "variant"))
+        .expect("Struct must have a `variant` field");
 
-    attr.parse_args_with(Punctuated::<Type, Token![,]>::parse_terminated)
-        .unwrap_or_else(|_| panic!("Expected comma-separated types in #[{attr_name}(...)]"))
-        .into_iter()
-        .collect()
+    let path = match &field.ty {
+        syn::Type::Path(tp) => &tp.path,
+        _ => panic!("`variant` field must be a path type, not a type alias"),
+    };
+
+    let last = path.segments.last().expect("Empty path");
+
+    match &last.arguments {
+        syn::PathArguments::AngleBracketed(args) => args.args.iter().cloned().collect(),
+        _ => panic!(
+            "`variant` field type must carry generic arguments — \
+             use the full type (e.g. `node::entity::Variant<N, R, E, M>`) \
+             instead of a type alias"
+        ),
+    }
 }
 
-/// Derives `ChildrenIter<N>` by delegating to `self.variant.children_iter()`.
+/// Derives `ChildrenIter<N>` where `N` is the first generic arg of the `variant` field type.
 ///
 /// ```ignore
 /// #[derive(ChildrenIter)]
-/// #[children_iter(NodeRef<Node>)]
-/// pub struct Node { pub variant: SomeVariant }
+/// pub struct Node {
+///     pub variant: node::entity::Variant<NodeRef<Node>, R, E, M>,
+/// }
 /// ```
-#[proc_macro_derive(ChildrenIter, attributes(children_iter))]
+#[proc_macro_derive(ChildrenIter)]
 pub fn derive_children_iter(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let struct_name = &input.ident;
-    let types = parse_type_params(&input, "children_iter");
-    assert_eq!(types.len(), 1, "#[children_iter(...)] expects exactly 1 type");
-    let n = &types[0];
+    let args = variant_args(&input);
+    let n = &args[0];
 
     quote! {
         impl ChildrenIter<#n> for #struct_name {
@@ -44,24 +66,22 @@ pub fn derive_children_iter(input: TokenStream) -> TokenStream {
     .into()
 }
 
-/// Derives `node::entity::IntoVariable<N, R, E, M>` by returning `self.variant`.
+/// Derives `node::entity::IntoVariable<N, R, E, M>` where `N, R, E, M` are the
+/// four generic args of the `variant` field type.
 ///
 /// ```ignore
 /// #[derive(IntoEntityVariable)]
-/// #[into_entity_variable(NodeRef<Node>, SomeR, NodeRef<expression::Node>, markup::Node)]
-/// pub struct Node { pub variant: SomeVariant }
+/// pub struct Node {
+///     pub variant: node::entity::Variant<NodeRef<Node>, R, NodeRef<expression::Node>, markup::Node>,
+/// }
 /// ```
-#[proc_macro_derive(IntoEntityVariable, attributes(into_entity_variable))]
+#[proc_macro_derive(IntoEntityVariable)]
 pub fn derive_into_entity_variable(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let struct_name = &input.ident;
-    let types = parse_type_params(&input, "into_entity_variable");
-    assert_eq!(
-        types.len(),
-        4,
-        "#[into_entity_variable(...)] expects exactly 4 types: N, R, E, M"
-    );
-    let (n, r, e, m) = (&types[0], &types[1], &types[2], &types[3]);
+    let args = variant_args(&input);
+    assert_eq!(args.len(), 4, "entity Variant expects 4 type args: N, R, E, M");
+    let (n, r, e, m) = (&args[0], &args[1], &args[2], &args[3]);
 
     quote! {
         impl IntoVariable<#n, #r, #e, #m> for #struct_name {
@@ -73,24 +93,22 @@ pub fn derive_into_entity_variable(input: TokenStream) -> TokenStream {
     .into()
 }
 
-/// Derives `node::expression::IntoVariable<N, R>` by returning `self.variant`.
+/// Derives `node::expression::IntoVariable<N, R>` where `N, R` are the two
+/// generic args of the `variant` field type.
 ///
 /// ```ignore
 /// #[derive(IntoExpressionVariable)]
-/// #[into_expression_variable(NodeRef<Node>, SomeR)]
-/// pub struct Node { pub variant: SomeVariant }
+/// pub struct Node {
+///     pub variant: node::expression::Variant<NodeRef<Node>, R>,
+/// }
 /// ```
-#[proc_macro_derive(IntoExpressionVariable, attributes(into_expression_variable))]
+#[proc_macro_derive(IntoExpressionVariable)]
 pub fn derive_into_expression_variable(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let struct_name = &input.ident;
-    let types = parse_type_params(&input, "into_expression_variable");
-    assert_eq!(
-        types.len(),
-        2,
-        "#[into_expression_variable(...)] expects exactly 2 types: N, R"
-    );
-    let (n, r) = (&types[0], &types[1]);
+    let args = variant_args(&input);
+    assert_eq!(args.len(), 2, "expression Variant expects 2 type args: N, R");
+    let (n, r) = (&args[0], &args[1]);
 
     quote! {
         impl IntoVariable<#n, #r> for #struct_name {
@@ -102,24 +120,22 @@ pub fn derive_into_expression_variable(input: TokenStream) -> TokenStream {
     .into()
 }
 
-/// Derives `node::entity::VariableMut<N, R, E, M>` by returning `&mut self.variant`.
+/// Derives `node::entity::VariableMut<N, R, E, M>` where `N, R, E, M` are the
+/// four generic args of the `variant` field type.
 ///
 /// ```ignore
 /// #[derive(EntityVariableMut)]
-/// #[entity_variable_mut(NodeRef<Node>, SomeR, NodeRef<expression::Node>, markup::Node)]
-/// pub struct Node { pub variant: SomeVariant }
+/// pub struct Node {
+///     pub variant: node::entity::Variant<NodeRef<Node>, R, NodeRef<expression::Node>, markup::Node>,
+/// }
 /// ```
-#[proc_macro_derive(EntityVariableMut, attributes(entity_variable_mut))]
+#[proc_macro_derive(EntityVariableMut)]
 pub fn derive_entity_variable_mut(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let struct_name = &input.ident;
-    let types = parse_type_params(&input, "entity_variable_mut");
-    assert_eq!(
-        types.len(),
-        4,
-        "#[entity_variable_mut(...)] expects exactly 4 types: N, R, E, M"
-    );
-    let (n, r, e, m) = (&types[0], &types[1], &types[2], &types[3]);
+    let args = variant_args(&input);
+    assert_eq!(args.len(), 4, "entity Variant expects 4 type args: N, R, E, M");
+    let (n, r, e, m) = (&args[0], &args[1], &args[2], &args[3]);
 
     quote! {
         impl VariableMut<#n, #r, #e, #m> for #struct_name {
@@ -130,4 +146,3 @@ pub fn derive_entity_variable_mut(input: TokenStream) -> TokenStream {
     }
     .into()
 }
-

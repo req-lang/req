@@ -10,9 +10,8 @@ pub type Variant =
     node::expression::Variant<NodeRef<Node>, Result<Target<entity::Node, Node>, Reference>>;
 
 #[derive(Debug, Clone, ChildrenIter)]
-#[children_iter(NodeRef<Node>)]
 pub struct Node {
-    pub variant: Variant,
+    pub variant: node::expression::Variant<NodeRef<Node>, Result<Target<entity::Node, Node>, Reference>>,
 }
 
 impl From<Variant> for Node {

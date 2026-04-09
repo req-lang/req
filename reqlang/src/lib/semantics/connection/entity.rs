@@ -5,28 +5,23 @@ use crate::{
         self, NodeRef,
         entity::{Label, VariableMut},
     },
-    reference::Reference,
     semantics::{
         connection::{expression, graph::Graph, issue::IssueKind, markup},
-        reference::WeakNodeRef,
+        reference::{self, WeakNodeRef},
     },
     utils::{children::ChildrenIter, take::Take},
 };
 use reqlang_derive::{ChildrenIter, EntityVariableMut};
 
-pub type Variant = node::entity::Variant<
-    NodeRef<Node>,
-    Result<WeakNodeRef<Node>, Reference>,
-    NodeRef<expression::Node>,
-    markup::Node,
->;
-
 #[derive(Default, Debug, Clone, ChildrenIter, EntityVariableMut)]
-#[children_iter(NodeRef<Node>)]
-#[entity_variable_mut(NodeRef<Node>, Result<WeakNodeRef<Node>, Reference>, NodeRef<expression::Node>, markup::Node)]
 pub struct Node {
     pub neighbors: Neighbors<WeakNodeRef<Node>>,
-    pub variant: Variant,
+    pub variant: node::entity::Variant<
+        NodeRef<Node>,
+        reference::Result<WeakNodeRef<Node>>,
+        NodeRef<expression::Node>,
+        markup::Node,
+    >,
 }
 
 impl Label for Node {
