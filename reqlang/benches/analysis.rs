@@ -6,7 +6,7 @@ pub mod simple {
     use reqlang::{
         mock::generator::ExponentialSizeIterator,
         node::{self, NodeRef},
-        semantics::{connection, reference, typing},
+        semantics::{connection, link, typing},
         syntax,
     };
 
