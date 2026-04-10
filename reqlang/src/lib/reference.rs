@@ -35,6 +35,10 @@ impl Reference {
             None => &self.value,
         }
     }
+
+    pub fn as_str(&self) -> &str {
+        &self.value
+    }
 }
 
 impl Add<&str> for &Reference {

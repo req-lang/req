@@ -44,6 +44,28 @@ pub enum Target<N, E> {
     Builtin(BuiltinKind),
 }
 
+impl<N, E> Target<N, E> {
+    pub fn mapn<O>(self, f: impl Fn(N) -> O) -> Target<O, E> {
+        use Target::*;
+
+        match self {
+            Entity(x) => Entity(f(x)),
+            Expression(x) => Expression(x),
+            Builtin(b) => Builtin(b),
+        }
+    }
+
+    pub fn mape<O>(self, f: impl Fn(E) -> O) -> Target<N, O> {
+        use Target::*;
+
+        match self {
+            Entity(x) => Entity(x),
+            Expression(x) => Expression(f(x)),
+            Builtin(b) => Builtin(b),
+        }
+    }
+}
+
 #[derive(Debug, Clone, IntoExpressionVariable)]
 pub struct Node {
     pub variant: Variant<NodeRef<Node>, super::ResultTgt<entity::Node, Node>>,
