@@ -119,21 +119,32 @@ impl<R> Inbound<R> {
 }
 
 // Explicitely defined in the syntax
-#[derive(Default, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct Outbound<R> {
     // Requirement to subject
     pub usages: Vec<R>,
-    pub restriction: R,
+    pub restriction: Result<R, IssueKind>,
     pub allocation: Option<R>,
     // Upward/Backward requirements
     pub traceability: Traceability<R>,
+}
+
+impl<R: Default> Default for Outbound<R> {
+    fn default() -> Self {
+        Self {
+            usages: Default::default(),
+            restriction: Err(IssueKind::MissingRequirementBinding),
+            allocation: Default::default(),
+            traceability: Default::default(),
+        }
+    }
 }
 
 impl<R> Outbound<R> {
     pub fn mapr<S>(self, mut f: impl Fn(R) -> S) -> Outbound<S> {
         Outbound {
             usages: self.usages.into_iter().map(&mut f).collect(),
-            restriction: f(self.restriction),
+            restriction: self.restriction.map(&mut f),
             allocation: self.allocation.map(&mut f),
             traceability: self.traceability.mapr(f),
         }
@@ -158,7 +169,12 @@ pub(super) fn connect(node: NodeRef<Node>, graph: &mut Graph) {
         issues: Vec::new(),
     };
     node_ref.neighbors.outbound = Outbound {
-        restriction: Connection::from(graph.outbound.restriction.take(&ptr)),
+        restriction: graph
+            .outbound
+            .restriction
+            .remove(&ptr)
+            .map(Connection::from)
+            .ok_or(IssueKind::MissingRequirementBinding),
         allocation: graph.outbound.allocation.remove(&ptr).map(Connection::from),
         usages: from_vec(graph.outbound.usages.take(&ptr)),
         traceability: Traceability {

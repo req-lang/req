@@ -131,8 +131,9 @@ pub(super) fn collect_issues(node: NodeRef<Node>) {
 
             collect_req_parent_issues(&mut nd.neighbors.parent);
 
-            let restr = &mut nd.neighbors.outbound.restriction;
-            collect_restriction_issues(&usages, restr);
+            if let Ok(restr) = &mut nd.neighbors.outbound.restriction {
+                collect_restriction_issues(&usages, restr);
+            }
 
             if let Some(alloc) = &mut nd.neighbors.outbound.allocation {
                 collect_allocation_issues(is_bottom, has_valid_derive, alloc);
@@ -162,21 +163,27 @@ pub(super) fn collect_issues(node: NodeRef<Node>) {
             let other = &[&derivations, &specializations];
             collect_conflicting_connection(other, &mut trace.refinements);
 
-            let restr = nd.neighbors.outbound.restriction.target.clone();
+            let restr = nd.neighbors.outbound.restriction.clone();
             let trace = &mut nd.neighbors.outbound.traceability;
 
             for conn in &mut trace.specializations {
-                collect_specialization_issues(&restr, conn);
+                if let Ok(restr) = &restr {
+                    collect_specialization_issues(&restr.target, conn);
+                }
                 collect_traceability_target_variant_issues(conn);
             }
 
             for conn in &mut trace.refinements {
-                collect_refinement_issues(&restr, conn);
+                if let Ok(restr) = &restr {
+                    collect_refinement_issues(&restr.target, conn);
+                }
                 collect_traceability_target_variant_issues(conn);
             }
 
             for conn in &mut trace.derivations {
-                collect_derivation_issues(&usages, &restr, conn);
+                if let Ok(restr) = &restr {
+                    collect_derivation_issues(&usages, &restr.target, conn);
+                }
                 collect_traceability_target_variant_issues(conn);
             }
         }
@@ -268,6 +275,7 @@ fn collect_alloc_restr_compatibility_issues(
     let alloc = &mut outbound.allocation;
 
     if let Some(alloc) = alloc
+        && let Ok(restr) = restr
         && restr.target.as_ptr() == alloc.target.as_ptr()
     {
         alloc.issue.push(IssueKind::SameAllocationAndRestriction);
@@ -300,22 +308,22 @@ fn collect_refinement_issues(restr: &WeakNodeRef<Node>, conn: &mut Connection<We
     use IssueKind::RefinementMismatch;
 
     let upgraded = conn.target.upgrade().unwrap();
-    let target_restr = &upgraded.borrow().neighbors.outbound.restriction.target;
+    let target_restr = &upgraded.borrow().neighbors.outbound.restriction;
 
-    if let Some(restr) = restr.upgrade() {
-        let mut candidate = restr;
-        while target_restr.as_ptr() != Rc::as_ptr(&candidate) {
-            if let None = candidate.borrow().neighbors.parent {
-                conn.issue.push(RefinementMismatch);
-                break;
-            }
-
-            let parent = {
-                let p = &candidate.borrow().neighbors.parent;
-                p.as_ref().unwrap().target.clone()
-            };
-            candidate = parent.upgrade().unwrap();
+    let mut candidate = restr.upgrade().unwrap();
+    while let Ok(r) = target_restr
+        && r.target.as_ptr() != Rc::as_ptr(&candidate)
+    {
+        if let None = candidate.borrow().neighbors.parent {
+            conn.issue.push(RefinementMismatch);
+            break;
         }
+
+        let parent = {
+            let p = &candidate.borrow().neighbors.parent;
+            p.as_ref().unwrap().target.clone()
+        };
+        candidate = parent.upgrade().unwrap();
     }
 }
 
@@ -334,10 +342,12 @@ fn collect_derivation_issues(
         _ => {}
     }
 
-    let target_restr = &target.borrow().neighbors.outbound.restriction.target;
-    let out_restr_usage = usages.iter().find(|u| **u == target_restr.as_ptr());
-    if out_restr_usage.is_none() {
-        conn.issue.push(UnrelatedDerivation);
+    let target_restr = &target.borrow().neighbors.outbound.restriction;
+    if let Ok(target_restr) = target_restr {
+        let out_restr_usage = usages.iter().find(|u| **u == target_restr.target.as_ptr());
+        if out_restr_usage.is_none() {
+            conn.issue.push(UnrelatedDerivation);
+        }
     }
 }
 
@@ -356,15 +366,12 @@ fn collect_restriction_issues(
     usages: &Vec<*const RefCell<Node>>,
     restr: &mut Connection<WeakNodeRef<Node>>,
 ) {
-    use IssueKind::{MissingRequirementBinding, NotAPartOrAttribute, UnrelatedRestriction};
+    use IssueKind::{NotAPartOrAttribute, UnrelatedRestriction};
     use node::entity::Variant::*;
 
-    match restr.target.upgrade() {
-        None => restr.issue.push(MissingRequirementBinding),
-        Some(tgt) => match tgt.borrow().variant {
-            Part(_) | Attribute(_) => {}
-            _ => restr.issue.push(NotAPartOrAttribute),
-        },
+    match restr.target.upgrade().unwrap().borrow().variant {
+        Part(_) | Attribute(_) => {}
+        _ => restr.issue.push(NotAPartOrAttribute),
     }
 
     let restr_usage = usages.iter().find(|u| restr.target.as_ptr() == **u);
@@ -443,17 +450,13 @@ fn is_valid_derivation(
     conn: &Connection<WeakNodeRef<Node>>,
     alloc: &Option<Connection<WeakNodeRef<Node>>>,
 ) -> bool {
-    match alloc {
-        Some(alloc) => match conn.target.upgrade() {
-            Some(tgt) => tgt
-                .borrow()
-                .neighbors
-                .outbound
-                .restriction
-                .target
-                .ptr_eq(&alloc.target),
-            None => false,
-        },
-        None => false,
+    if let Some(alloc) = alloc
+        && let Some(tgt) = conn.target.upgrade()
+        && let Ok(restr) = &tgt.borrow().neighbors.outbound.restriction
+        && restr.target.ptr_eq(&alloc.target)
+    {
+        return true;
     }
+
+    return false;
 }

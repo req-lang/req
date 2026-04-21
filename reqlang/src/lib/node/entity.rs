@@ -204,6 +204,22 @@ impl<N, R, E, M> Variant<N, R, E, M> {
         }
     }
 
+    pub fn children(&self) -> Option<&Vec<N>> {
+        match self {
+            Variant::Part(part) => Some(&part.children),
+            Variant::Package(package) => Some(&package.children),
+            _ => None,
+        }
+    }
+
+    pub fn children_mut(&mut self) -> Option<&mut Vec<N>> {
+        match self {
+            Variant::Part(part) => Some(&mut part.children),
+            Variant::Package(package) => Some(&mut package.children),
+            _ => None,
+        }
+    }
+
     pub fn part(&self) -> Option<&Part<N, R, M>> {
         match self {
             Variant::Part(part) => Some(part),

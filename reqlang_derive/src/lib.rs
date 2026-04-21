@@ -169,7 +169,7 @@ pub fn derive_entity_variable_mut(input: TokenStream) -> TokenStream {
 
     quote! {
         impl VariableMut<#n, #r, #e, #m> for #struct_name {
-            fn variant_mut(&mut self) -> &mut crate::node::entity::Variant<#n, #r, #e, #m> {
+            fn variant_mut(&mut self) -> &mut node::entity::Variant<#n, #r, #e, #m> {
                 &mut self.variant
             }
         }

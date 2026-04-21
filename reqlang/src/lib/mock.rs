@@ -75,7 +75,6 @@ pub mod generator {
     use crate::node::NodeRef;
     use crate::syntax::entity::Node;
     use crate::syntax::parser::{self, markup};
-    use crate::utils::children::ChildrenMut;
 
     pub struct ExponentialSizeIterator {
         value: f64,

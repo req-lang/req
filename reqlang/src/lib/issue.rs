@@ -1,6 +1,7 @@
 use std::cell::Ref;
 
 use crate::{
+    issue,
     node::expression::Variant,
     reference::Reference,
     semantics::{
@@ -89,7 +90,11 @@ impl From<Ref<'_, connection::entity::Node>> for IssueIterator {
 
         issues.extend(conn_issues(ob.usages.iter()).map(Issue::from));
         issues.extend(conn_issues(ob.allocation.iter()).map(Issue::from));
-        issues.extend(ob.restriction.issue.iter().map(Issue::from));
+
+        match ob.restriction.as_ref() {
+            Ok(restr) => issues.extend(restr.issue.iter().map(Issue::from)),
+            Err(issue) => issues.push(issue.into()),
+        }
 
         let tr = &ob.traceability;
         issues.extend(conn_issues(tr.specializations.iter()).map(Issue::from));

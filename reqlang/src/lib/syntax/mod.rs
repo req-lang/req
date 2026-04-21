@@ -4,25 +4,27 @@ pub mod tokenizer;
 
 pub mod entity {
 
+    use reqlang_derive::ChildrenIter;
+
     use crate::{
-        node::{self, NodeRef, entity},
+        node::{self, NodeRef, entity::Variant},
         reference::Reference,
         syntax::{
             expression,
             parser::{self, markup},
         },
+        utils::children::ChildrenIter,
     };
 
-    type Variant =
-        entity::Variant<NodeRef<Node>, Reference, NodeRef<expression::Node>, markup::Node>;
-
-    #[derive(Default, Debug, PartialEq, Eq)]
+    #[derive(Default, Clone, Debug, PartialEq, Eq, ChildrenIter)]
     pub struct Node {
-        pub variant: Variant,
+        pub variant: Variant<NodeRef<Node>, Reference, NodeRef<expression::Node>, markup::Node>,
     }
 
     impl Node {
-        pub fn new(variant: Variant) -> Self {
+        pub fn new(
+            variant: Variant<NodeRef<Node>, Reference, NodeRef<expression::Node>, markup::Node>,
+        ) -> Self {
             Self { variant }
         }
     }
