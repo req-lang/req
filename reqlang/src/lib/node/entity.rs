@@ -371,7 +371,9 @@ impl<N, R, E, M> Variant<N, R, E, M> {
                     ret.extend(requirement.meta.comment.iter_mut());
                     ret.push(markup);
                 }
-                RequirementVariant::Formal(_) => {}
+                RequirementVariant::Formal(_) => {
+                    ret.extend(requirement.meta.comment.iter_mut());
+                }
             },
             _ => {
                 ret.extend(self.meta_mut().comment.iter_mut());

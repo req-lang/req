@@ -225,6 +225,15 @@ impl<N, R> Variant<N, R> {
         }
     }
 
+    pub fn needs_end(&self) -> bool {
+        use Variant::*;
+
+        match self {
+            Branch(_) | Forall(_) | When(_) | Exists(_) | Select(_) | Aggregation(_) => true,
+            _ => false,
+        }
+    }
+
     pub fn needs_parentheses(&self, parent: &Self, is_right: bool) -> bool {
         let parent_prec = parent.precedence();
         let child_prec = self.precedence();
@@ -387,6 +396,17 @@ impl<N> SetElement<N> {
             variable,
             domain,
             filter: None,
+        }
+    }
+
+    pub fn mape<F, M>(self, mut f: F) -> SetElement<M>
+    where
+        F: FnMut(N) -> M,
+    {
+        SetElement {
+            variable: self.variable,
+            domain: f(self.domain),
+            filter: self.filter.map(&mut f),
         }
     }
 }

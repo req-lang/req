@@ -99,7 +99,7 @@ pub(crate) fn convert_target<N, O, E, G>(
     match target {
         Builtin(kind) => Builtin(kind),
         Entity(weak) => Entity(Rc::downgrade(&entities[&weak.as_ptr()])),
-        Expression(weak) => Expression(Rc::downgrade(&expressions[&weak.as_ptr()])),
+        Expression(x, weak) => Expression(x, Rc::downgrade(&expressions[&weak.as_ptr()])),
     }
 }
 

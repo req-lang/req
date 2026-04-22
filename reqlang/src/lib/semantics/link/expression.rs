@@ -40,7 +40,7 @@ impl TryFrom<&str> for BuiltinKind {
 #[derive(Debug, Clone)]
 pub enum Target<N, E> {
     Entity(N),
-    Expression(E),
+    Expression(String, E),
     Builtin(BuiltinKind),
 }
 
@@ -50,7 +50,7 @@ impl<N, E> Target<N, E> {
 
         match self {
             Entity(x) => Entity(f(x)),
-            Expression(x) => Expression(x),
+            Expression(v, d) => Expression(v, d),
             Builtin(b) => Builtin(b),
         }
     }
@@ -60,7 +60,7 @@ impl<N, E> Target<N, E> {
 
         match self {
             Entity(x) => Entity(x),
-            Expression(x) => Expression(f(x)),
+            Expression(v, d) => Expression(v, f(d)),
             Builtin(b) => Builtin(b),
         }
     }
@@ -104,7 +104,7 @@ fn find(
     }
 
     if let Some(expr) = local.get(&rf.value) {
-        return Some(Target::Expression(expr.clone()));
+        return Some(Target::Expression(rf.value.clone(), expr.clone()));
     }
 
     if let Some(entity) = entity::find(paths.entity, rf, paths.ctx) {

@@ -181,7 +181,7 @@ pub(super) fn evaluate_node(node: std::cell::Ref<Node>) -> Result<TypeKind, Issu
                 },
                 _ => Err(DomainNotFound),
             },
-            Target::Expression(node) => {
+            Target::Expression(_, node) => {
                 let node = node.upgrade().ok_or(Poison)?;
                 match node.borrow().typ.as_ref().map_err(|_| Poison)? {
                     TypeKind::Set(inner) => Ok(inner.as_ref().clone()),

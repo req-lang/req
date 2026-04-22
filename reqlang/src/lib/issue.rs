@@ -1,7 +1,6 @@
 use std::cell::Ref;
 
 use crate::{
-    issue,
     node::expression::Variant,
     reference::Reference,
     semantics::{

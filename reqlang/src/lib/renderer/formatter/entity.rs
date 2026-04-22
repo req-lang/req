@@ -14,7 +14,7 @@ pub fn format<W: std::io::Write>(
 ) -> std::io::Result<()> {
     use crate::node::entity::Variant::*;
 
-    let pad = pad(indent);
+    let pd = pad(indent);
 
     if let Some(comment) = &node.variant.meta().comment {
         markup::format(comment, indent, out)?;
@@ -22,26 +22,26 @@ pub fn format<W: std::io::Write>(
 
     for tag in &node.variant.meta().tags {
         match &tag.value {
-            Some(v) => writeln!(out, "{}# {} {} #", pad, tag.id, v)?,
-            None => writeln!(out, "{}# {} #", pad, tag.id)?,
+            Some(v) => writeln!(out, "{}# {} {} #", pd, tag.id, v)?,
+            None => writeln!(out, "{}# {} #", pd, tag.id)?,
         }
     }
 
     match &node.variant {
         Part(prt) => {
-            writeln!(out, "{}part {}", pad, prt.meta.label)?;
+            writeln!(out, "{}part {}", pd, prt.meta.label)?;
             format_container(&prt.imports, &prt.children, indent, out)?;
-            writeln!(out, "{}part", pad)
+            writeln!(out, "{}part", pd)
         }
 
         Package(pkg) => {
-            writeln!(out, "{}package {}", pad, pkg.meta.label)?;
+            writeln!(out, "{}package {}", pd, pkg.meta.label)?;
             format_container(&pkg.imports, &pkg.children, indent, out)?;
-            writeln!(out, "{}package", pad)
+            writeln!(out, "{}package", pd)
         }
 
         Attribute(atr) => {
-            write!(out, "{}let {} in ", pad, atr.meta.label)?;
+            write!(out, "{}let {} in ", pd, atr.meta.label)?;
             expression::format(atr.domain.borrow(), 0.into(), out)?;
             if let Some(unit) = &atr.unit {
                 write!(out, " [ ")?;
@@ -52,7 +52,7 @@ pub fn format<W: std::io::Write>(
         }
 
         Requirement(req) => {
-            write!(out, "{}requirement {} ", pad, node.variant.meta().label)?;
+            write!(out, "{}requirement {} ", pd, node.variant.meta().label)?;
 
             if req.inhibitor.top {
                 write!(out, "top ")?;
@@ -62,20 +62,21 @@ pub fn format<W: std::io::Write>(
                 write!(out, "bottom ")?;
             }
 
+            let pd1 = pad(indent + 1);
             if let Some(constrained) = &req.restriction {
-                writeln!(out, "{}on {}", pad, constrained)?;
+                write!(out, "\n{}on {}", pd1, constrained)?;
             }
 
             if let Some(allocated) = &req.allocation {
-                writeln!(out, "{}via {}", pad, allocated)?;
+                write!(out, "\n{}via {}", pd1, allocated)?;
             }
 
             for trace in &req.traceability {
                 let kind = traceability_keyword(&trace.kind);
-                writeln!(out, "{}{} {}", pad, kind, trace.target)?;
+                write!(out, "\n{}{} {}", pd1, kind, trace.target)?;
             }
 
-            writeln!(out, "{}is", pad)?;
+            writeln!(out, "\n{}is", pd)?;
 
             use crate::node::entity::RequirementVariant::*;
             match &req.variant {
@@ -83,7 +84,7 @@ pub fn format<W: std::io::Write>(
                 Informal(text) => markup::format(text, (indent + 1).into(), out)?,
             }
 
-            writeln!(out, "{}requirement", pad)
+            writeln!(out, "\n{}requirement", pd)
         }
     }
 }

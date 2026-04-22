@@ -28,8 +28,12 @@ impl Add<usize> for Ctx {
     type Output = Ctx;
 
     fn add(self, rhs: usize) -> Self::Output {
+        let indent = match self.indent == 0 {
+            true => 0,
+            false => self.indent + rhs,
+        };
         Ctx {
-            indent: self.indent + rhs,
+            indent,
             parens: self.parens,
         }
     }
@@ -42,142 +46,140 @@ impl Ctx {
             parens,
         }
     }
+
+    pub fn inline(self) -> Self {
+        Ctx {
+            indent: 0,
+            parens: self.parens,
+        }
+    }
 }
 
 pub fn format<W: std::io::Write>(node: Ref<Node>, ctx: Ctx, out: &mut W) -> std::io::Result<()> {
     use crate::node::expression::Variant::*;
 
-    let pad = pad(ctx.indent);
+    let pd = pad(ctx.indent);
     let parens = ctx.parens;
+    let sep = if ctx.indent > 0 { "\n" } else { " " };
     let ctx = ctx.with_parens(false);
 
+    write!(out, "{}", pd)?;
     if parens {
         write!(out, "(")?;
     }
 
     match &node.variant {
         Branch(branch) => {
-            write!(out, "{}if ", pad)?;
-            format_case(&branch.case, ctx, out)?;
+            write!(out, "if ")?;
+            format_case(&branch.case, out)?;
 
             if let Some(otherwise) = &branch.otherwise {
-                writeln!(out, "{}else", pad)?;
-                format(otherwise.borrow(), ctx + 1, out)?;
+                write!(out, "{}{}else ", sep, pd)?;
+                format(otherwise.borrow(), Ctx::default(), out)?;
             }
-
-            writeln!(out, "{}end", pad)?;
         }
 
         When(when) => {
-            writeln!(out, "{}when", pad)?;
+            write!(out, "when{}", sep)?;
+            let pd1 = pad(ctx.indent + 1);
             for (idx, case) in when.cases.iter().enumerate() {
-                if idx > 0 {
-                    write!(out, ", ")?;
+                write!(out, "{}", pd1)?;
+                format_case(&case, out)?;
+                if idx < when.cases.len() - 1 || when.otherwise.is_some() {
+                    write!(out, ",{}", sep)?;
                 }
+            }
 
-                format_case(&case, ctx, out)?;
-            }
             if let Some(otherwise) = &when.otherwise {
-                write!(out, ",\n")?;
-                writeln!(out, "{}otherwise", pad)?;
-                format(otherwise.borrow(), ctx + 1, out)?;
+                write!(out, "{}otherwise ", pd1)?;
+                format(otherwise.borrow(), Ctx::default(), out)?;
             }
-            writeln!(out, "{}end", pad)?;
         }
 
         Forall(forall) => {
-            write!(out, "{}forall ", pad)?;
-            format_set_elem(&forall.set, ctx, out)?;
-            format(forall.expression.borrow(), ctx, out)?;
-            writeln!(out, "{}end", pad)?;
+            write!(out, "forall ")?;
+            format_set_elem(&forall.set, out)?;
+            write!(out, "{}", sep)?;
+            format(forall.expression.borrow(), ctx + 1, out)?;
         }
 
         Exists(exists) => {
-            write!(out, "{}exists ", pad)?;
-            format_set_elem(&exists.set, ctx, out)?;
-            writeln!(out, "{}end", pad)?;
+            write!(out, "exists ")?;
+            format_set_elem(&exists.set, out)?;
         }
 
         Select(select) => {
-            write!(out, "{}select ", pad)?;
-            format_set_elem(&select.set, ctx, out)?;
-
+            write!(out, "select ")?;
+            format_set_elem(&select.set, out)?;
             if let Some(ref optimizer) = select.optimizer {
-                write!(out, "\n")?;
-                write!(out, "{} ", optimizer_symbol(&optimizer.kind))?;
-                format(optimizer.expression.borrow(), ctx, out)?;
+                let symbol = optimizer_symbol(&optimizer.kind);
+                write!(out, "{}{}{}{}", sep, pd, symbol, sep)?;
+                format(optimizer.expression.borrow(), ctx + 1, out)?;
             }
-
-            writeln!(out, "{}end", pad)?;
         }
 
         Aggregation(aggregation) => {
-            writeln!(out, "{} ", aggregator_symbol(&aggregation.aggregator))?;
-
+            write!(out, "{}{}", aggregator_symbol(&aggregation.aggregator), sep)?;
             for (idx, val) in aggregation.expressions.iter().enumerate() {
-                if idx > 0 {
-                    write!(out, ", ")?;
+                format(val.borrow(), ctx + 1, out)?;
+                if idx < aggregation.expressions.len() - 1 {
+                    write!(out, ",{}", sep)?;
                 }
-
-                writeln!(out, "{}", pad)?;
-                format(val.borrow(), ctx, out)?;
             }
-
-            writeln!(out, "{}end", pad)?;
         }
 
         UnaryOp(unary) => {
-            write!(out, "{}", pad)?;
             let operand = unary.operand.borrow();
             let parens = operand.variant.needs_parentheses(&node.variant, false);
-
+            let sub = ctx.with_parens(parens).inline();
+            let symbol = unary_symbol(&unary.operator);
             match unary.is_postfix() {
                 true => {
-                    format(unary.operand.borrow(), ctx.with_parens(parens), out)?;
-                    write!(out, "{}", unary_symbol(&unary.operator))?;
+                    format(unary.operand.borrow(), sub, out)?;
+                    write!(out, " {}", symbol)?;
                 }
                 false => {
-                    write!(out, "{}", unary_symbol(&unary.operator))?;
-                    format(unary.operand.borrow(), ctx.with_parens(parens), out)?;
+                    write!(out, "{} ", symbol)?;
+                    format(unary.operand.borrow(), sub, out)?;
                 }
             }
         }
 
         BinOp(bin_op) => {
-            write!(out, "{}", pad)?;
-
             let left = bin_op.left.borrow();
             let left_parens = left.variant.needs_parentheses(&node.variant, false);
-            format(bin_op.left.borrow(), ctx.with_parens(left_parens), out)?;
+            let sub = ctx.with_parens(left_parens).inline();
+            format(bin_op.left.borrow(), sub, out)?;
 
             write!(out, " {} ", binary_symbol(&bin_op.operator))?;
 
             let right = bin_op.right.borrow();
             let right_parens = right.variant.needs_parentheses(&node.variant, true);
-            format(bin_op.right.borrow(), ctx.with_parens(right_parens), out)?;
+            let sub = ctx.with_parens(right_parens).inline();
+            format(bin_op.right.borrow(), sub, out)?;
         }
 
         Function(function) => {
             format(function.expression.borrow(), ctx, out)?;
-            write!(out, "(")?;
-            for (i, arg) in function.arguments.iter().enumerate() {
-                if i > 0 {
+            write!(out, "( ")?;
+            for (idx, arg) in function.arguments.iter().enumerate() {
+                format(arg.borrow(), Ctx::default(), out)?;
+                if idx < function.arguments.len() - 1 {
                     write!(out, ", ")?;
                 }
-                format(arg.borrow(), ctx, out)?;
             }
-            write!(out, ")")?;
+            write!(out, " )")?;
         }
 
         Set(set) => {
-            write!(out, "{{")?;
-            for (i, elem) in set.elements.iter().enumerate() {
-                if i > 0 {
+            write!(out, "{{ ")?;
+            for (idx, elem) in set.elements.iter().enumerate() {
+                format(elem.borrow(), Ctx::default(), out)?;
+                if idx < set.elements.len() - 1 {
                     write!(out, ", ")?;
                 }
-                format(elem.borrow(), ctx, out)?;
             }
-            write!(out, "}}")?;
+            write!(out, " }}")?;
         }
 
         Identifier(r) => write!(out, "{}", r.target)?,
@@ -189,6 +191,10 @@ pub fn format<W: std::io::Write>(node: Ref<Node>, ctx: Ctx, out: &mut W) -> std:
         Undefined => write!(out, "undefined")?,
     }
 
+    if node.variant.needs_end() {
+        write!(out, "{}{}end", sep, pd)?;
+    }
+
     if parens {
         write!(out, ")")?;
     }
@@ -196,27 +202,22 @@ pub fn format<W: std::io::Write>(node: Ref<Node>, ctx: Ctx, out: &mut W) -> std:
     Ok(())
 }
 
-fn format_case<W: std::io::Write>(
-    case: &Case<NodeRef<Node>>,
-    ctx: Ctx,
-    out: &mut W,
-) -> std::io::Result<()> {
-    format(case.condition.borrow(), ctx, out)?;
-    write!(out, " then\n")?;
-    format(case.consequence.borrow(), ctx + 1, out)
+fn format_case<W: std::io::Write>(case: &Case<NodeRef<Node>>, out: &mut W) -> std::io::Result<()> {
+    format(case.condition.borrow(), Ctx::default(), out)?;
+    write!(out, " then ")?;
+    format(case.consequence.borrow(), Ctx::default(), out)
 }
 
 fn format_set_elem<W: std::io::Write>(
     set: &SetElement<NodeRef<Node>>,
-    ctx: Ctx,
     out: &mut W,
 ) -> std::io::Result<()> {
     write!(out, "{} in ", set.variable)?;
-    format(set.domain.borrow(), ctx, out)?;
+    format(set.domain.borrow(), Ctx::default(), out)?;
 
     if let Some(ref filter) = set.filter {
         write!(out, " such that ")?;
-        format(filter.borrow(), ctx, out)?;
+        format(filter.borrow(), Ctx::default(), out)?;
     }
 
     Ok(())

@@ -68,7 +68,7 @@ pub(super) fn evaluate(node: NodeRef<Node>) {
             }
         }
 
-        if let Ok(Target::Expression(n)) = &ident.target {
+        if let Ok(Target::Expression(_, n)) = &ident.target {
             if let Some(n) = n.upgrade()
                 && n.borrow().typ == Ok(TypeKind::Undefined)
             {

@@ -1,4 +1,3 @@
-// TODO: Detect newlines
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum Item<R> {
     Text(String),

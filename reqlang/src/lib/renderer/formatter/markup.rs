@@ -3,7 +3,7 @@ use crate::{renderer::formatter::padding::pad, syntax::parser::markup::Node};
 pub fn format<W: std::io::Write>(node: &Node, indent: usize, out: &mut W) -> std::io::Result<()> {
     use crate::node::markup::Item::*;
 
-    writeln!(out, "{} @@", pad(indent))?;
+    writeln!(out, "{}@@", pad(indent))?;
 
     write!(out, "{}", pad(indent))?;
     for item in &node.container.items {
@@ -14,5 +14,5 @@ pub fn format<W: std::io::Write>(node: &Node, indent: usize, out: &mut W) -> std
         }
     }
 
-    writeln!(out, "{} @@", pad(indent))
+    writeln!(out, "\n{}@@", pad(indent))
 }
