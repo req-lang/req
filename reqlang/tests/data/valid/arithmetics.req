@@ -1,14 +1,20 @@
 package A
-  @@ System block @@
+  @@
+  System block
+  @@
   part B
-    @@ Power draw @@
-    let x in real [W]
-    @@ Sample count @@
-    let y in integer [W]
+    @@
+    Power draw
+    @@
+    let x in real [ W ]
+    @@
+    Sample count
+    @@
+    let y in integer [ W ]
   part
-
-  requirement R1 on B is
-    (-B::x / B::y + 50! * +B::x) ^ 2 - (B::y ^ 2) % 2 > 0
+  requirement R1 
+    on B
+  is
+    (- B::x / B::y + 50 ! * + B::x) ^ 2 - B::y ^ 2 % 2 > 0
   requirement
-
 package

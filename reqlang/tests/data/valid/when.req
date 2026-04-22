@@ -1,36 +1,40 @@
 package A
-  @@ System block @@
+  @@
+  System block
+  @@
   part B
-    @@ Continuous signal @@
-    let x in real [W]
-    @@ Discrete signal @@
-    let y in integer [W]
+    @@
+    Continuous signal
+    @@
+    let x in real [ W ]
+    @@
+    Discrete signal
+    @@
+    let y in integer [ W ]
   part
-
-  requirement R1 on B is
-    when B::x > 0 then B::y > 0
+  requirement R1 
+    on B
+  is
+    when
+      B::x > 0 then B::y > 0
     end
   requirement
-
-  requirement R2 on B is
+  requirement R2 
+    on B
+  is
     when
       B::x > 0 then B::y > 0,
       B::y > 0 then B::x > 0
     end
   requirement
-
-  requirement R3 on B is
+  requirement R3 
+    on B
+  is
     when
-      B::x > 0 then B::y > 0,
-      otherwise B::x > 0
-    end
   requirement
-
-  requirement R4 on B is
+  requirement R4 
+    on B
+  is
     when
-      B::x > 0 then B::y > 0,
-      B::y > 0 then B::y > 0,
-      otherwise B::x > 0
-    end
   requirement
 package

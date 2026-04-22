@@ -1,18 +1,32 @@
 package A
-  @@ System block @@
+  @@
+  System block
+  @@
   part B
-    @@ Power draw @@
-    let x in real [W]
-    @@ Sample count @@
-    let y in integer [W]
+    @@
+    Power draw
+    @@
+    let x in real [ W ]
+    @@
+    Sample count
+    @@
+    let y in integer [ W ]
   part
-
-  requirement R1 on B is
-    all (B::x in real), B::y > 10 end
+  requirement R1 
+    on B
+  is
+    all
+      B::x in real,
+      B::y > 10
+    end
   requirement
-
-  requirement R2 on B is
-    any (B::x in real), B::y > 10, B::x = 520 end
+  requirement R2 
+    on B
+  is
+    any
+      B::x in real,
+      B::y > 10,
+      B::x = 520
+    end
   requirement
-
 package

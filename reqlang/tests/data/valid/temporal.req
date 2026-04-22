@@ -1,14 +1,20 @@
 package A
-  @@ System block @@
+  @@
+  System block
+  @@
   part B
-    @@ Flag x @@
+    @@
+    Flag x
+    @@
     let x in boolean
-    @@ Flag y @@
+    @@
+    Flag y
+    @@
     let y in boolean
   part
-
-  requirement R1 on B is
-    eventually B::x or (rising B::y and always (falling B::x since B::y) or previously B::x)
+  requirement R1 
+    on B
+  is
+    eventually B::x or (rising B::y and always falling B::x since B::y or previously B::x)
   requirement
-
 package

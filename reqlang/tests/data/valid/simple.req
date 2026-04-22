@@ -1,17 +1,23 @@
 package A
-  @@ System block @@
+  @@
+  System block
+  @@
   part B
-    @@ Power draw @@
-    let x in real [W]
+    @@
+    Power draw
+    @@
+    let x in real [ W ]
   part
-
   @@
   Comment {A::B::x}
   @@
   # tag tag has a value #
-  requirement R1 on B is
-  @@
-  Some tests {B::x}
-  @@
+  requirement R1 
+    on B
+  is
+    @@
+    Some tests {B::x}
+    @@
+
   requirement
 package

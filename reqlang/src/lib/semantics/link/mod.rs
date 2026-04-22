@@ -264,7 +264,7 @@ mod tests {
             _ => panic!("expected identifier"),
         };
         match target {
-            expression::Target::Expression(weak) => {
+            expression::Target::Expression(_, weak) => {
                 assert!(Rc::ptr_eq(&weak.upgrade().unwrap(), &domain_expr));
             }
             other => panic!("expected local variable target, got {:?}", other),

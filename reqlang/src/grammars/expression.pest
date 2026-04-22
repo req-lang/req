@@ -54,7 +54,7 @@ branch =  { if ~ expr ~ then ~ expr ~ (else ~ expr)? ~ end }
 if     = _{ "if" }
 else   = _{ "else" }
 
-when      =  { whe ~ (((case ~ ",")+ ~ otherwise) | (case ~ ",")* ~ case) ~ end }
+when      =  { whe ~ ((case ~ ("," ~ case)+ ~ otherwise) | (case ~ ",")* ~ case) ~ end }
 whe       = _{ "when" }
 case      =  { expr ~ then ~ expr }
 otherwise =  { other ~ expr }

@@ -10,12 +10,13 @@ fn assert_isomorphic_formatter(filename: &str) {
     let output = renderer::formatter::format_string(expected.borrow(), 0);
     let actual = node::map(syntax::parser::parse(&output).unwrap(), Node::from);
 
-    if actual != expected {
+    if actual != expected || input != output {
         eprintln!("*** INPUT ***\n{}\n\n", input);
         eprintln!("*** OUTPUT ***\n{}\n", output);
     }
 
     assert!(actual == expected);
+    assert!(input == output);
 }
 
 mod formatter {
@@ -84,5 +85,10 @@ mod formatter {
     #[test]
     fn traceability() {
         assert_isomorphic_formatter("traceability.req");
+    }
+
+    #[test]
+    fn tricky() {
+        assert_isomorphic_formatter("tricky_format.req");
     }
 }

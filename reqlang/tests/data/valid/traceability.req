@@ -1,36 +1,58 @@
 package A
-  @@ Top-level system @@
+  @@
+  Top-level system
+  @@
   part X
-    @@ Subsystem X1 @@
+    @@
+    Subsystem X1
+    @@
     part X1
-      @@ Sub-subsystem X2 @@
+      @@
+      Sub-subsystem X2
+      @@
       part X2
-        @@ State flag @@
+        @@
+        State flag
+        @@
         let x in boolean
       part
     part
   part
+  requirement R0 
+    on X
+  is
+    @@
+    very broad requirement
+    @@
 
-  requirement R0 on X is
-  @@ very broad requirement @@
   requirement
+  requirement R1 
+    on X::X1
+    refines R0
+  is
+    @@
+    Some tests 1
+    @@
 
-  requirement R1 on X::X1 refines R0 is
-  @@
-  Some tests 1
-  @@
   requirement
+  requirement R2 
+    on X::X1::X2
+    refines R1
+    refines R0
+  is
+    @@
+    Some tests 2
+    @@
 
-  requirement R2 on X::X1::X2 refines R1 refines R0 is
-  @@
-  Some tests 2
-  @@
   requirement
+  requirement R3 
+    on X::X1::X2::x
+    refines R1
+    refines R2
+  is
+    @@
+    Some tests on {X::X1::X2::x}
+    @@
 
-  requirement R3 on X::X1::X2::x refines R1 refines R2 is
-  @@
-  Some tests on {X::X1::X2::x}
-  @@
   requirement
-
 package

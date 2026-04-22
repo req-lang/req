@@ -1,21 +1,28 @@
 package A
-  @@ System block @@
+  @@
+  System block
+  @@
   part B
-    @@ Power draw @@
-    let x in real [W]
-    @@ Sample count @@
-    let y in integer [W]
+    @@
+    Power draw
+    @@
+    let x in real [ W ]
+    @@
+    Sample count
+    @@
+    let y in integer [ W ]
   part
-
-  requirement R1 on B is
-    if (B::x in real) then true
+  requirement R1 
+    on B
+  is
+    if B::x in real then true
     end
   requirement
-
-  requirement R2 on B is
-    if (B::y in real) then true
+  requirement R2 
+    on B
+  is
+    if B::y in real then true
     else false
     end
   requirement
-
 package

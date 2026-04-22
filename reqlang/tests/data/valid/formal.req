@@ -1,22 +1,29 @@
 package A
-  @@ System block @@
+  @@
+  System block
+  @@
   part B
-    @@ Power draw @@
-    let x in real [W]
-    @@ Status flag @@
+    @@
+    Power draw
+    @@
+    let x in real [ W ]
+    @@
+    Status flag
+    @@
     let y in boolean
   part
-
   @@
   Comment {A::B::x}
   @@
   # tag tag has a value #
-  requirement R1 on B is
+  requirement R1 
+    on B
+  is
     B::x = 0
   requirement
-
-  requirement R2 on B is
+  requirement R2 
+    on B
+  is
     B::y = true
   requirement
-
 package
