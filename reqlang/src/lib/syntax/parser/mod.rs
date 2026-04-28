@@ -38,7 +38,7 @@ mod tests {
             self, entity,
             parser::{expression, markup, parse},
         },
-        utils::children::{ChildrenIter, ChildrenMut, IntoChildren},
+        utils::children::{ChildrenIter, IntoChildren},
     };
 
     #[test]

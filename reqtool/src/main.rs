@@ -58,12 +58,11 @@ fn main() {
             let nd = node::map(root, syntax::entity::Node::from);
             let result = match output {
                 Some(p) => {
-                    let fd = fs::File::create(p).unwrap_or_else(|err| {
+                    let mut fd = fs::File::create(p).unwrap_or_else(|err| {
                         eprintln!("unable to create the output file: {err}");
                         process::exit(1);
                     });
-                    let mut writer = io::BufWriter::new(fd);
-                    formatter::entity::format(nd.borrow(), 0, &mut writer)
+                    formatter::entity::format(nd.borrow(), 0, &mut fd)
                 }
                 None => formatter::entity::format(nd.borrow(), 0, &mut io::stdout()),
             };

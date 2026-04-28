@@ -3,7 +3,8 @@ use std::{
     ops::{Add, Range},
 };
 
-#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[error("Syntax error at: {start}")]
 pub struct Span {
     pub start: Position,
     pub end: Position,
