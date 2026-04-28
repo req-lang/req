@@ -1,3 +1,31 @@
+#[derive(Default, Debug, Clone, Eq, PartialEq, Hash)]
+pub struct Node<P, R> {
+    pub payload: P,
+    pub container: Container<R>,
+}
+
+impl<P, R> Node<P, R> {
+    pub fn map<F, Q>(self, mut f: F) -> Node<Q, R>
+    where
+        F: FnMut(P) -> Q,
+    {
+        Node {
+            payload: f(self.payload),
+            container: self.container,
+        }
+    }
+
+    pub fn mapr<F, S>(self, f: F) -> Node<P, S>
+    where
+        F: FnMut(R) -> S,
+    {
+        Node {
+            payload: self.payload,
+            container: self.container.mapr(f),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum Item<R> {
     Text(String),
@@ -6,9 +34,9 @@ pub enum Item<R> {
 }
 
 impl<R> Item<R> {
-    pub fn mapr<F, S>(self, f: F) -> Item<S>
+    pub fn mapr<F, S>(self, mut f: F) -> Item<S>
     where
-        F: Fn(R) -> S,
+        F: FnMut(R) -> S,
     {
         match self {
             Item::Reference(r) => Item::Reference(f(r)),
@@ -37,12 +65,12 @@ impl<R> Default for Container<R> {
 }
 
 impl<R> Container<R> {
-    pub fn mapr<F, S>(self, f: F) -> Container<S>
+    pub fn mapr<F, S>(self, mut f: F) -> Container<S>
     where
-        F: Fn(R) -> S,
+        F: FnMut(R) -> S,
     {
         Container {
-            items: self.items.into_iter().map(|i| i.mapr(|x| f(x))).collect(),
+            items: self.items.into_iter().map(|i| i.mapr(&mut f)).collect(),
         }
     }
 

@@ -1,10 +1,64 @@
-use crate::utils::children::{Children, ChildrenIter, ChildrenMut, IntoChildren};
+use crate::{
+    node::{expression, markup},
+    utils::children::{Children, ChildrenIter, ChildrenMut, IntoChildren},
+};
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct Node<N, R, E, M> {
+    pub payload: N,
+    pub meta: Meta<markup::Node<M, R>>,
+    pub variant: Variant<usize, R, Vec<expression::Node<E, R>>, markup::Node<M, R>>,
+}
+
+impl<N, R, E, M> Node<N, R, E, M> {
+    pub fn markups(&self) -> impl Iterator<Item = &markup::Node<M, R>> {
+        let mut ret = Vec::new();
+
+        ret.extend(self.variant.markups());
+        ret.extend(self.meta.comment.iter());
+        ret.into_iter()
+    }
+
+    pub fn markups_mut(&mut self) -> impl Iterator<Item = &mut markup::Node<M, R>> {
+        let mut ret = Vec::new();
+
+        ret.extend(self.variant.markups_mut());
+        ret.extend(self.meta.comment.iter_mut());
+        ret.into_iter()
+    }
+
+    pub fn map<F, Q>(self, mut f: F) -> Node<Q, R, E, M>
+    where
+        F: FnMut(N) -> Q,
+    {
+        Node {
+            payload: f(self.payload),
+            meta: self.meta,
+            variant: self.variant,
+        }
+    }
+
+    pub fn mapr<F, S>(self, mut f: F) -> Node<N, S, E, M>
+    where
+        F: FnMut(R) -> S,
+    {
+        Node {
+            payload: self.payload,
+            meta: self.meta.mapm(|m| m.mapr(&mut f)),
+            variant: self
+                .variant
+                .mapr(&mut f)
+                .mape(|e| e.into_iter().map(|e| e.mapr(&mut f)).collect())
+                .mapm(|m| m.mapr(&mut f)),
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Variant<N, R, E, M> {
-    Part(Part<N, R, M>),
-    Attribute(Attribute<E, M>),
-    Package(Package<N, R, M>),
+    Part(Part<N, R>),
+    Attribute(Attribute<E>),
+    Package(Package<N, R>),
     Requirement(Requirement<R, E, M>),
 }
 
@@ -68,37 +122,17 @@ impl<N, R, E, M> Default for Variant<N, R, E, M> {
 }
 
 impl<N, R, E, M> Variant<N, R, E, M> {
-    pub fn meta(&self) -> &Meta<M> {
-        match self {
-            Variant::Part(part) => &part.meta,
-            Variant::Attribute(attribute) => &attribute.meta,
-            Variant::Package(package) => &package.meta,
-            Variant::Requirement(requirement) => &requirement.meta,
-        }
-    }
-
-    pub fn meta_mut(&mut self) -> &mut Meta<M> {
-        match self {
-            Variant::Part(part) => &mut part.meta,
-            Variant::Attribute(attribute) => &mut attribute.meta,
-            Variant::Package(package) => &mut package.meta,
-            Variant::Requirement(requirement) => &mut requirement.meta,
-        }
-    }
-
     pub fn mapn<F, O>(self, mut f: F) -> Variant<O, R, E, M>
     where
         F: FnMut(N) -> O,
     {
         match self {
             Variant::Part(part) => Variant::Part(Part {
-                meta: part.meta,
                 imports: part.imports,
                 children: part.children.into_iter().map(&mut f).collect(),
             }),
             Variant::Attribute(attribute) => Variant::Attribute(attribute),
             Variant::Package(package) => Variant::Package(Package {
-                meta: package.meta,
                 imports: package.imports,
                 children: package.children.into_iter().map(&mut f).collect(),
             }),
@@ -112,22 +146,18 @@ impl<N, R, E, M> Variant<N, R, E, M> {
     {
         match self {
             Variant::Part(part) => Variant::Part(Part {
-                meta: part.meta,
                 imports: part.imports.into_iter().map(&mut f).collect(),
                 children: part.children,
             }),
             Variant::Attribute(attribute) => Variant::Attribute(Attribute {
-                meta: attribute.meta,
                 domain: attribute.domain,
                 unit: attribute.unit,
             }),
             Variant::Package(package) => Variant::Package(Package {
-                meta: package.meta,
                 imports: package.imports.into_iter().map(&mut f).collect(),
                 children: package.children,
             }),
             Variant::Requirement(requirement) => Variant::Requirement(Requirement {
-                meta: requirement.meta,
                 restriction: requirement.restriction.map(&mut f),
                 allocation: requirement.allocation.map(&mut f),
                 traceability: requirement
@@ -151,13 +181,11 @@ impl<N, R, E, M> Variant<N, R, E, M> {
         match self {
             Variant::Part(part) => Variant::Part(part),
             Variant::Attribute(attribute) => Variant::Attribute(Attribute {
-                meta: attribute.meta,
                 domain: f(attribute.domain),
                 unit: attribute.unit.map(&mut f),
             }),
             Variant::Package(package) => Variant::Package(package),
             Variant::Requirement(requirement) => Variant::Requirement(Requirement {
-                meta: requirement.meta,
                 restriction: requirement.restriction,
                 allocation: requirement.allocation,
                 traceability: requirement.traceability,
@@ -176,22 +204,18 @@ impl<N, R, E, M> Variant<N, R, E, M> {
     {
         match self {
             Variant::Part(part) => Variant::Part(Part {
-                meta: part.meta.mapm(&mut f),
                 imports: part.imports,
                 children: part.children,
             }),
             Variant::Attribute(attribute) => Variant::Attribute(Attribute {
-                meta: attribute.meta.mapm(&mut f),
                 domain: attribute.domain,
                 unit: attribute.unit,
             }),
             Variant::Package(package) => Variant::Package(Package {
-                meta: package.meta.mapm(&mut f),
                 imports: package.imports,
                 children: package.children,
             }),
             Variant::Requirement(requirement) => Variant::Requirement(Requirement {
-                meta: requirement.meta.mapm(&mut f),
                 restriction: requirement.restriction,
                 allocation: requirement.allocation,
                 traceability: requirement.traceability,
@@ -220,28 +244,28 @@ impl<N, R, E, M> Variant<N, R, E, M> {
         }
     }
 
-    pub fn part(&self) -> Option<&Part<N, R, M>> {
+    pub fn part(&self) -> Option<&Part<N, R>> {
         match self {
             Variant::Part(part) => Some(part),
             _ => None,
         }
     }
 
-    pub fn into_package(self) -> Option<Package<N, R, M>> {
+    pub fn into_package(self) -> Option<Package<N, R>> {
         match self {
             Variant::Package(package) => Some(package),
             _ => None,
         }
     }
 
-    pub fn package(&self) -> Option<&Package<N, R, M>> {
+    pub fn package(&self) -> Option<&Package<N, R>> {
         match self {
             Variant::Package(package) => Some(package),
             _ => None,
         }
     }
 
-    pub fn package_mut(&mut self) -> Option<&mut Package<N, R, M>> {
+    pub fn package_mut(&mut self) -> Option<&mut Package<N, R>> {
         match self {
             Variant::Package(package) => Some(package),
             _ => None,
@@ -269,14 +293,14 @@ impl<N, R, E, M> Variant<N, R, E, M> {
         }
     }
 
-    pub fn attribute(&self) -> Option<&Attribute<E, M>> {
+    pub fn attribute(&self) -> Option<&Attribute<E>> {
         match self {
             Variant::Attribute(attribute) => Some(attribute),
             _ => None,
         }
     }
 
-    pub fn attribute_mut(&mut self) -> Option<&mut Attribute<E, M>> {
+    pub fn attribute_mut(&mut self) -> Option<&mut Attribute<E>> {
         match self {
             Variant::Attribute(attribute) => Some(attribute),
             _ => None,
@@ -349,14 +373,11 @@ impl<N, R, E, M> Variant<N, R, E, M> {
         match self {
             Variant::Requirement(requirement) => match &requirement.variant {
                 RequirementVariant::Informal(markup) => {
-                    ret.extend(requirement.meta.comment.iter());
                     ret.push(markup);
                 }
                 RequirementVariant::Formal(_) => {}
             },
-            _ => {
-                ret.extend(self.meta().comment.iter());
-            }
+            _ => {}
         }
 
         ret.into_iter()
@@ -368,16 +389,11 @@ impl<N, R, E, M> Variant<N, R, E, M> {
         match self {
             Variant::Requirement(requirement) => match &mut requirement.variant {
                 RequirementVariant::Informal(markup) => {
-                    ret.extend(requirement.meta.comment.iter_mut());
                     ret.push(markup);
                 }
-                RequirementVariant::Formal(_) => {
-                    ret.extend(requirement.meta.comment.iter_mut());
-                }
+                RequirementVariant::Formal(_) => {}
             },
-            _ => {
-                ret.extend(self.meta_mut().comment.iter_mut());
-            }
+            _ => {}
         }
 
         ret.into_iter()
@@ -401,79 +417,61 @@ impl<N, R, E, M> Variant<N, R, E, M> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Part<N, R, M> {
-    pub meta: Meta<M>,
+pub struct Part<N, R> {
     pub imports: Vec<R>,
     pub children: Vec<N>,
 }
 
-impl<N, R, M> Default for Part<N, R, M> {
+impl<N, R> Default for Part<N, R> {
     fn default() -> Self {
         Self {
-            meta: Default::default(),
             imports: Default::default(),
             children: Default::default(),
         }
     }
 }
 
-impl<N, R, M> Part<N, R, M> {
+impl<N, R> Part<N, R> {
     pub fn new(imports: Vec<R>, children: Vec<N>) -> Self {
-        Part {
-            meta: Meta::default(),
-            imports,
-            children,
-        }
+        Part { imports, children }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Attribute<E, M> {
-    pub meta: Meta<M>,
+pub struct Attribute<E> {
     pub domain: E,
     pub unit: Option<E>,
 }
 
-impl<E, M> Attribute<E, M> {
+impl<E> Attribute<E> {
     pub fn new(domain: E) -> Self {
-        Attribute {
-            meta: Meta::default(),
-            domain,
-            unit: None,
-        }
+        Attribute { domain, unit: None }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Package<N, R, M> {
-    pub meta: Meta<M>,
+pub struct Package<N, R> {
     pub imports: Vec<R>,
     pub children: Vec<N>,
 }
 
-impl<N, R, M> Default for Package<N, R, M> {
+impl<N, R> Default for Package<N, R> {
     fn default() -> Self {
         Self {
-            meta: Default::default(),
             imports: Default::default(),
             children: Default::default(),
         }
     }
 }
 
-impl<N, R, M> Package<N, R, M> {
+impl<N, R> Package<N, R> {
     pub fn new(imports: Vec<R>, children: Vec<N>) -> Self {
-        Package {
-            meta: Meta::default(),
-            imports,
-            children,
-        }
+        Package { imports, children }
     }
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub struct Requirement<R, E, M> {
-    pub meta: Meta<M>,
     pub restriction: Option<R>,
     pub allocation: Option<R>,
     pub traceability: Vec<TraceabilityLink<R>>,
@@ -484,7 +482,6 @@ pub struct Requirement<R, E, M> {
 impl<R, E, M> From<RequirementVariant<E, M>> for Requirement<R, E, M> {
     fn from(variant: RequirementVariant<E, M>) -> Self {
         Requirement {
-            meta: Meta::default(),
             restriction: None,
             allocation: None,
             traceability: Vec::new(),

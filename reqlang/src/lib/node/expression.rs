@@ -1,5 +1,33 @@
 use crate::utils::children::ChildrenIter;
 
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+pub struct Node<P, R> {
+    pub payload: P,
+    pub variant: Variant<usize, R>,
+}
+
+impl<P, R> Node<P, R> {
+    pub fn map<F, Q>(self, mut f: F) -> Node<Q, R>
+    where
+        F: FnMut(P) -> Q,
+    {
+        Node {
+            payload: f(self.payload),
+            variant: self.variant,
+        }
+    }
+
+    pub fn mapr<F, S>(self, f: F) -> Node<P, S>
+    where
+        F: FnMut(R) -> S,
+    {
+        Node {
+            payload: self.payload,
+            variant: self.variant.mapr(f),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Variant<N, R> {
     Branch(Branch<N>),
