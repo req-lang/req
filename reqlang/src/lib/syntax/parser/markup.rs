@@ -1,18 +1,15 @@
 use crate::{
-    node::markup::{self},
+    node::{
+        self,
+        markup::{Container, Item},
+    },
     reference::Reference,
     syntax::tokenizer::markup::{IntoTokens, Token},
 };
 
-pub type Item = markup::Item<Reference>;
-pub type Container = markup::Container<Reference>;
+pub type Node = node::markup::Node<(), Reference>;
 
-#[derive(Default, Debug, Clone, PartialEq, Eq)]
-pub struct Node {
-    pub container: Container,
-}
-
-impl Item {
+impl Item<Reference> {
     pub fn to_string(self) -> String {
         match self {
             Item::Text(s) => s,
@@ -34,10 +31,8 @@ impl From<String> for Node {
     fn from(value: String) -> Self {
         let unindented = unindent::unindent(&value);
         let tokens = unindented.char_indices().tokens();
-        let value = tokens.map(|token| Item::from_token(token)).collect();
-        Self {
-            container: Container { items: value },
-        }
+        let value: Vec<_> = tokens.map(|token| Item::from_token(token)).collect();
+        Node::empty(Container::from(value))
     }
 }
 

@@ -7,6 +7,20 @@ pub struct Node<P, R> {
 }
 
 impl<P, R> Node<P, R> {
+    pub fn empty(variant: Variant<usize, R>) -> Self
+    where
+        P: Default,
+    {
+        Self {
+            payload: Default::default(),
+            variant,
+        }
+    }
+
+    pub fn new(payload: P, variant: Variant<usize, R>) -> Self {
+        Self { payload, variant }
+    }
+
     pub fn map<F, Q>(self, mut f: F) -> Node<Q, R>
     where
         F: FnMut(P) -> Q,
@@ -656,4 +670,10 @@ pub enum NumberKind {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Boolean {
     pub value: bool,
+}
+
+impl From<bool> for Boolean {
+    fn from(value: bool) -> Self {
+        Boolean { value }
+    }
 }

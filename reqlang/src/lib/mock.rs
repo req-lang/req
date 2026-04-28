@@ -1,47 +1,39 @@
 pub mod entity {
     use crate::{
         mock::expression,
-        node::{
-            self, NodeRef,
-            entity::{Attribute, Package, Part, Requirement, RequirementVariant, Variant},
-        },
+        node::entity::{Attribute, Meta, Package, Part, Requirement, RequirementVariant, Variant},
         syntax::{self, entity::Node},
     };
 
-    pub fn package(label: &str) -> NodeRef<Node> {
-        let mut variant = Variant::Package(Package::new(vec![], vec![]));
-        variant.meta_mut().label = label.to_string();
-        node::new(Node::new(variant))
+    pub fn package<S: ToString>(label: S) -> Node {
+        let variant = Variant::Package(Package::new(vec![], vec![]));
+        Node::empty(Meta::from(label.to_string()), variant)
     }
 
-    pub fn part(label: &str) -> NodeRef<Node> {
-        let mut variant = Variant::Part(Part::new(vec![], vec![]));
-        variant.meta_mut().label = label.to_string();
-        node::new(Node::new(variant))
+    pub fn part<S: ToString>(label: S) -> Node {
+        let variant = Variant::Part(Part::new(vec![], vec![]));
+        Node::empty(Meta::from(label.to_string()), variant)
     }
 
-    pub fn attribute(label: &str, domain: &str) -> NodeRef<Node> {
+    pub fn attribute<S: ToString>(label: S, domain: S) -> Node {
         let domain = expression::identifier(domain);
-        let mut variant = Variant::Attribute(Attribute::new(domain));
-        variant.meta_mut().label = label.to_string();
-        node::new(Node::new(variant))
+        let variant = Variant::Attribute(Attribute::new(vec![domain]));
+        Node::empty(Meta::from(label.to_string()), variant)
     }
 
-    pub fn requirement(label: &str) -> NodeRef<Node> {
+    pub fn requirement<S: ToString>(label: S) -> Node {
         let variant = RequirementVariant::default();
-        let mut variant = Variant::Requirement(Requirement::from(variant));
-        variant.meta_mut().label = label.to_string();
-        node::new(Node::new(variant))
+        let variant = Variant::Requirement(Requirement::from(variant));
+        Node::empty(Meta::from(label.to_string()), variant)
     }
 
-    pub fn formal(label: &str, expr: NodeRef<syntax::expression::Node>) -> NodeRef<Node> {
-        let req = requirement(label);
-        req.borrow_mut().variant.requirement_mut().unwrap().variant =
-            RequirementVariant::Formal(expr);
+    pub fn formal(label: &str, expr: Vec<syntax::expression::Node>) -> Node {
+        let mut req = requirement(label);
+        req.variant.requirement_mut().unwrap().variant = RequirementVariant::Formal(expr);
         req
     }
 
-    pub fn simple_tree() -> NodeRef<Node> {
+    pub fn simple_tree() -> Vec<Node> {
         let mut arena = vec![
             package("a"),
             package("b"),
@@ -50,31 +42,29 @@ pub mod entity {
             package("e"),
         ];
 
-        let variant = Variant::Package(Package::new(vec![], vec![arena[3].clone()]));
-        arena[1].borrow_mut().variant = variant;
+        let variant = Variant::Package(Package::new(vec![], vec![3]));
+        arena[1].variant = variant;
 
-        let variant = Variant::Package(Package::new(vec![], vec![arena[4].clone()]));
-        arena[2].borrow_mut().variant = variant;
+        let variant = Variant::Package(Package::new(vec![], vec![4]));
+        arena[2].variant = variant;
 
-        let variant = Variant::Package(Package::new(
-            vec![],
-            vec![arena[1].clone(), arena[2].clone()],
-        ));
-        arena[0].borrow_mut().variant = variant;
+        let variant = Variant::Package(Package::new(vec![], vec![1, 2]));
+        arena[0].variant = variant;
         arena.reverse();
 
-        return arena.pop().unwrap();
+        return arena;
     }
 }
 
 pub mod generator {
+    use std::cell::RefCell;
     use std::rc::Rc;
 
     use super::entity::package;
     use crate::mock::entity::requirement;
-    use crate::node::NodeRef;
+    use crate::node;
     use crate::syntax::entity::Node;
-    use crate::syntax::parser::{self, markup};
+    use crate::syntax::markup;
 
     pub struct ExponentialSizeIterator {
         value: f64,
@@ -97,7 +87,7 @@ pub mod generator {
     }
 
     pub trait Generate {
-        fn generate(&self) -> NodeRef<Node>;
+        fn generate(&self) -> Vec<Node>;
 
         fn size(&self) -> u64;
     }
@@ -110,53 +100,56 @@ pub mod generator {
         pub words: u64,
     }
 
+    fn repeat_words(count: usize) -> String {
+        vec!["word"]
+            .into_iter()
+            .cycle()
+            .take(count)
+            .collect::<Vec<&str>>()
+            .join(" ")
+    }
+
+    fn push_child(nd: &Rc<RefCell<Node>>, child: usize) {
+        nd.borrow_mut().variant.children_mut().unwrap().push(child);
+    }
+
     impl Generate for Simple {
-        fn generate(&self) -> NodeRef<Node> {
-            let root = package("root");
+        fn generate(&self) -> Vec<Node> {
+            let root = Rc::new(RefCell::new(package("root")));
+            let mut arena = vec![root.clone()];
 
             for p in 0..self.packages {
-                let pkg = package(format!("package_{p}").as_str());
-                root.borrow_mut()
-                    .variant
-                    .children_mut()
-                    .unwrap()
-                    .push(Rc::clone(&pkg));
+                let pkg = Rc::new(RefCell::new(package(format!("package_{p}"))));
+                arena.push(pkg.clone());
+                push_child(&root, arena.len());
 
                 let mut prev = pkg;
                 for d in 0..self.depth {
-                    let curr = package(format!("package_{p}_{d}").as_str());
+                    let curr = Rc::new(RefCell::new(package(format!("package_{p}_{d}"))));
+                    arena.push(curr.clone());
+                    let len = arena.len();
                     for r in 0..self.requirements {
-                        let req = requirement(format!("requirement_{p}_{d}_{r}").as_str());
-                        let content = vec!["word"]
-                            .into_iter()
-                            .cycle()
-                            .take(self.words as usize)
-                            .collect::<Vec<&str>>()
-                            .join(" ");
+                        let mut req = requirement(format!("requirement_{p}_{d}_{r}"));
+                        let content = repeat_words(self.words as usize);
+                        let mut markup = node::markup::Container::default();
+                        markup.items.push(node::markup::Item::Text(content));
 
-                        let mut markup = markup::Container::default();
-                        markup.items.push(markup::Item::Text(content));
+                        let informal = req.variant.requirement_mut().unwrap().informal_mut();
+                        *informal.unwrap() = markup::Node::empty(markup);
 
-                        *req.borrow_mut()
-                            .variant
-                            .requirement_mut()
-                            .unwrap()
-                            .informal_mut()
-                            .unwrap() = parser::markup::Node { container: markup };
-
-                        curr.borrow_mut().variant.children_mut().unwrap().push(req);
+                        arena.push(Rc::new(RefCell::new(req)));
+                        push_child(&curr, arena.len());
                     }
 
-                    prev.borrow_mut()
-                        .variant
-                        .children_mut()
-                        .unwrap()
-                        .push(Rc::clone(&curr));
+                    push_child(&prev, len);
                     prev = curr;
                 }
             }
 
-            root
+            arena
+                .into_iter()
+                .map(|n| RefCell::into_inner(Rc::try_unwrap(n).unwrap()))
+                .collect()
         }
 
         fn size(&self) -> u64 {
@@ -179,41 +172,35 @@ pub mod generator {
 pub mod expression {
     use crate::{
         node::{
-            self, NodeRef,
+            self,
             expression::{Identifier, Variant},
         },
         reference::Reference,
         syntax::expression::Node,
     };
 
-    pub fn identifier(location: &str) -> NodeRef<Node> {
+    pub fn identifier<S: ToString>(location: S) -> Node {
         let reference = Reference::new(location.to_string());
         let variant = Variant::Identifier(Identifier::new(reference));
-        node::new(Node::new(variant))
+        Node::empty(variant)
     }
 
-    pub fn number(n: i64) -> NodeRef<Node> {
+    pub fn number(n: i64) -> Node {
         let num = node::expression::Number {
             kind: node::expression::NumberKind::Integer,
             value: n.to_string(),
         };
-        node::new(Node::new(node::expression::Variant::Number(num)))
+        Node::empty(Variant::Number(num))
     }
 
-    pub fn boolean(b: bool) -> NodeRef<Node> {
-        node::new(Node::new(node::expression::Variant::Boolean(
-            node::expression::Boolean { value: b },
-        )))
+    pub fn boolean(b: bool) -> Node {
+        Node::empty(Variant::Boolean(node::expression::Boolean::from(b)))
     }
 
-    pub fn binary(
-        op: node::expression::BinaryOperator,
-        left: NodeRef<Node>,
-        right: NodeRef<Node>,
-    ) -> NodeRef<Node> {
-        node::new(Node::new(node::expression::Variant::BinOp(
+    pub fn binary(op: node::expression::BinaryOperator, left: usize, right: usize) -> Node {
+        Node::empty(node::expression::Variant::BinOp(
             node::expression::BinOp::new(op, left, right),
-        )))
+        ))
     }
 }
 

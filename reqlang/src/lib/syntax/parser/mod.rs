@@ -1,25 +1,25 @@
 use itertools::Itertools;
 
-use crate::{
-    node::NodeRef,
-    syntax::{
-        location::Span,
-        tokenizer::entity::{IntoLexeme, IntoPosition, IntoTokens},
-    },
+use crate::syntax::{
+    location::Span,
+    parser::entity::Node,
+    tokenizer::entity::{IntoLexeme, IntoPosition, IntoTokens},
 };
 
 pub mod entity;
 pub mod expression;
 pub mod markup;
 
-pub fn parse(input: &str) -> Result<NodeRef<entity::Node>, Span> {
+pub fn parse(input: &str) -> Result<Vec<Node>, Span> {
+    let mut arena = Vec::new();
     let mut tokens = input
         .char_indices()
         .positioned()
         .lexemes()
         .tokens()
         .multipeek();
-    entity::parse(&mut tokens)
+    entity::parse(&mut tokens, &mut arena)?;
+    Ok(arena)
 }
 
 #[cfg(test)]

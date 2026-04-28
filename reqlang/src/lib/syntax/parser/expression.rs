@@ -1,4 +1,4 @@
-use std::sync::OnceLock;
+use std::{cell::RefCell, rc::Rc, sync::OnceLock};
 
 use pest::{
     Parser,
@@ -7,7 +7,7 @@ use pest::{
 };
 
 use crate::{
-    node::{self, NodeRef, expression::*},
+    node::{self, expression::*},
     reference::Reference,
     syntax::location::{Position, Span},
 };
@@ -17,23 +17,15 @@ use pest_derive;
 #[grammar = "grammars/expression.pest"]
 struct PairParser;
 
-pub type ParserVariant = Variant<NodeRef<Node>, Reference>;
+pub type Node = node::expression::Node<Span, Reference>;
 
-#[derive(Debug, Default, PartialEq, Eq)]
-pub struct Node {
-    pub span: Span,
-    pub variant: ParserVariant,
-}
-
-impl Node {
-    pub fn new(span: Span, variant: ParserVariant) -> Self {
-        Self { span, variant }
-    }
-}
-
-pub fn parse(input: &str, offset: &Position) -> Result<NodeRef<Node>, Span> {
+pub fn parse(input: &str, offset: &Position) -> Result<Vec<Node>, Span> {
+    let mut arena = Vec::new();
     match PairParser::parse(Rule::expr, input) {
-        Ok(mut pair) => Ok(Builder::new(offset).build(pair.next().unwrap())),
+        Ok(mut pair) => {
+            Builder::new(offset).build(pair.next().unwrap(), &mut arena);
+            Ok(arena)
+        }
         Err(err) => Err(Span::from((err.line_col, err.location)) + *offset),
     }
 }
@@ -43,17 +35,15 @@ struct Builder<'s> {
 }
 
 impl<'s> Builder<'s> {
-    fn node(&self, span: Span, variant: ParserVariant) -> NodeRef<Node> {
-        node::new(Node::new(span + *self.offset, variant))
-    }
-
     fn new(offset: &'s Position) -> Self {
         Self { offset }
     }
 
-    fn build(&self, pair: Pair<Rule>) -> NodeRef<Node> {
+    fn build(&self, pair: Pair<Rule>, arena: &mut Vec<Node>) -> usize {
+        let ar = Rc::new(RefCell::new(arena));
         let node = pratt_parser()
             .map_primary(|primary| {
+                let mut arena = ar.borrow_mut();
                 let span = Span::from(primary.as_span());
                 match primary.as_rule() {
                     Rule::ident => {
@@ -61,7 +51,7 @@ impl<'s> Builder<'s> {
                         let reference = Reference::new(value);
                         let ident = Identifier::new(reference);
                         let variant = Variant::Identifier(ident);
-                        self.node(span, variant)
+                        Node::new(span, variant)
                     }
 
                     Rule::num => {
@@ -70,31 +60,31 @@ impl<'s> Builder<'s> {
                         let mut number = Number::new(kind);
                         number.value = value;
                         let variant = Variant::Number(number);
-                        self.node(span, variant)
+                        Node::new(span, variant)
                     }
 
                     Rule::bool => {
                         let value = primary.into_inner().next().unwrap().as_rule().into();
                         let variant = Variant::Boolean(value);
-                        self.node(span, variant)
+                        Node::new(span, variant)
                     }
 
                     Rule::undefined => {
                         let variant = Variant::Undefined;
-                        self.node(span, variant)
+                        Node::new(span, variant)
                     }
 
                     Rule::branch => {
                         let mut inner = primary.into_inner();
-                        let condition = self.build(inner.next().unwrap());
-                        let consequence = self.build(inner.next().unwrap());
+                        let condition = self.build(inner.next().unwrap(), *arena);
+                        let consequence = self.build(inner.next().unwrap(), *arena);
                         let case = Case::new(condition, consequence);
                         let mut branch = Branch::new(case);
                         if let Some(p) = inner.next() {
-                            branch.otherwise = Some(self.build(p));
+                            branch.otherwise = Some(self.build(p, *arena));
                         }
                         let variant = Variant::Branch(branch);
-                        self.node(span, variant)
+                        Node::new(span, variant)
                     }
 
                     Rule::when => {
@@ -104,13 +94,13 @@ impl<'s> Builder<'s> {
                             match p.as_rule() {
                                 Rule::case => {
                                     let mut inner = p.into_inner();
-                                    let condition = self.build(inner.next().unwrap());
-                                    let consequence = self.build(inner.next().unwrap());
+                                    let condition = self.build(inner.next().unwrap(), *arena);
+                                    let consequence = self.build(inner.next().unwrap(), *arena);
                                     when.cases.push(Case::new(condition, consequence));
                                 }
 
                                 Rule::otherwise => {
-                                    let node = self.build(p.into_inner().next().unwrap());
+                                    let node = self.build(p.into_inner().next().unwrap(), *arena);
                                     when.otherwise = Some(node);
                                 }
 
@@ -119,54 +109,54 @@ impl<'s> Builder<'s> {
                         }
 
                         let variant = Variant::When(when);
-                        self.node(span, variant)
+                        Node::new(span, variant)
                     }
 
                     Rule::forall => {
                         let mut inner = primary.into_inner();
-                        let expression = self.build(inner.next_back().unwrap());
+                        let expression = self.build(inner.next_back().unwrap(), *arena);
                         let variable = inner.next().unwrap().as_str().to_string();
-                        let domain = self.build(inner.next().unwrap());
+                        let domain = self.build(inner.next().unwrap(), *arena);
                         let mut set = SetElement::new(variable, domain);
                         if let Some(p) = inner.next() {
-                            set.filter = Some(self.build(p));
+                            set.filter = Some(self.build(p, *arena));
                         }
 
                         let variant = Variant::Forall(Forall::new(set, expression));
-                        self.node(span, variant)
+                        Node::new(span, variant)
                     }
 
                     Rule::exists => {
                         let mut inner = primary.into_inner();
 
                         let variable = inner.next().unwrap().as_str().to_string();
-                        let domain = self.build(inner.next().unwrap());
+                        let domain = self.build(inner.next().unwrap(), *arena);
                         let mut set = SetElement::new(variable, domain);
                         if let Some(p) = inner.next() {
-                            set.filter = Some(self.build(p));
+                            set.filter = Some(self.build(p, *arena));
                         }
 
                         let variant = Variant::Exists(Exists::new(set));
-                        self.node(span, variant)
+                        Node::new(span, variant)
                     }
 
                     Rule::select => {
                         let mut inner = primary.into_inner();
 
                         let variable = inner.next().unwrap().as_str().to_string();
-                        let domain = self.build(inner.next().unwrap());
+                        let domain = self.build(inner.next().unwrap(), *arena);
                         let mut select = Select::new(SetElement::new(variable, domain));
                         for p in inner {
                             match p.as_rule() {
                                 Rule::optimizer => {
                                     let mut inner = p.into_inner();
                                     let kind = inner.next().unwrap().as_rule().into();
-                                    let expression = self.build(inner.next().unwrap());
+                                    let expression = self.build(inner.next().unwrap(), *arena);
                                     select.optimizer = Some(Optimizer::new(kind, expression))
                                 }
 
                                 Rule::expr => {
-                                    select.set.filter = Some(self.build(p));
+                                    select.set.filter = Some(self.build(p, *arena));
                                 }
 
                                 _ => {}
@@ -174,7 +164,7 @@ impl<'s> Builder<'s> {
                         }
 
                         let variant = Variant::Select(select);
-                        self.node(span, variant)
+                        Node::new(span, variant)
                     }
 
                     Rule::aggregation => {
@@ -183,11 +173,11 @@ impl<'s> Builder<'s> {
                         let mut aggregation = Aggregation::new(aggregator);
 
                         for p in inner {
-                            aggregation.expressions.push(self.build(p));
+                            aggregation.expressions.push(self.build(p, *arena));
                         }
 
                         let variant = Variant::Aggregation(aggregation);
-                        self.node(span, variant)
+                        Node::new(span, variant)
                     }
 
                     Rule::set => {
@@ -195,52 +185,60 @@ impl<'s> Builder<'s> {
                         let inner = primary.into_inner();
 
                         for p in inner {
-                            set.elements.push(self.build(p));
+                            set.elements.push(self.build(p, *arena));
                         }
 
                         let variant = Variant::Set(set);
-                        self.node(span, variant)
+                        Node::new(span, variant)
                     }
 
-                    Rule::expr => self.build(primary),
+                    Rule::expr => {
+                        self.build(primary, *arena);
+                        arena.pop().unwrap()
+                    }
 
                     _ => unreachable!(),
                 }
             })
             .map_infix(|lhs, op, rhs| {
+                let n = ar.borrow().len();
+                ar.borrow_mut().extend([lhs, rhs]);
                 let span = op.as_span().into();
                 let operator = op.as_rule().into();
-                let variant = Variant::BinOp(BinOp::new(operator, lhs, rhs));
+                let variant = Variant::BinOp(BinOp::new(operator, n, n + 1));
 
-                self.node(span, variant)
+                Node::new(span, variant)
             })
             .map_prefix(|op, operand| {
-                let operand = operand;
+                ar.borrow_mut().push(operand);
                 let span = op.as_span().into();
                 let operator = op.as_rule().into();
-                let variant = Variant::UnaryOp(UnaryOp::new(operator, operand));
+                let variant = Variant::UnaryOp(UnaryOp::new(operator, ar.borrow().len()));
 
-                self.node(span, variant)
+                Node::new(span, variant)
             })
             .map_postfix(|operand, op| {
-                let operand = operand;
+                let mut ar = ar.borrow_mut();
+                ar.push(operand);
                 let span = op.as_span().into();
                 let variant = match op.as_rule() {
                     Rule::call => {
-                        let mut function = Function::new(operand);
+                        let mut function = Function::new(ar.len());
                         for p in op.into_inner() {
-                            function.arguments.push(self.build(p));
+                            function.arguments.push(self.build(p, *ar));
                         }
                         Variant::Function(function)
                     }
-                    Rule::fac => Variant::UnaryOp(UnaryOp::new(UnaryOperator::Factorial, operand)),
+                    Rule::fac => Variant::UnaryOp(UnaryOp::new(UnaryOperator::Factorial, ar.len())),
                     _ => unreachable!(),
                 };
 
-                self.node(span, variant)
+                Node::new(span, variant)
             })
             .parse(pair.into_inner());
-        node
+
+        ar.borrow_mut().push(node);
+        ar.borrow().len()
     }
 }
 

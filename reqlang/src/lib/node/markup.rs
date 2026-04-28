@@ -5,6 +5,20 @@ pub struct Node<P, R> {
 }
 
 impl<P, R> Node<P, R> {
+    pub fn empty(container: Container<R>) -> Self
+    where
+        P: Default,
+    {
+        Self {
+            payload: Default::default(),
+            container,
+        }
+    }
+
+    pub fn new(payload: P, container: Container<R>) -> Self {
+        Self { payload, container }
+    }
+
     pub fn map<F, Q>(self, mut f: F) -> Node<Q, R>
     where
         F: FnMut(P) -> Q,
@@ -61,6 +75,12 @@ impl<R> Default for Container<R> {
         Self {
             items: Default::default(),
         }
+    }
+}
+
+impl<R> From<Vec<Item<R>>> for Container<R> {
+    fn from(items: Vec<Item<R>>) -> Self {
+        Self { items }
     }
 }
 

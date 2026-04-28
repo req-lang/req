@@ -6,25 +6,31 @@ use crate::{
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Node<N, R, E, M> {
     pub payload: N,
-    pub meta: Meta<markup::Node<M, R>>,
-    pub variant: Variant<usize, R, Vec<expression::Node<E, R>>, markup::Node<M, R>>,
+    pub meta: NodeMeta<M, R>,
+    pub variant: NodeVariant<R, E, M>,
 }
 
-impl<N, R, E, M> Node<N, R, E, M> {
-    pub fn markups(&self) -> impl Iterator<Item = &markup::Node<M, R>> {
-        let mut ret = Vec::new();
+pub type NodeVariant<R, E, M> = Variant<usize, R, Vec<expression::Node<E, R>>, markup::Node<M, R>>;
+pub type NodeMeta<M, R> = Meta<markup::Node<M, R>>;
 
-        ret.extend(self.variant.markups());
-        ret.extend(self.meta.comment.iter());
-        ret.into_iter()
+impl<N, R, E, M> Node<N, R, E, M> {
+    pub fn empty(meta: NodeMeta<M, R>, variant: NodeVariant<R, E, M>) -> Self
+    where
+        N: Default,
+    {
+        Self {
+            payload: Default::default(),
+            meta,
+            variant,
+        }
     }
 
-    pub fn markups_mut(&mut self) -> impl Iterator<Item = &mut markup::Node<M, R>> {
-        let mut ret = Vec::new();
-
-        ret.extend(self.variant.markups_mut());
-        ret.extend(self.meta.comment.iter_mut());
-        ret.into_iter()
+    pub fn new(payload: N, meta: NodeMeta<M, R>, variant: NodeVariant<R, E, M>) -> Self {
+        Self {
+            payload,
+            meta,
+            variant,
+        }
     }
 
     pub fn map<F, Q>(self, mut f: F) -> Node<Q, R, E, M>
@@ -51,6 +57,46 @@ impl<N, R, E, M> Node<N, R, E, M> {
                 .mape(|e| e.into_iter().map(|e| e.mapr(&mut f)).collect())
                 .mapm(|m| m.mapr(&mut f)),
         }
+    }
+
+    pub fn mape<F, G>(self, mut f: F) -> Node<N, R, G, M>
+    where
+        F: FnMut(E) -> G,
+    {
+        Node {
+            payload: self.payload,
+            meta: self.meta,
+            variant: self
+                .variant
+                .mape(|e| e.into_iter().map(|e| e.map(&mut f)).collect()),
+        }
+    }
+
+    pub fn mapm<F, G>(self, mut f: F) -> Node<N, R, E, G>
+    where
+        F: FnMut(M) -> G,
+    {
+        Node {
+            payload: self.payload,
+            meta: self.meta.mapm(|m| m.map(&mut f)),
+            variant: self.variant.mapm(|e| e.map(&mut f)),
+        }
+    }
+
+    pub fn markups(&self) -> impl Iterator<Item = &markup::Node<M, R>> {
+        let mut ret = Vec::new();
+
+        ret.extend(self.variant.markups());
+        ret.extend(self.meta.comment.iter());
+        ret.into_iter()
+    }
+
+    pub fn markups_mut(&mut self) -> impl Iterator<Item = &mut markup::Node<M, R>> {
+        let mut ret = Vec::new();
+
+        ret.extend(self.variant.markups_mut());
+        ret.extend(self.meta.comment.iter_mut());
+        ret.into_iter()
     }
 }
 
@@ -555,6 +601,16 @@ impl<R> Default for Meta<R> {
     fn default() -> Self {
         Self {
             label: Default::default(),
+            tags: Default::default(),
+            comment: Default::default(),
+        }
+    }
+}
+
+impl<R> From<String> for Meta<R> {
+    fn from(value: String) -> Self {
+        Self {
+            label: value,
             tags: Default::default(),
             comment: Default::default(),
         }
