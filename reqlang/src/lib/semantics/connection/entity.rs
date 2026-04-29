@@ -7,7 +7,7 @@ use crate::{
     utils::take::Take,
 };
 
-pub type Node<E, M> = link::entity::Node<Neighbors<Connection<Idx>>, E, M>;
+pub(super) type Node<E, M> = link::entity::Node<Neighbors<Connection<Idx>>, E, M>;
 
 #[derive(Debug, Clone)]
 pub struct Neighbors<R> {

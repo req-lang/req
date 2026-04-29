@@ -5,8 +5,13 @@ pub mod simple {
 
     use reqlang::{
         mock::generator::ExponentialSizeIterator,
+        node::entity::Idx,
         semantics::{
-            connection, link,
+            connection::{
+                self,
+                entity::{Connection, Neighbors},
+            },
+            link,
             typing::{self, TypeResult},
         },
         syntax,
@@ -16,7 +21,7 @@ pub mod simple {
 
     fn complete_pipeline(
         root: Vec<syntax::entity::Node>,
-    ) -> Vec<connection::entity::Node<TypeResult, ()>> {
+    ) -> Vec<link::entity::Node<Neighbors<Connection<Idx>>, TypeResult, ()>> {
         let ast = root;
         let resolved = link::resolve(ast);
         let typing = typing::evaluate(resolved);

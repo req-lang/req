@@ -559,18 +559,8 @@ dependencies = [
  "pest",
  "pest_derive",
  "pretty_assertions",
- "reqlang_derive",
  "thiserror",
  "unindent",
-]
-
-[[package]]
-name = "reqlang_derive"
-version = "0.1.0"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
 ]
 
 [[package]]

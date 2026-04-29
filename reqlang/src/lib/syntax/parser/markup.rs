@@ -7,7 +7,11 @@ use crate::{
     syntax::tokenizer::markup::{IntoTokens, Token},
 };
 
-pub type Node = node::markup::Node<(), Reference>;
+pub(in crate::syntax) type Node = node::markup::Node<(), Reference>;
+
+pub fn parse<S: ToString>(s: &S) -> Node {
+    Node::from(s.to_string())
+}
 
 impl Item<Reference> {
     pub fn to_string(self) -> String {

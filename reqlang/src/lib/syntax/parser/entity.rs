@@ -16,7 +16,7 @@ use crate::{
     },
 };
 
-pub type Node = node::entity::Node<Span, Reference, Reference, Span, ()>;
+pub(in crate::syntax) type Node = node::entity::Node<Span, Reference, Reference, Span, ()>;
 // INVARIANT: Always parsed in DFS order (to allow iterating directly over the Vec<Node>)
 // TODO: Use peek_nth to avoid reset_peek
 pub fn parse(tokens: &mut MultiPeek<TokenIterator>, arena: &mut Vec<Node>) -> Result<Idx, Span> {

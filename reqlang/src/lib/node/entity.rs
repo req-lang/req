@@ -38,17 +38,18 @@ impl<N, R, T, E, M> Index<Idx> for Vec<Node<N, R, T, E, M>> {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub struct Node<N, R, T, E, M> {
+pub struct Node<N, R, T, E, M, I = Idx, J = expression::Idx> {
     pub payload: N,
     pub meta: NodeMeta<M, R>,
-    pub variant: NodeVariant<R, T, E, M>,
+    pub variant: NodeVariant<R, T, E, M, I, J>,
 }
 
-pub type NodeVariant<R, T, E, M> = Variant<Idx, R, Vec<expression::Node<E, T>>, markup::Node<M, R>>;
+pub type NodeVariant<R, T, E, M, I = Idx, J = expression::Idx> =
+    Variant<I, R, Vec<expression::Node<E, T, J>>, markup::Node<M, R>>;
 pub type NodeMeta<M, R> = Meta<markup::Node<M, R>>;
 
-impl<N, R, T, E, M> Node<N, R, T, E, M> {
-    pub fn empty(meta: NodeMeta<M, R>, variant: NodeVariant<R, T, E, M>) -> Self
+impl<N, R, T, E, M, I, J> Node<N, R, T, E, M, I, J> {
+    pub fn empty(meta: NodeMeta<M, R>, variant: NodeVariant<R, T, E, M, I, J>) -> Self
     where
         N: Default,
     {
@@ -59,7 +60,7 @@ impl<N, R, T, E, M> Node<N, R, T, E, M> {
         }
     }
 
-    pub fn new(payload: N, meta: NodeMeta<M, R>, variant: NodeVariant<R, T, E, M>) -> Self {
+    pub fn new(payload: N, meta: NodeMeta<M, R>, variant: NodeVariant<R, T, E, M, I, J>) -> Self {
         Self {
             payload,
             meta,
@@ -67,7 +68,7 @@ impl<N, R, T, E, M> Node<N, R, T, E, M> {
         }
     }
 
-    pub fn map<F, Q>(self, f: F) -> Node<Q, R, T, E, M>
+    pub fn map<F, Q>(self, f: F) -> Node<Q, R, T, E, M, I, J>
     where
         F: FnOnce(N) -> Q,
     {
@@ -78,7 +79,7 @@ impl<N, R, T, E, M> Node<N, R, T, E, M> {
         }
     }
 
-    pub fn mapr<F, S>(self, mut f: F) -> Node<N, S, T, E, M>
+    pub fn mapr<F, S>(self, mut f: F) -> Node<N, S, T, E, M, I, J>
     where
         F: FnMut(R) -> S,
     {
@@ -89,7 +90,7 @@ impl<N, R, T, E, M> Node<N, R, T, E, M> {
         }
     }
 
-    pub fn mapt<F, U>(self, mut f: F) -> Node<N, R, U, E, M>
+    pub fn mapt<F, U>(self, mut f: F) -> Node<N, R, U, E, M, I, J>
     where
         F: FnMut(T) -> U,
     {
@@ -102,7 +103,7 @@ impl<N, R, T, E, M> Node<N, R, T, E, M> {
         }
     }
 
-    pub fn mape<F, G>(self, mut f: F) -> Node<N, R, T, G, M>
+    pub fn mape<F, G>(self, mut f: F) -> Node<N, R, T, G, M, I, J>
     where
         F: FnMut(E) -> G,
     {
@@ -115,7 +116,7 @@ impl<N, R, T, E, M> Node<N, R, T, E, M> {
         }
     }
 
-    pub fn mapm<F, G>(self, mut f: F) -> Node<N, R, T, E, G>
+    pub fn mapm<F, G>(self, mut f: F) -> Node<N, R, T, E, G, I, J>
     where
         F: FnMut(M) -> G,
     {

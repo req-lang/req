@@ -17,7 +17,7 @@ use pest_derive;
 #[grammar = "grammars/expression.pest"]
 struct PairParser;
 
-pub type Node = node::expression::Node<Span, Reference>;
+pub(in crate::syntax) type Node = node::expression::Node<Span, Reference>;
 
 pub fn parse(input: &str, offset: &Position) -> Result<Vec<Node>, Span> {
     let mut arena = Vec::new();
@@ -29,9 +29,7 @@ pub fn parse(input: &str, offset: &Position) -> Result<Vec<Node>, Span> {
             let arena = arena
                 .into_iter()
                 .map(|node| {
-                    let variant = node
-                        .variant
-                        .mape(|idx| (len - 1 - usize::from(idx)).into());
+                    let variant = node.variant.mape(|idx| (len - 1 - usize::from(idx)).into());
                     Node::new(node.payload, variant)
                 })
                 .collect();
@@ -242,9 +240,7 @@ impl<'s> Builder<'s> {
                         }
                         Variant::Function(function)
                     }
-                    Rule::fac => {
-                        Variant::UnaryOp(UnaryOp::new(UnaryOperator::Factorial, n.into()))
-                    }
+                    Rule::fac => Variant::UnaryOp(UnaryOp::new(UnaryOperator::Factorial, n.into())),
                     _ => unreachable!(),
                 };
 

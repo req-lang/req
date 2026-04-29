@@ -1,10 +1,10 @@
 use crate::{
     node::{self},
     reference::Reference,
-    semantics::link::{Result, entity},
+    semantics::link::{Link, entity},
 };
 
-pub type Node<P> = node::markup::Node<P, Result<node::entity::Idx>>;
+pub type Node<P> = node::markup::Node<P, Link<node::entity::Idx>>;
 
 pub(super) fn link<P, R: Into<Reference> + Clone>(
     paths: &entity::FindCtx<R>,

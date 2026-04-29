@@ -35,13 +35,13 @@ impl<P, R> Index<Idx> for Vec<Node<P, R>> {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct Node<P, R> {
+pub struct Node<P, R, I = Idx> {
     pub payload: P,
-    pub variant: Variant<Idx, R>,
+    pub variant: Variant<I, R>,
 }
 
-impl<P, R> Node<P, R> {
-    pub fn empty(variant: Variant<Idx, R>) -> Self
+impl<P, R, I> Node<P, R, I> {
+    pub fn empty(variant: Variant<I, R>) -> Self
     where
         P: Default,
     {
@@ -51,11 +51,11 @@ impl<P, R> Node<P, R> {
         }
     }
 
-    pub fn new(payload: P, variant: Variant<Idx, R>) -> Self {
+    pub fn new(payload: P, variant: Variant<I, R>) -> Self {
         Self { payload, variant }
     }
 
-    pub fn map<F, Q>(self, f: F) -> Node<Q, R>
+    pub fn map<F, Q>(self, f: F) -> Node<Q, R, I>
     where
         F: FnOnce(P) -> Q,
     {
@@ -65,7 +65,7 @@ impl<P, R> Node<P, R> {
         }
     }
 
-    pub fn mapr<F, S>(self, f: F) -> Node<P, S>
+    pub fn mapr<F, S>(self, f: F) -> Node<P, S, I>
     where
         F: FnMut(R) -> S,
     {

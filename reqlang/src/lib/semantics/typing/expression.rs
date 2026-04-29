@@ -54,7 +54,7 @@ impl From<&Issue> for Severity {
     }
 }
 
-pub type Node = link::expression::Node<super::TypeResult>;
+type Node = link::expression::Node<super::TypeResult>;
 
 pub(super) fn evaluate<E>(
     arena: Vec<link::expression::Node<E>>,

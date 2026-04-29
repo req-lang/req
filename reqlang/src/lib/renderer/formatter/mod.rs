@@ -7,6 +7,13 @@ pub mod expression;
 pub mod markup;
 mod padding;
 
+pub fn format<W: std::io::Write, N, R: Display, T: Display, E, M>(
+    arena: &Vec<node::entity::Node<N, R, T, E, M>>,
+    out: &mut W,
+) -> std::io::Result<()> {
+    entity::format(arena, 0.into(), 0, out)
+}
+
 pub fn format_string<N, R: Display, T: Display, E, M>(
     arena: &Vec<node::entity::Node<N, R, T, E, M>>,
     indent: usize,

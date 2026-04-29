@@ -8,7 +8,7 @@ use crate::semantics::{
     },
 };
 
-pub type Node<N, M> = link::entity::Node<N, TypeResult, M>;
+pub(super) type Node<N, M> = link::entity::Node<N, TypeResult, M>;
 
 pub(super) fn evaluate<N, E, M>(
     types: Vec<RefCell<Vec<Option<TypeResult>>>>,

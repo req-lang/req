@@ -1,14 +1,21 @@
 use reqlang::{
+    node::entity::Idx,
     semantics::{
-        connection::{self},
-        link, typing,
+        connection::{
+            self,
+            entity::{Connection, Neighbors},
+        },
+        link,
+        typing::{self, TypeResult},
     },
     syntax,
 };
 
 pub const PATH_ROOT: &str = "tests/data/valid";
 
-fn assert_valid_parsing_and_analysis(filename: &str) -> Vec<connection::entity::Node<(), ()>> {
+fn assert_valid_parsing_and_analysis(
+    filename: &str,
+) -> Vec<link::entity::Node<Neighbors<Connection<Idx>>, TypeResult, ()>> {
     let path = std::path::PathBuf::from(PATH_ROOT).join(filename);
     let input = std::fs::read_to_string(path).unwrap();
     let result = syntax::parser::parse(&input);
@@ -20,9 +27,9 @@ fn assert_valid_parsing_and_analysis(filename: &str) -> Vec<connection::entity::
         .into_iter()
         .map(syntax::entity::Node::from)
         .collect();
-    let resolved = link::resolve(ast);
-    let _ = typing::evaluate(resolved.clone());
-    let connected = connection::connect(resolved);
+    let arena = link::resolve(ast);
+    let arena = typing::evaluate(arena);
+    let arena = connection::connect(arena);
 
     //
     // let issues: Vec<_> = NodeIter::new(connected.clone())
@@ -35,7 +42,7 @@ fn assert_valid_parsing_and_analysis(filename: &str) -> Vec<connection::entity::
     // }
     // assert!(issues.is_empty());
 
-    connected
+    arena
 }
 
 mod valid {

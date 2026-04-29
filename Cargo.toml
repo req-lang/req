@@ -1,6 +1,6 @@
 [workspace]
 
-members = ["reqlang", "reqlang_derive", "reqtool"]
+members = ["reqlang", "reqtool"]
 resolver = "2"
 
 [profile.profiling]
