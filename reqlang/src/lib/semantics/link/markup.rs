@@ -1,36 +1,14 @@
-use reqlang_derive::IntoItems;
-
 use crate::{
-    node::markup::Container,
-    node::{self, markup::IntoItems},
+    node::{self},
     reference::Reference,
-    semantics::link::{self, WeakNodeRef, entity},
-    syntax::{self},
+    semantics::link::{Result, entity},
 };
 
-#[derive(Default, Debug, Clone, IntoItems)]
-pub struct Node {
-    pub container: Container<link::ResultRef<entity::Node>>,
-}
+pub type Node<P> = node::markup::Node<P, Result<node::entity::Idx>>;
 
-impl From<Container<link::ResultRef<entity::Node>>> for Node {
-    fn from(container: Container<link::ResultRef<entity::Node>>) -> Self {
-        Self { container }
-    }
-}
-
-pub(super) fn link(paths: &entity::SubPaths, node: &mut Node) {
-    for rf in node.container.references_mut() {
-        if let Some(found) = entity::find(paths.entity, rf.as_ref().err().unwrap(), &paths.ctx) {
-            *rf = Ok(found.clone());
-        }
-    }
-}
-
-pub(super) fn init_nodes(node: syntax::parser::markup::Node) -> Node {
-    Node {
-        container: node
-            .container
-            .mapr(|r| Err::<WeakNodeRef<entity::Node>, Reference>(r)),
-    }
+pub(super) fn link<P, R: Into<Reference> + Clone>(
+    paths: &entity::FindCtx<R>,
+    node: node::markup::Node<P, R>,
+) -> Node<P> {
+    node.mapr(|r| entity::find(paths, r))
 }

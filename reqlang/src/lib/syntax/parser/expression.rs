@@ -24,6 +24,7 @@ pub fn parse(input: &str, offset: &Position) -> Result<Vec<Node>, Span> {
     match PairParser::parse(Rule::expr, input) {
         Ok(mut pair) => {
             Builder::new(offset).build(pair.next().unwrap(), &mut arena);
+            arena.reverse();
             Ok(arena)
         }
         Err(err) => Err(Span::from((err.line_col, err.location)) + *offset),
@@ -39,12 +40,12 @@ impl<'s> Builder<'s> {
         Self { offset }
     }
 
-    fn build(&self, pair: Pair<Rule>, arena: &mut Vec<Node>) -> usize {
+    fn build(&self, pair: Pair<Rule>, arena: &mut Vec<Node>) -> Idx {
         let ar = Rc::new(RefCell::new(arena));
         let node = pratt_parser()
             .map_primary(|primary| {
                 let mut arena = ar.borrow_mut();
-                let span = Span::from(primary.as_span());
+                let span = Span::from(primary.as_span()) + *self.offset;
                 match primary.as_rule() {
                     Rule::ident => {
                         let value = primary.as_str().to_string();
@@ -203,33 +204,35 @@ impl<'s> Builder<'s> {
             .map_infix(|lhs, op, rhs| {
                 let n = ar.borrow().len();
                 ar.borrow_mut().extend([lhs, rhs]);
-                let span = op.as_span().into();
+                let span = Span::from(op.as_span()) + *self.offset;
                 let operator = op.as_rule().into();
-                let variant = Variant::BinOp(BinOp::new(operator, n, n + 1));
+                let variant = Variant::BinOp(BinOp::new(operator, n.into(), (n + 1).into()));
 
                 Node::new(span, variant)
             })
             .map_prefix(|op, operand| {
                 ar.borrow_mut().push(operand);
-                let span = op.as_span().into();
+                let span = Span::from(op.as_span()) + *self.offset;
                 let operator = op.as_rule().into();
-                let variant = Variant::UnaryOp(UnaryOp::new(operator, ar.borrow().len()));
+                let variant = Variant::UnaryOp(UnaryOp::new(operator, ar.borrow().len().into()));
 
                 Node::new(span, variant)
             })
             .map_postfix(|operand, op| {
                 let mut ar = ar.borrow_mut();
                 ar.push(operand);
-                let span = op.as_span().into();
+                let span = Span::from(op.as_span()) + *self.offset;
                 let variant = match op.as_rule() {
                     Rule::call => {
-                        let mut function = Function::new(ar.len());
+                        let mut function = Function::new(ar.len().into());
                         for p in op.into_inner() {
                             function.arguments.push(self.build(p, *ar));
                         }
                         Variant::Function(function)
                     }
-                    Rule::fac => Variant::UnaryOp(UnaryOp::new(UnaryOperator::Factorial, ar.len())),
+                    Rule::fac => {
+                        Variant::UnaryOp(UnaryOp::new(UnaryOperator::Factorial, ar.len().into()))
+                    }
                     _ => unreachable!(),
                 };
 
@@ -238,7 +241,7 @@ impl<'s> Builder<'s> {
             .parse(pair.into_inner());
 
         ar.borrow_mut().push(node);
-        ar.borrow().len()
+        ar.borrow().len().into()
     }
 }
 

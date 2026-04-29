@@ -1,34 +1,55 @@
-use std::rc::Rc;
+use std::cell::RefCell;
 
-use crate::{
-    node::{
-        self, NodeRef,
-        entity::{IntoVariable, VariableMut},
+use crate::semantics::{
+    link::{self},
+    typing::{
+        TypeResult,
+        expression::{self},
     },
-    semantics::{
-        link::{self, WeakNodeRef},
-        typing::{expression, markup},
-    },
-    utils::children::ChildrenIter,
 };
-use reqlang_derive::{ChildrenIter, EntityVariableMut, IntoEntityVariable};
 
-#[derive(Default, Debug, Clone, ChildrenIter, IntoEntityVariable, EntityVariableMut)]
-pub struct Node {
-    pub variant: node::entity::Variant<
-        NodeRef<Node>,
-        link::Result<WeakNodeRef<Node>>,
-        NodeRef<expression::Node>,
-        markup::Node,
-    >,
+pub type Node<N, M> = link::entity::Node<N, TypeResult, M>;
+
+pub(super) fn evaluate<N, E, M>(
+    types: Vec<RefCell<Vec<Option<TypeResult>>>>,
+    arena: Vec<link::entity::Node<N, E, M>>,
+) -> Vec<Node<N, M>> {
+    arena
+        .into_iter()
+        .zip(types)
+        .map(|(node, t)| {
+            // Workaround because mape is FnMut. might be removed with proper units semantics
+            let mut typ = Some(t.into_inner());
+            let variant = node
+                .variant
+                .mape(|n| expression::evaluate(n, typ.take().unwrap()));
+            Node::new(node.payload, node.meta, variant)
+        })
+        .collect()
 }
 
-pub(super) fn evaluate(node: NodeRef<Node>) {
-    for child in node.borrow().variant.children_iter() {
-        evaluate(child);
+pub(super) fn init_types<N, E, M>(
+    arena: &Vec<link::entity::Node<N, E, M>>,
+) -> Vec<RefCell<Vec<Option<TypeResult>>>> {
+    let mut types = Vec::with_capacity(arena.len());
+    for expr in arena.iter().map(|n| n.variant.expressions().next()) {
+        let init = match expr {
+            Some(expr) => {
+                let mut t = Vec::with_capacity(expr.len());
+                t.extend(std::iter::repeat(None).take(expr.len()));
+                t
+            }
+
+            None => Vec::new(),
+        };
+        types.push(RefCell::new(init));
     }
 
-    for expr in node.borrow().variant.expressions() {
-        expression::evaluate(Rc::clone(expr));
+    for (idx, node) in arena.iter().enumerate() {
+        if let Some(expr) = node.variant.expressions().next() {
+            expression::init_types(&arena, &expr[..], idx.into(), &types, None);
+        }
     }
+
+    types
 }

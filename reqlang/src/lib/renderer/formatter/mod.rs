@@ -1,19 +1,25 @@
-use std::cell::Ref;
+use std::fmt::Display;
 
-use crate::syntax::entity::Node;
+use crate::node;
 
 pub mod entity;
 pub mod expression;
 pub mod markup;
 mod padding;
 
-pub fn format_string(node: Ref<'_, Node>, indent: usize) -> String {
+pub fn format_string<N, R: Display, T: Display, E, M>(
+    arena: &Vec<node::entity::Node<N, R, T, E, M>>,
+    indent: usize,
+) -> String {
     let mut buf = Vec::new();
-    entity::format(node, indent, &mut buf).unwrap();
+    entity::format(arena, 0.into(), indent, &mut buf).unwrap();
     String::from_utf8(buf).unwrap()
 }
 
-pub fn format_to_file(node: Ref<'_, Node>, path: &std::path::Path) -> std::io::Result<()> {
+pub fn format_to_file<N, R: Display, T: Display, E, M>(
+    arena: &Vec<node::entity::Node<N, R, T, E, M>>,
+    path: &std::path::Path,
+) -> std::io::Result<()> {
     let mut file = std::fs::File::create(path)?;
-    entity::format(node, 0, &mut file)
+    entity::format(arena, 0.into(), 0, &mut file)
 }

@@ -1,12 +1,10 @@
-use std::{cell::Ref, ops::Add};
+use std::{fmt::Display, ops::Add};
 
 use crate::{
-    node::{
-        NodeRef,
-        expression::{Aggregator, BinaryOperator, Case, OptimizerKind, SetElement, UnaryOperator},
+    node::expression::{
+        Aggregator, BinaryOperator, Case, Idx, Node, OptimizerKind, SetElement, UnaryOperator,
     },
     renderer::formatter::padding::pad,
-    syntax::expression::Node,
 };
 
 #[derive(Default, Debug, Copy, Clone)]
@@ -55,9 +53,15 @@ impl Ctx {
     }
 }
 
-pub fn format<W: std::io::Write>(node: Ref<Node>, ctx: Ctx, out: &mut W) -> std::io::Result<()> {
+pub fn format<W: std::io::Write, E, T: Display>(
+    arena: &Vec<Node<E, T>>,
+    idx: Idx,
+    ctx: Ctx,
+    out: &mut W,
+) -> std::io::Result<()> {
     use crate::node::expression::Variant::*;
 
+    let node = &arena[idx];
     let pd = pad(ctx.indent);
     let parens = ctx.parens;
     let sep = if ctx.indent > 0 { "\n" } else { " " };
@@ -71,11 +75,11 @@ pub fn format<W: std::io::Write>(node: Ref<Node>, ctx: Ctx, out: &mut W) -> std:
     match &node.variant {
         Branch(branch) => {
             write!(out, "if ")?;
-            format_case(&branch.case, out)?;
+            format_case(arena, &branch.case, out)?;
 
             if let Some(otherwise) = &branch.otherwise {
                 write!(out, "{}{}else ", sep, pd)?;
-                format(otherwise.borrow(), Ctx::default(), out)?;
+                format(arena, *otherwise, Ctx::default(), out)?;
             }
         }
 
@@ -84,7 +88,7 @@ pub fn format<W: std::io::Write>(node: Ref<Node>, ctx: Ctx, out: &mut W) -> std:
             let pd1 = pad(ctx.indent + 1);
             for (idx, case) in when.cases.iter().enumerate() {
                 write!(out, "{}", pd1)?;
-                format_case(&case, out)?;
+                format_case(arena, case, out)?;
                 if idx < when.cases.len() - 1 || when.otherwise.is_some() {
                     write!(out, ",{}", sep)?;
                 }
@@ -92,36 +96,36 @@ pub fn format<W: std::io::Write>(node: Ref<Node>, ctx: Ctx, out: &mut W) -> std:
 
             if let Some(otherwise) = &when.otherwise {
                 write!(out, "{}otherwise ", pd1)?;
-                format(otherwise.borrow(), Ctx::default(), out)?;
+                format(arena, *otherwise, Ctx::default(), out)?;
             }
         }
 
         Forall(forall) => {
             write!(out, "forall ")?;
-            format_set_elem(&forall.set, out)?;
+            format_set_elem(arena, &forall.set, out)?;
             write!(out, "{}", sep)?;
-            format(forall.expression.borrow(), ctx + 1, out)?;
+            format(arena, forall.expression, ctx + 1, out)?;
         }
 
         Exists(exists) => {
             write!(out, "exists ")?;
-            format_set_elem(&exists.set, out)?;
+            format_set_elem(arena, &exists.set, out)?;
         }
 
         Select(select) => {
             write!(out, "select ")?;
-            format_set_elem(&select.set, out)?;
+            format_set_elem(arena, &select.set, out)?;
             if let Some(ref optimizer) = select.optimizer {
                 let symbol = optimizer_symbol(&optimizer.kind);
                 write!(out, "{}{}{}{}", sep, pd, symbol, sep)?;
-                format(optimizer.expression.borrow(), ctx + 1, out)?;
+                format(arena, optimizer.expression, ctx + 1, out)?;
             }
         }
 
         Aggregation(aggregation) => {
             write!(out, "{}{}", aggregator_symbol(&aggregation.aggregator), sep)?;
             for (idx, val) in aggregation.expressions.iter().enumerate() {
-                format(val.borrow(), ctx + 1, out)?;
+                format(arena, *val, ctx + 1, out)?;
                 if idx < aggregation.expressions.len() - 1 {
                     write!(out, ",{}", sep)?;
                 }
@@ -129,41 +133,41 @@ pub fn format<W: std::io::Write>(node: Ref<Node>, ctx: Ctx, out: &mut W) -> std:
         }
 
         UnaryOp(unary) => {
-            let operand = unary.operand.borrow();
+            let operand = &arena[unary.operand];
             let parens = operand.variant.needs_parentheses(&node.variant, false);
             let sub = ctx.with_parens(parens).inline();
             let symbol = unary_symbol(&unary.operator);
             match unary.is_postfix() {
                 true => {
-                    format(unary.operand.borrow(), sub, out)?;
+                    format(arena, unary.operand, sub, out)?;
                     write!(out, " {}", symbol)?;
                 }
                 false => {
                     write!(out, "{} ", symbol)?;
-                    format(unary.operand.borrow(), sub, out)?;
+                    format(arena, unary.operand, sub, out)?;
                 }
             }
         }
 
         BinOp(bin_op) => {
-            let left = bin_op.left.borrow();
+            let left = &arena[bin_op.left];
             let left_parens = left.variant.needs_parentheses(&node.variant, false);
             let sub = ctx.with_parens(left_parens).inline();
-            format(bin_op.left.borrow(), sub, out)?;
+            format(arena, bin_op.left, sub, out)?;
 
             write!(out, " {} ", binary_symbol(&bin_op.operator))?;
 
-            let right = bin_op.right.borrow();
+            let right = &arena[bin_op.right];
             let right_parens = right.variant.needs_parentheses(&node.variant, true);
             let sub = ctx.with_parens(right_parens).inline();
-            format(bin_op.right.borrow(), sub, out)?;
+            format(arena, bin_op.right, sub, out)?;
         }
 
         Function(function) => {
-            format(function.expression.borrow(), ctx, out)?;
+            format(arena, function.expression, ctx, out)?;
             write!(out, "( ")?;
             for (idx, arg) in function.arguments.iter().enumerate() {
-                format(arg.borrow(), Ctx::default(), out)?;
+                format(arena, *arg, Ctx::default(), out)?;
                 if idx < function.arguments.len() - 1 {
                     write!(out, ", ")?;
                 }
@@ -174,7 +178,7 @@ pub fn format<W: std::io::Write>(node: Ref<Node>, ctx: Ctx, out: &mut W) -> std:
         Set(set) => {
             write!(out, "{{ ")?;
             for (idx, elem) in set.elements.iter().enumerate() {
-                format(elem.borrow(), Ctx::default(), out)?;
+                format(arena, *elem, Ctx::default(), out)?;
                 if idx < set.elements.len() - 1 {
                     write!(out, ", ")?;
                 }
@@ -202,22 +206,27 @@ pub fn format<W: std::io::Write>(node: Ref<Node>, ctx: Ctx, out: &mut W) -> std:
     Ok(())
 }
 
-fn format_case<W: std::io::Write>(case: &Case<NodeRef<Node>>, out: &mut W) -> std::io::Result<()> {
-    format(case.condition.borrow(), Ctx::default(), out)?;
+fn format_case<W: std::io::Write, E, T: Display>(
+    arena: &Vec<Node<E, T>>,
+    case: &Case<Idx>,
+    out: &mut W,
+) -> std::io::Result<()> {
+    format(arena, case.condition, Ctx::default(), out)?;
     write!(out, " then ")?;
-    format(case.consequence.borrow(), Ctx::default(), out)
+    format(arena, case.consequence, Ctx::default(), out)
 }
 
-fn format_set_elem<W: std::io::Write>(
-    set: &SetElement<NodeRef<Node>>,
+fn format_set_elem<W: std::io::Write, E, T: Display>(
+    arena: &Vec<Node<E, T>>,
+    set: &SetElement<Idx>,
     out: &mut W,
 ) -> std::io::Result<()> {
     write!(out, "{} in ", set.variable)?;
-    format(set.domain.borrow(), Ctx::default(), out)?;
+    format(arena, set.domain, Ctx::default(), out)?;
 
     if let Some(ref filter) = set.filter {
         write!(out, " such that ")?;
-        format(filter.borrow(), Ctx::default(), out)?;
+        format(arena, *filter, Ctx::default(), out)?;
     }
 
     Ok(())

@@ -1,36 +1,15 @@
-use std::rc::Rc;
-
 use crate::{
-    node::{
-        self, NodeRef,
-        entity::{Label, VariableMut},
-    },
+    node::entity::{Idx, TraceabilityKind},
     semantics::{
-        connection::{expression, graph::Graph, issue::IssueKind, markup},
-        link::{self, WeakNodeRef},
+        connection::{graph::Graph, issue::IssueKind},
+        link::{self},
     },
-    utils::{children::ChildrenIter, take::Take},
+    utils::take::Take,
 };
-use reqlang_derive::{ChildrenIter, EntityVariableMut};
 
-#[derive(Default, Debug, Clone, ChildrenIter, EntityVariableMut)]
-pub struct Node {
-    pub neighbors: Neighbors<Connection<WeakNodeRef<Node>>>,
-    pub variant: node::entity::Variant<
-        NodeRef<Node>,
-        link::Result<WeakNodeRef<Node>>,
-        NodeRef<expression::Node>,
-        markup::Node,
-    >,
-}
+pub type Node<E, M> = link::entity::Node<Neighbors<Connection<Idx>>, E, M>;
 
-impl Label for Node {
-    fn label(&self) -> String {
-        self.variant.meta().label.clone()
-    }
-}
-
-#[derive(Default, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct Neighbors<R> {
     pub inbound: Inbound<R>,
     pub outbound: Outbound<R>,
@@ -53,7 +32,7 @@ pub struct Connection<R> {
     pub issue: Vec<IssueKind>,
 }
 
-fn from_vec(x: Vec<WeakNodeRef<Node>>) -> Vec<Connection<WeakNodeRef<Node>>> {
+fn from_vec(x: Vec<Idx>) -> Vec<Connection<Idx>> {
     x.into_iter().map(|ptr| Connection::from(ptr)).collect()
 }
 
@@ -92,6 +71,16 @@ impl<R> Traceability<R> {
             issues: self.issues,
         }
     }
+
+    pub fn iter(&self) -> impl Iterator<Item = (&R, TraceabilityKind)> {
+        use TraceabilityKind::*;
+
+        let derivations = self.derivations.iter().map(|c| (c, Derivation));
+        let refinements = self.refinements.iter().map(|c| (c, Refinement));
+        let specializations = self.specializations.iter().map(|c| (c, Specialization));
+
+        derivations.chain(refinements).chain(specializations)
+    }
 }
 
 // Derived from outbound connections
@@ -129,17 +118,6 @@ pub struct Outbound<R> {
     pub traceability: Traceability<R>,
 }
 
-impl<R: Default> Default for Outbound<R> {
-    fn default() -> Self {
-        Self {
-            usages: Default::default(),
-            restriction: Err(IssueKind::MissingRequirementBinding),
-            allocation: Default::default(),
-            traceability: Default::default(),
-        }
-    }
-}
-
 impl<R> Outbound<R> {
     pub fn mapr<S>(self, mut f: impl Fn(R) -> S) -> Outbound<S> {
         Outbound {
@@ -151,41 +129,47 @@ impl<R> Outbound<R> {
     }
 }
 
-pub(super) fn connect(node: NodeRef<Node>, graph: &mut Graph) {
-    let ptr = Rc::as_ptr(&node);
-    let mut node_ref = node.borrow_mut();
+pub(super) fn connect<N, E, M>(
+    arena: Vec<link::entity::Node<N, E, M>>,
+    graph: &mut Graph,
+) -> Vec<Node<E, M>> {
+    arena
+        .into_iter()
+        .enumerate()
+        .map(|(idx, n)| n.map(|_| make_neighbors(idx.into(), graph)))
+        .collect()
+}
 
-    node_ref.neighbors.parent = graph.parent.remove(&ptr).map(Connection::from);
-    node_ref.neighbors.inbound = Inbound {
-        restrictions: from_vec(graph.inbound.restrictions.take(&ptr)),
-        allocations: from_vec(graph.inbound.allocations.take(&ptr)),
-        usages: from_vec(graph.inbound.usages.take(&ptr)),
-        traceability: Traceability {
-            derivations: from_vec(graph.inbound.derivations.take(&ptr)),
-            refinements: from_vec(graph.inbound.refinements.take(&ptr)),
-            specializations: from_vec(graph.inbound.specializations.take(&ptr)),
+fn make_neighbors(nd: Idx, graph: &mut Graph) -> Neighbors<Connection<Idx>> {
+    Neighbors {
+        parent: graph.parent.remove(&nd).map(Connection::from),
+        inbound: Inbound {
+            restrictions: from_vec(graph.inbound.restrictions.take(&nd)),
+            allocations: from_vec(graph.inbound.allocations.take(&nd)),
+            usages: from_vec(graph.inbound.usages.take(&nd)),
+            traceability: Traceability {
+                derivations: from_vec(graph.inbound.derivations.take(&nd)),
+                refinements: from_vec(graph.inbound.refinements.take(&nd)),
+                specializations: from_vec(graph.inbound.specializations.take(&nd)),
+                issues: Vec::new(),
+            },
             issues: Vec::new(),
         },
-        issues: Vec::new(),
-    };
-    node_ref.neighbors.outbound = Outbound {
-        restriction: graph
-            .outbound
-            .restriction
-            .remove(&ptr)
-            .map(Connection::from)
-            .ok_or(IssueKind::MissingRequirementBinding),
-        allocation: graph.outbound.allocation.remove(&ptr).map(Connection::from),
-        usages: from_vec(graph.outbound.usages.take(&ptr)),
-        traceability: Traceability {
-            derivations: from_vec(graph.outbound.derivations.take(&ptr)),
-            refinements: from_vec(graph.outbound.refinements.take(&ptr)),
-            specializations: from_vec(graph.outbound.specializations.take(&ptr)),
-            issues: Vec::new(),
+        outbound: Outbound {
+            restriction: graph
+                .outbound
+                .restriction
+                .remove(&nd)
+                .map(Connection::from)
+                .ok_or(IssueKind::MissingRequirementBinding),
+            allocation: graph.outbound.allocation.remove(&nd).map(Connection::from),
+            usages: from_vec(graph.outbound.usages.take(&nd)),
+            traceability: Traceability {
+                derivations: from_vec(graph.outbound.derivations.take(&nd)),
+                refinements: from_vec(graph.outbound.refinements.take(&nd)),
+                specializations: from_vec(graph.outbound.specializations.take(&nd)),
+                issues: Vec::new(),
+            },
         },
-    };
-
-    for child in node_ref.variant.children_iter() {
-        connect(child, graph);
     }
 }

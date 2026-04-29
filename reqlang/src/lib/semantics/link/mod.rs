@@ -1,198 +1,167 @@
-use std::{cell::RefCell, rc::Weak};
+use std::collections::HashMap;
 
 use crate::{
-    node::{self, NodeRef},
+    node::{self, entity::Idx},
     reference::Reference,
-    semantics::link::entity::{Ctx, Node, Paths, build_paths, init_nodes, link},
-    syntax,
+    semantics::link::entity::{init_imports, init_paths, iv_paths, link},
 };
 
-pub mod convert;
 pub mod entity;
 pub mod expression;
 pub mod markup;
 
-pub type WeakNodeRef<T> = Weak<RefCell<T>>;
 pub type Result<N> = std::result::Result<N, Reference>;
-pub type ResultRef<N> = Result<WeakNodeRef<N>>;
-pub type ResultTgt<N, E> = Result<expression::Target<WeakNodeRef<N>, WeakNodeRef<E>>>;
 
-pub fn resolve(syntax: NodeRef<syntax::entity::Node>) -> NodeRef<Node> {
-    let node = node::map(syntax, init_nodes);
+pub fn resolve<N, R: Into<Reference> + AsRef<str> + Clone, E, M>(
+    arena: Vec<node::entity::Node<N, R, R, E, M>>,
+) -> Vec<entity::Node<N, E, M>> {
+    let mut paths = HashMap::with_capacity(arena.len());
+    init_paths(&arena, Idx::default(), &Reference::default(), &mut paths);
 
-    let root = Reference::default();
-    let mut paths = Paths::default();
+    let mut parents = Vec::with_capacity(arena.len());
+    init_imports(&arena, 0.into(), Vec::new(), &mut parents);
 
-    build_paths(node.clone(), &root, &mut paths);
-    link(&paths, node.clone(), Ctx::default());
+    let iv = iv_paths(&arena, &paths);
+    link(&paths, iv, parents, arena)
+}
 
-    node
+pub fn paths<N, R: Into<Reference> + AsRef<str> + Clone, E, M>(
+    arena: &Vec<node::entity::Node<N, R, R, E, M>>,
+) -> Vec<Reference> {
+    let mut paths = HashMap::with_capacity(arena.len());
+    init_paths(&arena, Idx::default(), &Reference::default(), &mut paths);
+    iv_paths(&arena, &paths)
+        .into_iter()
+        .map(|p| p[0].clone())
+        .collect()
 }
 
 #[cfg(test)]
 mod tests {
-    use std::rc::Rc;
-
     use pretty_assertions::assert_eq;
 
     use crate::{
         mock,
-        node::{self, NodeRef, entity as entity_node, expression as expr_node, markup},
+        node::{entity as entity_node, expression as expr_node, markup},
         reference::Reference,
-        semantics::link::{entity::Node, expression, resolve},
-        syntax::{self, parser},
-        utils::children::{ChildrenIter, ChildrenMut},
+        semantics::link::{entity, expression, resolve},
+        syntax,
     };
 
-    fn get_child(parent: &NodeRef<Node>, label: &str) -> NodeRef<Node> {
-        parent
-            .borrow()
+    fn get_child(arena: &[entity::Node<(), (), ()>], parent_idx: usize, label: &str) -> usize {
+        arena[parent_idx]
             .variant
-            .children_iter()
-            .find(|n| n.borrow().variant.meta().label == label)
-            .unwrap()
+            .children()
+            .expect("node has no children")
+            .iter()
+            .copied()
+            .find(|idx| arena[usize::from(*idx)].meta.label == label)
+            .map(usize::from)
+            .unwrap_or_else(|| panic!("child '{}' not found", label))
     }
 
-    fn assert_resolves_to(node: &NodeRef<Node>, label: &str) {
-        let rf = node.borrow().variant.references().next().cloned().unwrap();
-        assert!(rf.is_ok());
-        assert_eq!(
-            rf.unwrap().upgrade().unwrap().borrow().variant.meta().label,
-            label
-        );
+    fn assert_resolves_to(arena: &[entity::Node<(), (), ()>], idx: usize, label: &str) {
+        let rf = arena[idx].variant.references().next().cloned().unwrap();
+        assert!(rf.is_ok(), "expected resolved reference, got: {:?}", rf);
+        assert_eq!(arena[usize::from(rf.unwrap())].meta.label, label);
     }
 
     #[test]
     fn resolves_complete_path() {
-        let p = mock::entity::package("p");
-        let r1 = mock::entity::requirement("r1");
-        r1.borrow_mut()
-            .variant
-            .requirement_mut()
-            .unwrap()
-            .restriction = Some(Reference::new("p::x".to_string()));
-        {
-            let mut p_mut = p.borrow_mut();
-            let children = p_mut.variant.children_mut().unwrap();
-            children.push(mock::entity::attribute("x", "real"));
-            children.push(r1);
-        }
+        let mut p = mock::entity::package("p");
+        p.variant.children_mut().unwrap().push(1.into());
+        p.variant.children_mut().unwrap().push(2.into());
 
-        let resolved = resolve(p);
+        let x = mock::entity::attribute("x", "real");
 
-        assert_resolves_to(&get_child(&resolved, "r1"), "x");
+        let mut r1 = mock::entity::requirement("r1");
+        r1.variant.requirement_mut().unwrap().restriction = Some(Reference::new("p::x"));
+
+        let resolved = resolve(vec![p, x, r1]);
+
+        assert_resolves_to(&resolved, 2, "x");
     }
 
     #[test]
     fn resolves_parent_path() {
-        let p = mock::entity::package("p");
-        let r1 = mock::entity::requirement("r1");
-        r1.borrow_mut()
-            .variant
-            .requirement_mut()
-            .unwrap()
-            .restriction = Some(Reference::new("x".to_string()));
-        {
-            let mut p_mut = p.borrow_mut();
-            let children = p_mut.variant.children_mut().unwrap();
-            children.push(mock::entity::attribute("x", "real"));
-            children.push(r1);
-        }
+        let mut p = mock::entity::package("p");
+        p.variant.children_mut().unwrap().push(1.into());
+        p.variant.children_mut().unwrap().push(2.into());
 
-        let resolved = resolve(p);
+        let x = mock::entity::attribute("x", "real");
 
-        assert_resolves_to(&get_child(&resolved, "r1"), "x");
+        let mut r1 = mock::entity::requirement("r1");
+        r1.variant.requirement_mut().unwrap().restriction = Some(Reference::new("x"));
+
+        let resolved = resolve(vec![p, x, r1]);
+
+        assert_resolves_to(&resolved, 2, "x");
     }
 
     #[test]
     fn resolves_parent_subpath() {
-        let p = mock::entity::package("p");
-        let y = mock::entity::part("y");
-        let r1 = mock::entity::requirement("r1");
-        r1.borrow_mut()
-            .variant
-            .requirement_mut()
-            .unwrap()
-            .restriction = Some(Reference::new("y::x".to_string()));
-        y.borrow_mut()
-            .variant
-            .children_mut()
-            .unwrap()
-            .push(mock::entity::attribute("x", "real"));
-        {
-            let mut p_mut = p.borrow_mut();
-            let children = p_mut.variant.children_mut().unwrap();
-            children.push(y);
-            children.push(r1);
-        }
+        let mut p = mock::entity::package("p");
+        p.variant.children_mut().unwrap().push(1.into());
+        p.variant.children_mut().unwrap().push(3.into());
 
-        let resolved = resolve(p);
+        let mut y = mock::entity::part("y");
+        y.variant.children_mut().unwrap().push(2.into());
 
-        assert_resolves_to(&get_child(&resolved, "r1"), "x");
+        let x = mock::entity::attribute("x", "real");
+
+        let mut r1 = mock::entity::requirement("r1");
+        r1.variant.requirement_mut().unwrap().restriction = Some(Reference::new("y::x"));
+
+        let resolved = resolve(vec![p, y, x, r1]);
+
+        assert_resolves_to(&resolved, 3, "x");
     }
 
     #[test]
     fn resolves_import_subpath() {
-        let p = mock::entity::package("p");
-        let y = mock::entity::part("y");
-        let q = mock::entity::package("q");
-        let r1 = mock::entity::requirement("r1");
-        r1.borrow_mut()
-            .variant
-            .requirement_mut()
-            .unwrap()
-            .restriction = Some(Reference::new("x".to_string()));
-        q.borrow_mut()
-            .variant
+        let mut p = mock::entity::package("p");
+        let mut y = mock::entity::part("y");
+        let x = mock::entity::attribute("x", "real");
+        let mut q = mock::entity::package("q");
+        let mut r1 = mock::entity::requirement("r1");
+
+        p.variant.children_mut().unwrap().push(1.into());
+        p.variant.children_mut().unwrap().push(3.into());
+        y.variant.children_mut().unwrap().push(2.into());
+        q.variant
             .imports_mut()
             .unwrap()
-            .push(Reference::new("p::y".to_string()));
-        y.borrow_mut()
-            .variant
-            .children_mut()
-            .unwrap()
-            .push(mock::entity::attribute("x", "real"));
-        q.borrow_mut().variant.children_mut().unwrap().push(r1);
-        {
-            let mut p_mut = p.borrow_mut();
-            let children = p_mut.variant.children_mut().unwrap();
-            children.push(y); // y must precede q so its path is set before import resolution
-            children.push(q);
-        }
+            .push(Reference::new("p::y"));
+        q.variant.children_mut().unwrap().push(4.into());
 
-        let resolved = resolve(p);
+        r1.variant.requirement_mut().unwrap().restriction = Some(Reference::new("x"));
 
-        assert_resolves_to(&get_child(&get_child(&resolved, "q"), "r1"), "x");
-    }
+        let resolved = resolve(vec![p, y, x, q, r1]);
 
-    fn get_expr_from_attr(attr: &NodeRef<Node>) -> NodeRef<expression::Node> {
-        attr.borrow().variant.expressions().next().cloned().unwrap()
+        let r1_idx = get_child(&resolved, 3, "r1");
+        assert_resolves_to(&resolved, r1_idx, "x");
     }
 
     #[test]
     fn resolves_attribute_domain_to_entity() {
-        let p = mock::entity::package("p");
+        let mut p = mock::entity::package("p");
+        p.variant.children_mut().unwrap().push(1.into());
+        p.variant.children_mut().unwrap().push(2.into());
+
         let y = mock::entity::attribute("y", "real");
         let x = mock::entity::attribute("x", "p::y");
-        {
-            let mut p_mut = p.borrow_mut();
-            let children = p_mut.variant.children_mut().unwrap();
-            children.push(y);
-            children.push(x);
-        }
 
-        let resolved = resolve(p);
+        let resolved = resolve(vec![p, y, x]);
 
-        let x = get_child(&resolved, "x");
-        let domain = get_expr_from_attr(&x);
-        let borrow = domain.borrow();
-        let target = match &borrow.variant {
+        let x_idx = get_child(&resolved, 0, "x");
+        let domain = resolved[x_idx].variant.expressions().next().unwrap();
+        let target = match &domain[0].variant {
             expr_node::Variant::Identifier(ident) => ident.target.as_ref().unwrap(),
             _ => panic!("expected identifier"),
         };
         match target {
-            expression::Target::Entity(weak) => {
-                assert_eq!(weak.upgrade().unwrap().borrow().variant.meta().label, "y");
+            expression::Target::Entity(entity_idx) => {
+                assert_eq!(resolved[usize::from(*entity_idx)].meta.label, "y");
             }
             other => panic!("expected entity target, got {:?}", other),
         }
@@ -200,19 +169,16 @@ mod tests {
 
     #[test]
     fn resolves_attribute_domain_to_builtin() {
-        let p = mock::entity::package("p");
-        p.borrow_mut()
-            .variant
-            .children_mut()
-            .unwrap()
-            .push(mock::entity::attribute("x", "real"));
+        let mut p = mock::entity::package("p");
+        p.variant.children_mut().unwrap().push(1.into());
 
-        let resolved = resolve(p);
+        let x = mock::entity::attribute("x", "real");
 
-        let x = get_child(&resolved, "x");
-        let domain = get_expr_from_attr(&x);
-        let borrow = domain.borrow();
-        let target = match &borrow.variant {
+        let resolved = resolve(vec![p, x]);
+
+        let x_idx = get_child(&resolved, 0, "x");
+        let domain = resolved[x_idx].variant.expressions().next().unwrap();
+        let target = match &domain[0].variant {
             expr_node::Variant::Identifier(ident) => ident.target.as_ref().unwrap(),
             _ => panic!("expected identifier"),
         };
@@ -225,47 +191,39 @@ mod tests {
 
     #[test]
     fn resolves_forall_body_to_local_variable() {
-        let p = mock::entity::package("p");
+        // Expression arena (pre-order): [forall(domain=Idx(1), body=Idx(2)), S, x]
+        let set = expr_node::SetElement::new("x".to_string(), 1.into());
+        let forall = expr_node::Forall::new(set, 2.into());
+        let forall_node = syntax::expression::Node::empty(expr_node::Variant::Forall(forall));
+        let domain_s = mock::expression::identifier("S");
+        let body_x = mock::expression::identifier("x");
+        let expr_arena = vec![forall_node, domain_s, body_x];
 
-        // forall x in S, x  — "x" in body should resolve to local var (domain), not entity
-        let domain = mock::expression::identifier("S");
-        let body = mock::expression::identifier("x");
-        let set = expr_node::SetElement::new("x".to_string(), domain);
-        let forall = expr_node::Forall::new(set, body);
-        let forall_node = node::new(syntax::expression::Node::new(expr_node::Variant::Forall(
-            forall,
-        )));
+        let a = syntax::entity::Node::empty(
+            entity_node::Meta::from("a".to_string()),
+            entity_node::Variant::Attribute(entity_node::Attribute::new(expr_arena)),
+        );
 
-        let mut a_variant =
-            entity_node::Variant::Attribute(entity_node::Attribute::new(forall_node));
-        a_variant.meta_mut().label = "a".to_string();
-        let a = node::new(syntax::entity::Node::new(a_variant));
+        let mut p = mock::entity::package("p");
+        p.variant.children_mut().unwrap().push(1.into());
 
-        p.borrow_mut().variant.children_mut().unwrap().push(a);
+        let resolved = resolve(vec![p, a]);
 
-        let resolved = resolve(p);
+        let a_idx = get_child(&resolved, 0, "a");
+        let expr_arena = resolved[a_idx].variant.expressions().next().unwrap();
 
-        let a = get_child(&resolved, "a");
-        let forall_expr = get_expr_from_attr(&a);
-
-        let (body_expr, domain_expr) = {
-            let borrow = forall_expr.borrow();
-            match &borrow.variant {
-                expr_node::Variant::Forall(forall) => {
-                    (forall.expression.clone(), forall.set.domain.clone())
-                }
-                _ => panic!("expected forall"),
-            }
+        let (body_idx, domain_idx) = match &expr_arena[0].variant {
+            expr_node::Variant::Forall(f) => (usize::from(f.expression), usize::from(f.set.domain)),
+            _ => panic!("expected forall"),
         };
 
-        let borrow = body_expr.borrow();
-        let target = match &borrow.variant {
+        let target = match &expr_arena[body_idx].variant {
             expr_node::Variant::Identifier(ident) => ident.target.as_ref().unwrap(),
             _ => panic!("expected identifier"),
         };
         match target {
-            expression::Target::Expression(_, weak) => {
-                assert!(Rc::ptr_eq(&weak.upgrade().unwrap(), &domain_expr));
+            expression::Target::Expression(_, idx) => {
+                assert_eq!(usize::from(*idx), domain_idx);
             }
             other => panic!("expected local variable target, got {:?}", other),
         }
@@ -273,24 +231,19 @@ mod tests {
 
     #[test]
     fn resolves_markup_reference() {
-        let p = mock::entity::package("p");
-        {
-            let mut comment = markup::Container::default();
-            comment
-                .items
-                .push(markup::Item::Reference(Reference::new("p".to_string())));
-            p.borrow_mut().variant.meta_mut().comment =
-                Some(parser::markup::Node { container: comment });
-        }
+        let mut comment = markup::Container::default();
+        comment
+            .items
+            .push(markup::Item::Reference(Reference::new("p")));
 
-        let resolved = resolve(p);
+        let mut p = mock::entity::package("p");
+        p.meta.comment = Some(markup::Node::empty(comment));
 
-        let markup = resolved.borrow().variant.markups().next().cloned().unwrap();
+        let resolved = resolve(vec![p]);
+
+        let markup = resolved[0].markups().next().cloned().unwrap();
         let rf = markup.container.references().next().cloned().unwrap();
         assert!(rf.is_ok());
-        assert_eq!(
-            rf.unwrap().upgrade().unwrap().borrow().variant.meta().label,
-            "p"
-        );
+        assert_eq!(resolved[usize::from(rf.unwrap())].meta.label, "p");
     }
 }

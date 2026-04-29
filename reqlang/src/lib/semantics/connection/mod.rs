@@ -1,29 +1,51 @@
+use std::{cell::RefCell, fmt::Debug, rc::Rc};
+
 use crate::{
-    node::NodeRef,
+    node::entity::Idx,
     semantics::{
-        connection::graph::Graph,
-        link::{self, convert::convert},
+        connection::{
+            entity::{Connection, Neighbors},
+            graph::Graph,
+        },
+        link::{self},
     },
-    utils::iter::NodeIter,
 };
 
 pub mod cycles;
 pub mod entity;
-pub mod expression;
 pub mod graph;
 pub mod issue;
-pub mod markup;
 
-pub fn connect(node: NodeRef<link::entity::Node>) -> NodeRef<entity::Node> {
-    let node = convert(node);
+pub trait Connected {
+    fn neigbhors(&self) -> &Neighbors<Connection<Idx>>;
+}
+
+impl<E, M> Connected for entity::Node<E, M> {
+    fn neigbhors(&self) -> &Neighbors<Connection<Idx>> {
+        &self.payload
+    }
+}
+
+pub fn connect<N, E: Debug, M: Debug>(
+    arena: Vec<link::entity::Node<N, E, M>>,
+) -> Vec<entity::Node<E, M>> {
     let mut graph = Graph::default();
 
-    graph::build_graph(node.clone(), &mut graph, None);
-    entity::connect(node.clone(), &mut graph);
+    graph::build_graph(&arena, &mut graph, None);
+    let arena = entity::connect(arena, &mut graph);
 
-    cycles::detect_traceability_cycles(node.clone());
-    for nd in NodeIter::new(node.clone()) {
-        issue::collect_issues(nd);
+    let arena: Vec<_> = arena
+        .into_iter()
+        .map(|a| Rc::new(RefCell::new(a)))
+        .collect();
+
+    cycles::detect_traceability_cycles(&arena);
+    for (idx, _) in arena.iter().enumerate() {
+        issue::collect_issues(&arena, idx.into());
     }
-    node
+
+    arena
+        .into_iter()
+        .map(|n| Rc::try_unwrap(n).unwrap().into_inner())
+        .collect()
 }

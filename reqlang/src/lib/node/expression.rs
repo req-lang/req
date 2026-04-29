@@ -1,13 +1,47 @@
+use std::ops::{Index, IndexMut};
+
 use crate::utils::children::ChildrenIter;
+
+#[derive(Default, Debug, Copy, Clone, Eq, PartialEq, Hash)]
+pub struct Idx(usize);
+
+impl From<Idx> for usize {
+    fn from(value: Idx) -> Self {
+        let Idx(val) = value;
+        val
+    }
+}
+
+impl From<usize> for Idx {
+    fn from(value: usize) -> Self {
+        Self(value)
+    }
+}
+
+impl<P, R> IndexMut<Idx> for Vec<Node<P, R>> {
+    fn index_mut(&mut self, index: Idx) -> &mut Self::Output {
+        let Idx(val) = index;
+        self.index_mut(val)
+    }
+}
+
+impl<P, R> Index<Idx> for Vec<Node<P, R>> {
+    type Output = Node<P, R>;
+
+    fn index(&self, index: Idx) -> &Self::Output {
+        let Idx(val) = index;
+        self.index(val)
+    }
+}
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Node<P, R> {
     pub payload: P,
-    pub variant: Variant<usize, R>,
+    pub variant: Variant<Idx, R>,
 }
 
 impl<P, R> Node<P, R> {
-    pub fn empty(variant: Variant<usize, R>) -> Self
+    pub fn empty(variant: Variant<Idx, R>) -> Self
     where
         P: Default,
     {
@@ -17,13 +51,13 @@ impl<P, R> Node<P, R> {
         }
     }
 
-    pub fn new(payload: P, variant: Variant<usize, R>) -> Self {
+    pub fn new(payload: P, variant: Variant<Idx, R>) -> Self {
         Self { payload, variant }
     }
 
-    pub fn map<F, Q>(self, mut f: F) -> Node<Q, R>
+    pub fn map<F, Q>(self, f: F) -> Node<Q, R>
     where
-        F: FnMut(P) -> Q,
+        F: FnOnce(P) -> Q,
     {
         Node {
             payload: f(self.payload),

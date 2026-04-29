@@ -1,42 +1,50 @@
+use std::cell::{Ref, RefCell};
+
 use crate::{
     node::{
-        self, NodeRef,
-        expression::{Case, SetElement},
+        self,
+        expression::{Case, Idx, SetElement},
     },
     semantics::{
-        link::expression::{BuiltinKind, Target},
-        typing::expression::{Issue, Node, TypeKind},
+        link::{
+            self,
+            expression::{BuiltinKind, Target},
+        },
+        typing::TypeResult,
+        typing::expression::{Issue, TypeKind},
     },
 };
 
-pub(super) fn evaluate_node(node: std::cell::Ref<Node>) -> Result<TypeKind, Issue> {
+pub(super) fn evaluate_node<P>(
+    types: &Vec<RefCell<Vec<Option<TypeResult>>>>,
+    entity: node::entity::Idx,
+    arena: &[link::expression::Node<P>],
+    idx: Idx,
+) -> TypeResult {
     use Issue::*;
-    use node::entity::Variant::*;
     use node::expression::Variant::*;
 
-    match &node.variant {
+    let local = types[usize::from(entity)].borrow();
+    match &arena[usize::from(idx)].variant {
         Branch(branch) => {
             let els = match &branch.otherwise {
-                Some(expr) => Some(expr.borrow().typ.as_ref().map_err(|_| Poison)?.clone()),
+                Some(expr) => Some(type_or_poison(&local, *expr)?),
                 None => None,
             };
 
-            evaluate_case(&branch.case, els)
+            evaluate_case(&local, &branch.case, els)
         }
 
         When(when) => {
             let mut cases = when.cases.iter();
             let expected = match &when.otherwise {
-                Some(expr) => expr.borrow().typ.as_ref().map_err(|_| Poison)?.clone(),
-                None => {
-                    let first = cases.next().unwrap();
-                    let first_ref = first.consequence.borrow();
-                    first_ref.typ.as_ref().map_err(|_| Poison)?.clone()
-                }
+                Some(expr) => *expr,
+                None => cases.next().unwrap().consequence,
             };
 
+            let expected = type_or_poison(&local, expected)?;
             for c in cases {
-                evaluate_case(c, Some(expected.clone()))?;
+                evaluate_case(&local, c, Some(expected.clone()))?;
             }
 
             Ok(expected)
@@ -45,12 +53,11 @@ pub(super) fn evaluate_node(node: std::cell::Ref<Node>) -> Result<TypeKind, Issu
         Forall(forall) => {
             use TypeKind::*;
 
-            evaluate_set_element(&forall.set)?;
+            evaluate_set_element(&local, &forall.set)?;
 
-            let expr = forall.expression.borrow();
-            let typ = expr.typ.as_ref().map_err(|_| Poison)?;
-            if *typ != Boolean {
-                return Err(UnexpectedType(Boolean, typ.clone()));
+            let expr = type_or_poison(&local, forall.expression)?;
+            if expr != Boolean {
+                return Err(UnexpectedType(Boolean, expr.clone()));
             }
 
             Ok(Boolean)
@@ -59,17 +66,17 @@ pub(super) fn evaluate_node(node: std::cell::Ref<Node>) -> Result<TypeKind, Issu
         Exists(exists) => {
             use TypeKind::*;
 
-            evaluate_set_element(&exists.set)?;
+            evaluate_set_element(&local, &exists.set)?;
             Ok(Boolean)
         }
 
         Select(select) => {
             use TypeKind::*;
 
-            let typ = evaluate_set_element(&select.set)?;
+            let domain = evaluate_set_element(&local, &select.set)?;
             match &select.optimizer {
-                None => Ok(typ),
-                Some(opt) => match opt.expression.borrow().typ.as_ref().map_err(|_| Poison)? {
+                None => Ok(domain),
+                Some(opt) => match type_or_poison(&local, opt.expression)? {
                     Number => Ok(Number),
                     t => Err(UnexpectedType(Number, t.clone())),
                 },
@@ -80,10 +87,9 @@ pub(super) fn evaluate_node(node: std::cell::Ref<Node>) -> Result<TypeKind, Issu
             use TypeKind::*;
 
             for expression in &aggregation.expressions {
-                let expr_ref = expression.borrow();
-                let t = expr_ref.typ.as_ref().map_err(|_| Poison)?;
-                if *t != Boolean {
-                    return Err(UnexpectedType(Boolean, t.clone()));
+                let expr = type_or_poison(&local, *expression)?;
+                if expr != Boolean {
+                    return Err(UnexpectedType(Boolean, expr.clone()));
                 }
             }
 
@@ -94,15 +100,14 @@ pub(super) fn evaluate_node(node: std::cell::Ref<Node>) -> Result<TypeKind, Issu
             use TypeKind::*;
             use node::expression::UnaryOperator::*;
 
-            let op_ref = una.operand.borrow();
-            let type_op = op_ref.typ.as_ref().map_err(|_| Poison)?;
+            let operand = type_or_poison(&local, una.operand)?;
             let expected = match una.operator {
                 Plus | Negation | Factorial => Number,
                 Not | Previously | Rise | Fall | Eventually | Always => Boolean,
             };
 
-            match type_op {
-                actual if *actual != expected => {
+            match operand {
+                actual if actual != expected => {
                     return Err(UnexpectedType(expected, actual.clone()));
                 }
                 _ => Ok(expected),
@@ -113,11 +118,8 @@ pub(super) fn evaluate_node(node: std::cell::Ref<Node>) -> Result<TypeKind, Issu
             use TypeKind::*;
             use node::expression::BinaryOperator::*;
 
-            let lhs_ref = bin.left.borrow();
-            let rhs_ref = bin.right.borrow();
-
-            let lhs = lhs_ref.typ.as_ref().map_err(|_| Poison)?;
-            let rhs = rhs_ref.typ.as_ref().map_err(|_| Poison)?;
+            let lhs = type_or_poison(&local, bin.left)?;
+            let rhs = type_or_poison(&local, bin.right)?;
 
             let (expected, result) = match &bin.operator {
                 Plus | Minus | Multiply | Divide | Modulus | Power => (Number, Number),
@@ -136,7 +138,7 @@ pub(super) fn evaluate_node(node: std::cell::Ref<Node>) -> Result<TypeKind, Issu
             };
 
             match (&bin.operator, lhs, rhs) {
-                (In, lhs, _) if *lhs == expected => Ok(result),
+                (In, lhs, _) if lhs == expected => Ok(result),
                 (In, lhs, _) => Err(UnexpectedType(expected, lhs.clone())),
                 (Union | Intersection | Includes | Complement | Difference, lhs, _)
                     if !lhs.is_set() =>
@@ -149,45 +151,40 @@ pub(super) fn evaluate_node(node: std::cell::Ref<Node>) -> Result<TypeKind, Issu
                 {
                     Err(UnexpectedType(expected, rhs.clone()))
                 }
-                (_, lhs, _) if *lhs != expected => Err(UnexpectedType(expected, lhs.clone())),
-                (_, _, rhs) if *rhs != expected => Err(UnexpectedType(expected, rhs.clone())),
+                (_, lhs, _) if lhs != expected => Err(UnexpectedType(expected, lhs.clone())),
+                (_, _, rhs) if rhs != expected => Err(UnexpectedType(expected, rhs.clone())),
                 (_, _, _) => Ok(result),
             }
         }
 
         Set(set) => {
             let mut se = set.elements.iter();
-            let first_ref = se.next().unwrap().borrow();
-            let type_first = first_ref.typ.as_ref().map_err(|_| Poison)?;
-
+            let first = se.next().unwrap();
+            let first = type_or_poison(&local, *first)?;
             for elem in se {
-                let elem_ref = elem.borrow();
-                let type_elem = elem_ref.typ.as_ref().map_err(|_| Poison)?;
-                if type_elem != type_first {
-                    return Err(UnexpectedType(type_first.clone(), type_elem.clone()));
+                let elem = type_or_poison(&local, *elem)?;
+                if elem != first {
+                    return Err(UnexpectedType(first.clone(), elem.clone()));
                 }
             }
 
-            Ok(TypeKind::Set(Box::new(type_first.clone())))
+            Ok(TypeKind::Set(Box::new(first.clone())))
         }
 
         Function(_) => todo!(),
 
-        Identifier(ident) => match ident.target.as_ref().map_err(|_| DomainNotFound)? {
-            Target::Entity(node) => match node.upgrade().ok_or(Poison)?.borrow().variant {
-                Attribute(ref atr) => match atr.domain.borrow().typ.as_ref().map_err(|_| Poison)? {
+        Identifier(ident) => match &ident.target.as_ref().map_err(|_| DomainNotFound)? {
+            Target::Entity(tgt) => match types[usize::from(*tgt)].borrow().is_empty() {
+                false => match type_or_poison(&types[usize::from(*tgt)].borrow(), 0.into())? {
                     TypeKind::Set(inner) => Ok(inner.as_ref().clone()),
                     typ => Err(NotASet(typ.clone())),
                 },
-                _ => Err(DomainNotFound),
+                true => Err(DomainNotFound),
             },
-            Target::Expression(_, node) => {
-                let node = node.upgrade().ok_or(Poison)?;
-                match node.borrow().typ.as_ref().map_err(|_| Poison)? {
-                    TypeKind::Set(inner) => Ok(inner.as_ref().clone()),
-                    typ => Err(NotASet(typ.clone())),
-                }
-            }
+            Target::Expression(_, tgt) => match type_or_poison(&local, *tgt)? {
+                TypeKind::Set(inner) => Ok(inner.as_ref().clone()),
+                typ => Err(NotASet(typ.clone())),
+            },
             Target::Builtin(kind) => Ok(TypeKind::from(*kind)),
         },
 
@@ -200,20 +197,19 @@ pub(super) fn evaluate_node(node: std::cell::Ref<Node>) -> Result<TypeKind, Issu
 }
 
 fn evaluate_case(
-    case: &Case<NodeRef<Node>>,
+    types: &Ref<'_, Vec<Option<TypeResult>>>,
+    case: &Case<Idx>,
     expected: Option<TypeKind>,
-) -> Result<TypeKind, Issue> {
+) -> TypeResult {
     use Issue::*;
     use TypeKind::*;
 
-    let cond_ref = case.condition.borrow();
-    let cond = cond_ref.typ.as_ref().map_err(|_| Poison)?;
-    if *cond != Boolean {
+    let cond = type_or_poison(types, case.condition)?;
+    if cond != Boolean {
         return Err(UnexpectedType(Boolean, cond.clone()));
     }
 
-    let cons_ref = case.consequence.borrow();
-    let cons = cons_ref.typ.as_ref().map_err(|_| Poison)?.clone();
+    let cons = type_or_poison(types, case.consequence)?;
     match expected {
         Some(exp) if cons == exp => Ok(cons),
         Some(exp) => Err(UnexpectedType(exp.clone(), cons)),
@@ -221,26 +217,34 @@ fn evaluate_case(
     }
 }
 
-fn evaluate_set_element(set: &SetElement<NodeRef<Node>>) -> Result<TypeKind, Issue> {
+fn evaluate_set_element(
+    types: &Ref<'_, Vec<Option<TypeResult>>>,
+    set: &SetElement<Idx>,
+) -> TypeResult {
     use Issue::*;
     use TypeKind::*;
 
-    let domain = &set.domain;
-    let domain_ref = domain.borrow();
-    let typ = match domain_ref.typ.as_ref().map_err(|_| Poison)? {
+    let typ = match type_or_poison(types, set.domain)? {
         Set(t) => t,
         typ => return Err(NotASet(typ.clone())),
     };
 
     if let Some(filter) = &set.filter {
-        let filter_ref = filter.borrow();
-        let typ = filter_ref.typ.as_ref().map_err(|_| Poison)?;
-        if *typ != Boolean {
+        let typ = type_or_poison(types, *filter)?;
+        if typ != Boolean {
             return Err(UnexpectedType(Boolean, typ.clone()));
         }
     }
 
     Ok(*typ.clone())
+}
+
+fn type_or_poison(types: &Ref<'_, Vec<Option<TypeResult>>>, idx: Idx) -> TypeResult {
+    types[usize::from(idx)]
+        .clone()
+        .unwrap()
+        .map_err(|_| Issue::Poison)
+        .clone()
 }
 
 impl From<BuiltinKind> for TypeKind {

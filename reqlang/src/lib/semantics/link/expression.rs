@@ -1,19 +1,14 @@
-use std::{collections::HashMap, rc::Rc};
+use std::collections::HashMap;
 
 use crate::{
-    node::{
-        self, NodeRef,
-        expression::{IntoVariable, Variant},
-    },
+    node::{self, expression::Idx},
     reference::Reference,
     semantics::link::{
-        WeakNodeRef,
+        Result,
         entity::{self},
     },
-    syntax,
     utils::children::ChildrenIter,
 };
-use reqlang_derive::IntoExpressionVariable;
 
 #[derive(Debug, Clone, Copy)]
 pub enum BuiltinKind {
@@ -22,100 +17,79 @@ pub enum BuiltinKind {
     Boolean,
 }
 
-impl TryFrom<&str> for BuiltinKind {
-    type Error = ();
-
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
+impl BuiltinKind {
+    fn find<S: AsRef<str>>(value: S) -> Option<Self> {
         use BuiltinKind::*;
 
-        match value {
-            "real" => Ok(Real),
-            "integer" => Ok(Integer),
-            "boolean" => Ok(Boolean),
-            _ => Err(()),
+        match value.as_ref() {
+            "real" => Some(Real),
+            "integer" => Some(Integer),
+            "boolean" => Some(Boolean),
+            _ => None,
         }
     }
 }
 
 #[derive(Debug, Clone)]
-pub enum Target<N, E> {
-    Entity(N),
-    Expression(String, E),
+pub enum Target {
+    Entity(node::entity::Idx),
+    Expression(String, Idx),
     Builtin(BuiltinKind),
 }
 
-impl<N, E> Target<N, E> {
-    pub fn mapn<O>(self, f: impl Fn(N) -> O) -> Target<O, E> {
-        use Target::*;
+pub type Node<P> = node::expression::Node<P, Result<Target>>;
 
-        match self {
-            Entity(x) => Entity(f(x)),
-            Expression(v, d) => Expression(v, d),
-            Builtin(b) => Builtin(b),
-        }
+pub(super) fn link<P, R: Into<Reference> + AsRef<str> + Clone>(
+    ctx: &entity::FindCtx<R>,
+    arena: Vec<node::expression::Node<P, R>>,
+) -> Vec<Node<P>> {
+    let mut local: Vec<HashMap<String, Idx>> = Vec::with_capacity(arena.len());
+
+    for _ in &arena {
+        local.push(HashMap::new());
     }
 
-    pub fn mape<O>(self, f: impl Fn(E) -> O) -> Target<N, O> {
-        use Target::*;
+    init_scope(&arena, 0, &mut local);
+    arena
+        .into_iter()
+        .zip(local.into_iter())
+        .map(|(node, scope)| node.mapr(|rf| find(ctx, &scope, rf)))
+        .collect()
+}
 
-        match self {
-            Entity(x) => Entity(x),
-            Expression(v, d) => Expression(v, f(d)),
-            Builtin(b) => Builtin(b),
-        }
+fn find<R: Into<Reference> + AsRef<str> + Clone>(
+    ctx: &entity::FindCtx<R>,
+    local: &HashMap<String, Idx>,
+    target: R,
+) -> Result<Target> {
+    let rf = target.as_ref();
+    if let Some(builtin) = BuiltinKind::find(rf) {
+        return Ok(Target::Builtin(builtin));
     }
+
+    if let Some(expr) = local.get(rf) {
+        return Ok(Target::Expression(rf.to_string(), *expr));
+    }
+
+    let entity = entity::find(ctx, target)?;
+    Ok(Target::Entity(entity))
 }
 
-#[derive(Debug, Clone, IntoExpressionVariable)]
-pub struct Node {
-    pub variant: Variant<NodeRef<Node>, super::ResultTgt<entity::Node, Node>>,
-}
-
-pub(super) fn link(
-    paths: &entity::SubPaths,
-    node: NodeRef<Node>,
-    mut local: HashMap<String, WeakNodeRef<Node>>,
+fn init_scope<P, R>(
+    arena: &Vec<node::expression::Node<P, R>>,
+    idx: usize,
+    local: &mut Vec<HashMap<String, Idx>>,
 ) {
-    use node::expression::Variant::*;
-
-    if let Some(set) = node.borrow().variant.set_element() {
-        local.insert(set.variable.clone(), Rc::downgrade(&set.domain));
+    let scope = &mut local[idx];
+    let node = &arena[idx];
+    if let Some(set) = node.variant.set_element() {
+        scope.insert(set.variable.clone(), set.domain);
     }
 
-    if let Identifier(ident) = &mut node.borrow_mut().variant {
-        let rf = ident.target.as_ref().err().unwrap();
-        if let Some(found) = find(paths, &local, rf) {
-            ident.target = Ok(found);
-        }
+    let ext = scope.clone();
+    for child in node.variant.children_iter() {
+        let idx = usize::from(child);
+        local[idx].extend(ext.clone());
+        init_scope(arena, idx, local);
     }
-
-    for child in node.borrow().variant.children_iter() {
-        link(paths, child, local.clone());
-    }
-}
-
-fn find(
-    paths: &entity::SubPaths,
-    local: &HashMap<String, WeakNodeRef<Node>>,
-    rf: &Reference,
-) -> Option<Target<WeakNodeRef<entity::Node>, WeakNodeRef<Node>>> {
-    if let Ok(builtin) = BuiltinKind::try_from(&rf.value[..]) {
-        return Some(Target::Builtin(builtin));
-    }
-
-    if let Some(expr) = local.get(&rf.value) {
-        return Some(Target::Expression(rf.value.clone(), expr.clone()));
-    }
-
-    if let Some(entity) = entity::find(paths.entity, rf, paths.ctx) {
-        return Some(Target::Entity(entity.clone()));
-    }
-
-    None
-}
-
-pub(super) fn init_node(node: syntax::expression::Node) -> Node {
-    let variant = node.variant.mapr(|r| Err::<Target<_, _>, Reference>(r));
-    let variant = variant.mape(|n| node::map(n, init_node));
-    Node { variant }
 }

@@ -1,14 +1,22 @@
-use reqlang::{syntax::entity::Node, *};
+use reqlang::*;
 
 pub const PATH_ROOT: &str = "tests/data/valid";
 
 fn assert_isomorphic_formatter(filename: &str) {
     let path = std::path::PathBuf::from(PATH_ROOT).join(filename);
     let input = std::fs::read_to_string(path).unwrap();
-    let expected = node::map(syntax::parser::parse(&input).unwrap(), Node::from);
+    let expected = syntax::parser::parse(&input)
+        .unwrap()
+        .into_iter()
+        .map(syntax::entity::Node::from)
+        .collect();
 
-    let output = renderer::formatter::format_string(expected.borrow(), 0);
-    let actual = node::map(syntax::parser::parse(&output).unwrap(), Node::from);
+    let output = renderer::formatter::format_string(&expected, 0);
+    let actual: Vec<_> = syntax::parser::parse(&output)
+        .unwrap()
+        .into_iter()
+        .map(syntax::entity::Node::from)
+        .collect();
 
     if actual != expected || input != output {
         eprintln!("*** INPUT ***\n{}\n\n", input);

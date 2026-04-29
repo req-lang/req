@@ -13,7 +13,7 @@ impl Item<Reference> {
     pub fn to_string(self) -> String {
         match self {
             Item::Text(s) => s,
-            Item::Reference(r) => format!("{{{}}}", r.value),
+            Item::Reference(r) => format!("{{{}}}", r),
             Item::Newline => "\n".to_string(),
         }
     }

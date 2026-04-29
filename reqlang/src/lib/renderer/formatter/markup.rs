@@ -1,6 +1,12 @@
-use crate::{renderer::formatter::padding::pad, syntax::parser::markup::Node};
+use std::fmt::Display;
 
-pub fn format<W: std::io::Write>(node: &Node, indent: usize, out: &mut W) -> std::io::Result<()> {
+use crate::{node::markup::Node, renderer::formatter::padding::pad};
+
+pub fn format<W: std::io::Write, M, R: Display>(
+    node: &Node<M, R>,
+    indent: usize,
+    out: &mut W,
+) -> std::io::Result<()> {
     use crate::node::markup::Item::*;
 
     writeln!(out, "{}@@", pad(indent))?;

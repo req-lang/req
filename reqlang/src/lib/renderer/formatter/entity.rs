@@ -1,26 +1,26 @@
-use std::cell::Ref;
+use std::fmt::Display;
 
 use crate::{
-    node::{NodeRef, entity::TraceabilityKind},
-    reference::Reference,
+    node::entity::{Idx, Node, TraceabilityKind},
     renderer::formatter::{expression, markup, padding::pad},
-    syntax::entity::Node,
 };
 
-pub fn format<W: std::io::Write>(
-    node: Ref<Node>,
+pub fn format<W: std::io::Write, N, R: Display, T: Display, E, M>(
+    arena: &Vec<Node<N, R, T, E, M>>,
+    idx: Idx,
     indent: usize,
     out: &mut W,
 ) -> std::io::Result<()> {
     use crate::node::entity::Variant::*;
 
+    let node = &arena[idx];
     let pd = pad(indent);
 
-    if let Some(comment) = &node.variant.meta().comment {
+    if let Some(comment) = &node.meta.comment {
         markup::format(comment, indent, out)?;
     }
 
-    for tag in &node.variant.meta().tags {
+    for tag in &node.meta.tags {
         match &tag.value {
             Some(v) => writeln!(out, "{}# {} {} #", pd, tag.id, v)?,
             None => writeln!(out, "{}# {} #", pd, tag.id)?,
@@ -29,30 +29,30 @@ pub fn format<W: std::io::Write>(
 
     match &node.variant {
         Part(prt) => {
-            writeln!(out, "{}part {}", pd, prt.meta.label)?;
-            format_container(&prt.imports, &prt.children, indent, out)?;
+            writeln!(out, "{}part {}", pd, node.meta.label)?;
+            format_container(&prt.imports, arena, &prt.children, indent, out)?;
             writeln!(out, "{}part", pd)
         }
 
         Package(pkg) => {
-            writeln!(out, "{}package {}", pd, pkg.meta.label)?;
-            format_container(&pkg.imports, &pkg.children, indent, out)?;
+            writeln!(out, "{}package {}", pd, node.meta.label)?;
+            format_container(&pkg.imports, arena, &pkg.children, indent, out)?;
             writeln!(out, "{}package", pd)
         }
 
         Attribute(atr) => {
-            write!(out, "{}let {} in ", pd, atr.meta.label)?;
-            expression::format(atr.domain.borrow(), 0.into(), out)?;
+            write!(out, "{}let {} in ", pd, node.meta.label)?;
+            expression::format(&atr.domain, 0.into(), 0.into(), out)?;
             if let Some(unit) = &atr.unit {
                 write!(out, " [ ")?;
-                expression::format(unit.borrow(), 0.into(), out)?;
+                expression::format(unit, 0.into(), 0.into(), out)?;
                 write!(out, " ]")?;
             }
             writeln!(out)
         }
 
         Requirement(req) => {
-            write!(out, "{}requirement {} ", pd, node.variant.meta().label)?;
+            write!(out, "{}requirement {} ", pd, node.meta.label)?;
 
             if req.inhibitor.top {
                 write!(out, "top ")?;
@@ -80,7 +80,7 @@ pub fn format<W: std::io::Write>(
 
             use crate::node::entity::RequirementVariant::*;
             match &req.variant {
-                Formal(expr) => expression::format(expr.borrow(), (indent + 1).into(), out)?,
+                Formal(expr) => expression::format(expr, 0.into(), (indent + 1).into(), out)?,
                 Informal(text) => markup::format(text, (indent + 1).into(), out)?,
             }
 
@@ -99,18 +99,19 @@ fn traceability_keyword(kind: &TraceabilityKind) -> &'static str {
     }
 }
 
-fn format_container<W: std::io::Write>(
-    imports: &[Reference],
-    children: &[NodeRef<Node>],
+fn format_container<W: std::io::Write, N, R: Display, T: Display, E, M>(
+    imports: &[R],
+    arena: &Vec<Node<N, R, T, E, M>>,
+    children: &Vec<Idx>,
     indent: usize,
     out: &mut W,
 ) -> std::io::Result<()> {
     for import in imports {
-        writeln!(out, "{}import {}", pad(indent), import.value)?;
+        writeln!(out, "{}import {}", pad(indent), import)?;
     }
 
     for child in children {
-        format(child.borrow(), indent + 1, out)?;
+        format(arena, *child, indent + 1, out)?;
     }
 
     Ok(())

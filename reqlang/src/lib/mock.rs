@@ -42,13 +42,13 @@ pub mod entity {
             package("e"),
         ];
 
-        let variant = Variant::Package(Package::new(vec![], vec![3]));
+        let variant = Variant::Package(Package::new(vec![], vec![3.into()]));
         arena[1].variant = variant;
 
-        let variant = Variant::Package(Package::new(vec![], vec![4]));
+        let variant = Variant::Package(Package::new(vec![], vec![4.into()]));
         arena[2].variant = variant;
 
-        let variant = Variant::Package(Package::new(vec![], vec![1, 2]));
+        let variant = Variant::Package(Package::new(vec![], vec![1.into(), 2.into()]));
         arena[0].variant = variant;
         arena.reverse();
 
@@ -110,42 +110,48 @@ pub mod generator {
     }
 
     fn push_child(nd: &Rc<RefCell<Node>>, child: usize) {
-        nd.borrow_mut().variant.children_mut().unwrap().push(child);
+        nd.borrow_mut()
+            .variant
+            .children_mut()
+            .unwrap()
+            .push(child.into());
     }
 
     impl Generate for Simple {
         fn generate(&self) -> Vec<Node> {
-            let root = Rc::new(RefCell::new(package("root")));
-            let mut arena = vec![root.clone()];
+            let arena = {
+                let root = Rc::new(RefCell::new(package("root")));
+                let mut arena = vec![root.clone()];
 
-            for p in 0..self.packages {
-                let pkg = Rc::new(RefCell::new(package(format!("package_{p}"))));
-                arena.push(pkg.clone());
-                push_child(&root, arena.len());
+                for p in 0..self.packages {
+                    let pkg = Rc::new(RefCell::new(package(format!("package_{p}"))));
+                    arena.push(pkg.clone());
+                    push_child(&root, arena.len());
 
-                let mut prev = pkg;
-                for d in 0..self.depth {
-                    let curr = Rc::new(RefCell::new(package(format!("package_{p}_{d}"))));
-                    arena.push(curr.clone());
-                    let len = arena.len();
-                    for r in 0..self.requirements {
-                        let mut req = requirement(format!("requirement_{p}_{d}_{r}"));
-                        let content = repeat_words(self.words as usize);
-                        let mut markup = node::markup::Container::default();
-                        markup.items.push(node::markup::Item::Text(content));
+                    let mut prev = pkg;
+                    for d in 0..self.depth {
+                        let curr = Rc::new(RefCell::new(package(format!("package_{p}_{d}"))));
+                        arena.push(curr.clone());
+                        let len = arena.len();
+                        for r in 0..self.requirements {
+                            let mut req = requirement(format!("requirement_{p}_{d}_{r}"));
+                            let content = repeat_words(self.words as usize);
+                            let mut markup = node::markup::Container::default();
+                            markup.items.push(node::markup::Item::Text(content));
 
-                        let informal = req.variant.requirement_mut().unwrap().informal_mut();
-                        *informal.unwrap() = markup::Node::empty(markup);
+                            let informal = req.variant.requirement_mut().unwrap().informal_mut();
+                            *informal.unwrap() = markup::Node::empty(markup);
 
-                        arena.push(Rc::new(RefCell::new(req)));
-                        push_child(&curr, arena.len());
+                            arena.push(Rc::new(RefCell::new(req)));
+                            push_child(&curr, arena.len());
+                        }
+
+                        push_child(&prev, len);
+                        prev = curr;
                     }
-
-                    push_child(&prev, len);
-                    prev = curr;
                 }
-            }
-
+                arena
+            };
             arena
                 .into_iter()
                 .map(|n| RefCell::into_inner(Rc::try_unwrap(n).unwrap()))
@@ -199,7 +205,7 @@ pub mod expression {
 
     pub fn binary(op: node::expression::BinaryOperator, left: usize, right: usize) -> Node {
         Node::empty(node::expression::Variant::BinOp(
-            node::expression::BinOp::new(op, left, right),
+            node::expression::BinOp::new(op, left.into(), right.into()),
         ))
     }
 }

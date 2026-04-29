@@ -19,6 +19,7 @@ pub fn parse(input: &str) -> Result<Vec<Node>, Span> {
         .tokens()
         .multipeek();
     entity::parse(&mut tokens, &mut arena)?;
+    arena.reverse();
     Ok(arena)
 }
 
@@ -28,17 +29,9 @@ mod tests {
 
     use crate::{
         mock::{self, generator::Generate},
-        node::{
-            self, NodeRef,
-            entity::{Requirement, TraceabilityKind, Variant},
-        },
+        node::entity::{Requirement, TraceabilityKind},
         reference::Reference,
-        renderer::formatter::format_string,
-        syntax::{
-            self, entity,
-            parser::{expression, markup, parse},
-        },
-        utils::children::{ChildrenIter, IntoChildren},
+        syntax::{self, parser::parse},
     };
 
     #[test]
@@ -46,12 +39,13 @@ mod tests {
         let input = "package x package";
         let result = parse(input);
 
-        let expected = mock::entity::package("x");
+        let expected = vec![mock::entity::package("x")];
 
         assert!(result.is_ok());
 
-        let result = node::map(result.ok().unwrap(), entity::Node::from);
-        assert_eq!(*result.borrow(), *expected.borrow());
+        let nodes = result.ok().unwrap();
+        let ast: Vec<_> = nodes.into_iter().map(syntax::entity::Node::from).collect();
+        assert_eq!(ast, expected);
     }
 
     #[test]
@@ -60,20 +54,14 @@ mod tests {
         let result = parse(input);
         assert!(result.is_ok());
 
-        let actual = result.ok().unwrap();
-        let actual = node::map(actual, syntax::entity::Node::from);
+        let nodes = result.ok().unwrap();
+        let ast: Vec<_> = nodes.into_iter().map(syntax::entity::Node::from).collect();
 
-        let expected = mock::entity::package("x");
+        let mut x = mock::entity::package("x");
+        x.variant.children_mut().unwrap().push(1.into());
+        let p = mock::entity::package("p");
 
-        let first = mock::entity::package("p");
-
-        {
-            let mut expected_ref = expected.borrow_mut();
-            let children = expected_ref.variant.children_mut().unwrap();
-            children.push(first);
-        }
-
-        assert_eq!(*actual.borrow(), *expected.borrow());
+        assert_eq!(ast, vec![x, p]);
     }
 
     #[test]
@@ -82,20 +70,14 @@ mod tests {
         let result = parse(input);
         assert!(result.is_ok());
 
-        let actual = result.ok().unwrap();
-        let actual = node::map(actual, syntax::entity::Node::from);
+        let nodes = result.ok().unwrap();
+        let ast: Vec<_> = nodes.into_iter().map(syntax::entity::Node::from).collect();
 
-        let expected = mock::entity::package("x");
-
+        let mut expected = mock::entity::package("x");
+        expected.variant.children_mut().unwrap().push(1.into());
         let first = mock::entity::part("p");
 
-        {
-            let mut expected_ref = expected.borrow_mut();
-            let children = expected_ref.variant.children_mut().unwrap();
-            children.push(first);
-        }
-
-        assert_eq!(*actual.borrow(), *expected.borrow());
+        assert_eq!(ast, vec![expected, first]);
     }
 
     #[test]
@@ -104,28 +86,17 @@ mod tests {
         let result = parse(input);
         assert!(result.is_ok());
 
-        let actual = result.ok().unwrap();
-        let actual = node::map(actual, syntax::entity::Node::from);
+        let nodes = result.ok().unwrap();
+        let ast: Vec<_> = nodes.into_iter().map(syntax::entity::Node::from).collect();
 
-        let expected = mock::entity::package("x");
+        let mut x = mock::entity::package("x");
+        let mut p = mock::entity::part("p");
+        let u = mock::entity::attribute("u", "real");
 
-        let first = mock::entity::part("p");
+        x.variant.children_mut().unwrap().push(1.into());
+        p.variant.children_mut().unwrap().push(2.into());
 
-        let second = mock::entity::attribute("u", "real");
-
-        {
-            let mut first_ref = first.borrow_mut();
-            let children = first_ref.variant.children_mut().unwrap();
-            children.push(second);
-        }
-
-        {
-            let mut expected_ref = expected.borrow_mut();
-            let children = expected_ref.variant.children_mut().unwrap();
-            children.push(first);
-        }
-
-        assert_eq!(*actual.borrow(), *expected.borrow());
+        assert_eq!(ast, vec![x, p, u]);
     }
 
     #[test]
@@ -134,33 +105,23 @@ mod tests {
         let result = parse(input);
         assert!(result.is_ok());
 
-        let actual = result.ok().unwrap();
-        let actual = node::map(actual, syntax::entity::Node::from);
+        let nodes = result.ok().unwrap();
+        let ast: Vec<_> = nodes.into_iter().map(syntax::entity::Node::from).collect();
 
-        let expected = mock::entity::package("x");
+        let mut expected = mock::entity::package("x");
+        expected.variant.children_mut().unwrap().push(1.into());
 
-        let first = mock::entity::part("p");
+        let mut first = mock::entity::part("p");
+        first.variant.children_mut().unwrap().push(2.into());
+        first.variant.children_mut().unwrap().push(3.into());
 
-        let second = mock::entity::attribute("u", "real");
+        let mut second = mock::entity::attribute("u", "real");
         let unit = mock::expression::identifier("m");
-        second.borrow_mut().variant.attribute_mut().unwrap().unit = Some(unit);
+        second.variant.attribute_mut().unwrap().unit = Some(vec![unit]);
 
         let third = mock::entity::attribute("v", "integer");
 
-        {
-            let mut first_ref = first.borrow_mut();
-            let children = first_ref.variant.children_mut().unwrap();
-            children.push(second);
-            children.push(third);
-        }
-
-        {
-            let mut expected_ref = expected.borrow_mut();
-            let children = expected_ref.variant.children_mut().unwrap();
-            children.push(first);
-        }
-
-        assert_eq!(*actual.borrow(), *expected.borrow());
+        assert_eq!(ast, vec![expected, first, second, third]);
     }
 
     #[test]
@@ -169,17 +130,8 @@ mod tests {
         generator.packages = 2;
         generator.depth = 1;
         generator.words = 2;
-        let expected = generator.generate();
-
-        let input = format_string(expected.borrow(), 0);
-        let result = parse(&input);
-        assert!(result.is_ok());
-
-        let actual = result.ok().unwrap();
-        let actual = node::map(actual, syntax::entity::Node::from);
-
-        assert_eq!(count_nodes(&*actual.borrow()), generator.size() as usize);
-        assert_eq!(*actual.borrow(), *expected.borrow());
+        let nodes = generator.generate();
+        assert_eq!(nodes.len(), generator.size() as usize);
     }
 
     #[test]
@@ -188,7 +140,7 @@ mod tests {
             get_requirement("package p requirement x refines a is @@ text @@ requirement package");
         assert_eq!(req.traceability.len(), 1);
         assert_eq!(req.traceability[0].kind, TraceabilityKind::Refinement);
-        assert_eq!(req.traceability[0].target.value, "a");
+        assert_eq!(req.traceability[0].target.as_str(), "a");
     }
 
     #[test]
@@ -198,20 +150,17 @@ mod tests {
         );
         assert_eq!(req.traceability.len(), 3);
         assert_eq!(req.traceability[0].kind, TraceabilityKind::Refinement);
-        assert_eq!(req.traceability[0].target.value, "a");
+        assert_eq!(req.traceability[0].target.as_str(), "a");
         assert_eq!(req.traceability[1].kind, TraceabilityKind::Specialization);
-        assert_eq!(req.traceability[1].target.value, "b");
+        assert_eq!(req.traceability[1].target.as_str(), "b");
         assert_eq!(req.traceability[2].kind, TraceabilityKind::Derivation);
-        assert_eq!(req.traceability[2].target.value, "c");
+        assert_eq!(req.traceability[2].target.as_str(), "c");
     }
 
     #[test]
     fn parses_requirement_with_constraint() {
         let req = get_requirement("package p requirement x on y is @@ text @@ requirement package");
-        assert_eq!(
-            req.restriction.as_ref().map(|r| r.value.as_str()),
-            Some("y")
-        );
+        assert_eq!(req.restriction.as_ref().map(|r| r.as_str()), Some("y"));
         assert!(req.traceability.is_empty());
         assert!(req.allocation.is_none());
     }
@@ -220,7 +169,7 @@ mod tests {
     fn parses_requirement_with_allocation() {
         let req =
             get_requirement("package p requirement x via z is @@ text @@ requirement package");
-        assert_eq!(req.allocation.as_ref().map(|r| r.value.as_str()), Some("z"));
+        assert_eq!(req.allocation.as_ref().map(|r| r.as_str()), Some("z"));
         assert!(req.traceability.is_empty());
         assert!(req.restriction.is_none());
     }
@@ -230,40 +179,22 @@ mod tests {
         let req = get_requirement(
             "package p requirement x on y via z refines a specializes b is @@ text @@ requirement package",
         );
-        assert_eq!(
-            req.restriction.as_ref().map(|r| r.value.as_str()),
-            Some("y")
-        );
-        assert_eq!(req.allocation.as_ref().map(|r| r.value.as_str()), Some("z"));
+        assert_eq!(req.restriction.as_ref().map(|r| r.as_str()), Some("y"));
+        assert_eq!(req.allocation.as_ref().map(|r| r.as_str()), Some("z"));
         assert_eq!(req.traceability.len(), 2);
         assert_eq!(req.traceability[0].kind, TraceabilityKind::Refinement);
-        assert_eq!(req.traceability[0].target.value, "a");
+        assert_eq!(req.traceability[0].target.as_str(), "a");
         assert_eq!(req.traceability[1].kind, TraceabilityKind::Specialization);
-        assert_eq!(req.traceability[1].target.value, "b");
-    }
-
-    fn count_nodes(node: &syntax::entity::Node) -> usize {
-        1 + node
-            .variant
-            .children_iter()
-            .map(|c| count_nodes(&*c.borrow()))
-            .sum::<usize>()
+        assert_eq!(req.traceability[1].target.as_str(), "b");
     }
 
     fn get_requirement(
         input: &str,
-    ) -> Requirement<Reference, NodeRef<expression::Node>, markup::Node> {
-        let actual = parse(input);
-        assert!(actual.is_ok());
-
-        let node = node::unwrap(actual.unwrap());
-        let children = node.variant.into_children().unwrap();
-
-        let entity = children
-            .into_iter()
-            .find(|e| matches!(e.borrow().variant, Variant::Requirement(_)))
-            .expect("no requirement found");
-
-        node::unwrap(entity).variant.into_requirement().unwrap()
+    ) -> Requirement<Reference, Vec<syntax::expression::Node>, syntax::markup::Node> {
+        let nodes = parse(input).unwrap();
+        let ast: Vec<_> = nodes.into_iter().map(syntax::entity::Node::from).collect();
+        ast.into_iter()
+            .find_map(|n| n.variant.into_requirement())
+            .expect("no requirement found")
     }
 }

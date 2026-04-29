@@ -1,27 +1,28 @@
 use reqlang::{
-    issue::IssueIterator,
-    node::{self, NodeRef},
     semantics::{
-        connection::{self, entity::Node},
+        connection::{self},
         link, typing,
     },
     syntax,
-    utils::iter::NodeIter,
 };
 
 pub const PATH_ROOT: &str = "tests/data/valid";
 
-fn assert_valid_parsing_and_analysis(filename: &str) -> NodeRef<Node> {
+fn assert_valid_parsing_and_analysis(filename: &str) -> Vec<connection::entity::Node<(), ()>> {
     let path = std::path::PathBuf::from(PATH_ROOT).join(filename);
     let input = std::fs::read_to_string(path).unwrap();
     let result = syntax::parser::parse(&input);
 
     assert!(result.is_ok());
 
-    let ast = node::map(result.unwrap(), syntax::entity::Node::from);
+    let ast = result
+        .unwrap()
+        .into_iter()
+        .map(syntax::entity::Node::from)
+        .collect();
     let resolved = link::resolve(ast);
-    let typed = typing::evaluate(resolved.clone());
-    let connected = connection::connect(resolved.clone());
+    let _ = typing::evaluate(resolved.clone());
+    let connected = connection::connect(resolved);
 
     //
     // let issues: Vec<_> = NodeIter::new(connected.clone())

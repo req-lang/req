@@ -3,10 +3,10 @@ use std::{collections::HashMap, fs, io, path::PathBuf, process};
 use clap::Parser;
 use colored::Colorize;
 use reqlang::{
-    issue::{self, IssueIterator, Severity},
+    issue::{self, IssueIterator, Severity, connection_errors, expr_errors, reference_errors},
     node::{self},
     path::NodePathIter,
-    renderer::formatter,
+    renderer::formatter::{self, entity},
     semantics::{
         connection::{self},
         link::{self},
@@ -43,64 +43,45 @@ enum Command {
     },
 }
 
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
     match cli.command {
         Command::Fmt { input, output } => {
-            let source = std::fs::read_to_string(&input).expect("Failed to read input");
+            let source = std::fs::read_to_string(&input)?;
+            let arena = parser::parse(&source)?;
 
-            let root = parser::parse(&source).unwrap_or_else(|err| {
-                eprintln!("syntax error at {}", err.start);
-                process::exit(1);
-            });
-
-            let nd = node::map(root, syntax::entity::Node::from);
             let result = match output {
-                Some(p) => {
-                    let mut fd = fs::File::create(p).unwrap_or_else(|err| {
-                        eprintln!("unable to create the output file: {err}");
-                        process::exit(1);
-                    });
-                    formatter::entity::format(nd.borrow(), 0, &mut fd)
-                }
-                None => formatter::entity::format(nd.borrow(), 0, &mut io::stdout()),
-            };
-
-            result.unwrap_or_else(|err| {
-                eprintln!("failed to write output: {err}");
-            });
+                Some(p) => entity::format(&arena, 0.into(), 0, &mut fs::File::create(p)?),
+                None => entity::format(&arena, 0.into(), 0, &mut io::stdout()),
+            }?;
         }
         Command::Check { input } => {
             let start = std::time::Instant::now();
-            let source = fs::read_to_string(&input).unwrap_or_else(|err| {
-                eprintln!("error reading {}: {err}", input.display());
-                process::exit(1);
-            });
-
-            let root = parser::parse(&source).unwrap_or_else(|err| {
-                eprintln!("syntax error at {}", err.start);
-                process::exit(1);
-            });
-
-            let spans: HashMap<_, _> = NodePathIter::new(root.clone())
-                .map(|(path, node)| (path, node.borrow().span))
+            let source = fs::read_to_string(&input)?;
+            let root = parser::parse(&source)?;
+            let paths = link::paths(&root);
+            let spans: HashMap<_, _> = paths
+                .iter()
+                .zip(root)
+                .map(|(path, node)| (path, node.payload))
                 .collect();
 
-            let ast = node::map(root, syntax::entity::Node::from);
-            let resolved = link::resolve(ast);
+            let resolved = link::resolve(root);
             let typed = typing::evaluate(resolved.clone());
-            let connected = connection::connect(resolved.clone());
+            let connected = connection::connect(resolved);
             let elapsed = start.elapsed();
 
             let mut count = 0;
-            for (((path, conn), res), node) in NodePathIter::new(connected)
-                .zip(NodeIter::new(resolved))
-                .zip(NodeIter::new(typed))
+            for (((path, conn), res), node) in paths
+                .iter()
+                .zip(connected.iter())
+                .zip(resolved.iter())
+                .zip(typed.iter())
             {
-                let issues: Vec<_> = IssueIterator::from(node.borrow())
-                    .chain(IssueIterator::from(conn.borrow()))
-                    .chain(IssueIterator::from(res.borrow()))
+                let issues: Vec<_> = expr_errors(node)
+                    .chain(connection_errors(conn))
+                    .chain(reference_errors(res))
                     .map(Issue::from)
                     .collect();
                 count += issues.len();
@@ -122,6 +103,8 @@ fn main() {
             }
         }
     }
+
+    Ok(())
 }
 
 struct Issue {

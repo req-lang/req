@@ -5,11 +5,11 @@ pub mod tokenizer;
 pub mod entity {
     use crate::{node, reference::Reference, syntax::parser};
 
-    pub type Node = node::entity::Node<(), Reference, (), ()>;
+    pub type Node = node::entity::Node<(), Reference, Reference, (), ()>;
 
     impl From<parser::entity::Node> for Node {
         fn from(value: parser::entity::Node) -> Self {
-            value.map(|_| ()).mape(|_| ())
+            value.map(|_| ()).mape(|_| ()).mapm(|_| ())
         }
     }
 }

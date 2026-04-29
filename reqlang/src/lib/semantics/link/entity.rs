@@ -1,120 +1,125 @@
-use std::{
-    cell::RefCell,
-    collections::HashMap,
-    rc::{Rc, Weak},
-};
+use std::collections::HashMap;
 
 use crate::{
-    node::{self, NodeRef, entity::IntoVariable},
+    node::{self, entity::Idx},
     reference::Reference,
-    semantics::link::{Result, WeakNodeRef, expression, markup},
-    syntax::{self},
+    semantics::link::{Result, expression, markup},
     utils::children::ChildrenIter,
 };
-use reqlang_derive::{ChildrenIter, IntoEntityVariable};
 
-#[derive(Default, Clone)]
-pub(super) struct Ctx {
-    path: Reference,
-    imports: Vec<Reference>,
+pub type Node<P, E, M> = node::entity::Node<P, Result<Idx>, Result<expression::Target>, E, M>;
+
+pub(super) fn link<N, R, E, M>(
+    paths: &HashMap<Reference, Idx>,
+    iv: Vec<Vec<&Reference>>,
+    parents: Vec<Vec<R>>,
+    arena: Vec<node::entity::Node<N, R, R, E, M>>,
+) -> Vec<Node<N, E, M>>
+where
+    R: Into<Reference> + AsRef<str> + Clone,
+{
+    arena
+        .into_iter()
+        .zip(iv.into_iter())
+        .zip(parents.into_iter())
+        .map(|((node, current), imports)| {
+            let parent = Reference::new(current[0].parent());
+            let ctx = FindCtx::new(&paths, &parent, imports);
+            let meta = node.meta.mapm(|r| markup::link(&ctx, r));
+            let variant = node
+                .variant
+                .mapr(|r| find(&ctx, r))
+                .mape(|e| expression::link(&ctx, e))
+                .mapm(|m| markup::link(&ctx, m));
+            Node::new(node.payload, meta, variant)
+        })
+        .collect()
 }
 
-#[derive(Default, Debug, Clone, ChildrenIter, IntoEntityVariable)]
-pub struct Node {
-    pub variant: node::entity::Variant<
-        NodeRef<Node>,
-        Result<WeakNodeRef<Node>>,
-        NodeRef<expression::Node>,
-        markup::Node,
-    >,
+pub struct FindCtx<'a, R> {
+    nodes: &'a HashMap<Reference, Idx>,
+    current: &'a Reference,
+    imports: Vec<R>,
 }
 
-pub(super) struct SubPaths<'a> {
-    pub entity: &'a Paths,
-    pub ctx: &'a Ctx,
-}
-
-#[derive(Debug, Default)]
-pub(super) struct Paths {
-    nodes: HashMap<Reference, Weak<RefCell<Node>>>,
-}
-
-pub(super) fn link(paths: &Paths, node: NodeRef<Node>, ctx: Ctx) {
-    let sub = SubPaths {
-        entity: &paths,
-        ctx: &ctx,
-    };
-
-    let imports = match node.borrow().variant.imports() {
-        Some(i) => i.iter().map(|i| i.clone().err().unwrap()).collect(),
-        None => Vec::new(),
-    };
-
-    {
-        let mut node_ref = node.borrow_mut();
-
-        for rf in node_ref.variant.references_mut() {
-            if let Some(found) = find(paths, rf.as_ref().err().unwrap(), &ctx) {
-                *rf = Ok(found.clone());
-            }
-        }
-
-        for expr in node_ref.variant.expressions() {
-            expression::link(&sub, expr.clone(), HashMap::new());
-        }
-
-        for markup in node_ref.variant.markups_mut() {
-            markup::link(&sub, markup);
+impl<'a, R> FindCtx<'a, R> {
+    fn new(nodes: &'a HashMap<Reference, Idx>, current: &'a Reference, imports: Vec<R>) -> Self {
+        Self {
+            nodes,
+            current,
+            imports,
         }
     }
-
-    let node_ref = node.borrow();
-    let label = &node_ref.variant.meta().label[..];
-    let path = &ctx.path + &label[..];
-
-    let ctx = Ctx { path, imports };
-
-    for child in node_ref.variant.children_iter() {
-        link(paths, child, ctx.clone());
-    }
 }
 
-pub(super) fn find(paths: &Paths, reference: &Reference, ctx: &Ctx) -> Option<WeakNodeRef<Node>> {
-    if let Some(direct) = paths.nodes.get(reference) {
-        return Some(direct.clone());
+pub(super) fn find<R: Into<Reference> + Clone>(ctx: &FindCtx<'_, R>, rf: R) -> Result<Idx> {
+    let rf = rf.into();
+    if let Some(direct) = ctx.nodes.get(&rf) {
+        return Ok(*direct);
     }
 
-    let child = &ctx.path + reference;
-    if let Some(child) = paths.nodes.get(&child) {
-        return Some(child.clone());
+    let child = ctx.current + &rf;
+    if let Some(child) = ctx.nodes.get(&child) {
+        return Ok(*child);
     }
 
     for import in &ctx.imports {
-        let imported = import + reference;
-        if let Some(imported) = paths.nodes.get(&imported) {
-            return Some(imported.clone());
+        let imported = &(*import).clone().into() + rf.as_str();
+        if let Some(imported) = ctx.nodes.get(&imported) {
+            return Ok(imported.clone());
         }
     }
 
-    None
+    Err(rf)
 }
 
-pub(super) fn build_paths<'n>(node: NodeRef<Node>, parent: &Reference, out: &mut Paths) {
-    let current = parent + &node.borrow().variant.meta().label[..];
+pub(super) fn init_imports<'n, P, R: Clone, T, E, M>(
+    arena: &'n Vec<node::entity::Node<P, R, T, E, M>>,
+    idx: Idx,
+    prev: Vec<R>,
+    parents: &mut Vec<Vec<R>>,
+) {
+    let node = &arena[idx];
+    parents.push(prev);
 
-    for child in node.borrow().variant.children_iter() {
-        build_paths(child, &current, out);
+    let imports = match node.variant.imports() {
+        Some(imports) => imports.iter().cloned().collect(),
+        None => Vec::new(),
+    };
+    for child in node.variant.children_iter() {
+        init_imports(arena, child, imports.clone(), parents);
+    }
+}
+
+pub(super) fn init_paths<'n, P, R, T, E, M>(
+    arena: &Vec<node::entity::Node<P, R, T, E, M>>,
+    idx: Idx,
+    parent: &Reference,
+    paths: &mut HashMap<Reference, Idx>,
+) {
+    let node = &arena[idx];
+    let current = parent + &node.meta.label;
+
+    for child in node.variant.children_iter() {
+        init_paths(arena, child, &current, paths);
     }
 
-    out.nodes.insert(current, Rc::downgrade(&node));
+    paths.insert(current, idx);
 }
 
-pub(super) fn init_nodes(node: syntax::entity::Node) -> Node {
-    let variant = node
-        .variant
-        .mapr(|r| Err::<Weak<RefCell<Node>>, Reference>(r));
-    let variant = variant.mape(|n| node::map(n, expression::init_node));
-    let variant = variant.mapn(|n| node::map(n, init_nodes));
-    let variant = variant.mapm(markup::init_nodes);
-    Node { variant }
+pub(super) fn iv_paths<'p, N>(
+    arena: &Vec<N>,
+    paths: &'p HashMap<Reference, Idx>,
+) -> Vec<Vec<&'p Reference>> {
+    let mut iv = Vec::with_capacity(paths.len());
+
+    for _ in arena {
+        iv.push(Vec::new());
+    }
+
+    for (path, idx) in paths {
+        iv[usize::from(*idx)].push(path);
+    }
+
+    iv
 }

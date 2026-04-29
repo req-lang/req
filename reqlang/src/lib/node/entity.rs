@@ -1,20 +1,54 @@
+use std::ops::{Index, IndexMut};
+
 use crate::{
     node::{expression, markup},
     utils::children::{Children, ChildrenIter, ChildrenMut, IntoChildren},
 };
 
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub struct Node<N, R, E, M> {
-    pub payload: N,
-    pub meta: NodeMeta<M, R>,
-    pub variant: NodeVariant<R, E, M>,
+#[derive(Default, Debug, Copy, Clone, Eq, PartialEq, Hash)]
+pub struct Idx(usize);
+
+impl From<Idx> for usize {
+    fn from(value: Idx) -> Self {
+        let Idx(val) = value;
+        val
+    }
 }
 
-pub type NodeVariant<R, E, M> = Variant<usize, R, Vec<expression::Node<E, R>>, markup::Node<M, R>>;
+impl From<usize> for Idx {
+    fn from(value: usize) -> Self {
+        Self(value)
+    }
+}
+
+impl<N, R, T, E, M> IndexMut<Idx> for Vec<Node<N, R, T, E, M>> {
+    fn index_mut(&mut self, index: Idx) -> &mut Self::Output {
+        let Idx(val) = index;
+        self.index_mut(val)
+    }
+}
+
+impl<N, R, T, E, M> Index<Idx> for Vec<Node<N, R, T, E, M>> {
+    type Output = Node<N, R, T, E, M>;
+
+    fn index(&self, index: Idx) -> &Self::Output {
+        let Idx(val) = index;
+        self.index(val)
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct Node<N, R, T, E, M> {
+    pub payload: N,
+    pub meta: NodeMeta<M, R>,
+    pub variant: NodeVariant<R, T, E, M>,
+}
+
+pub type NodeVariant<R, T, E, M> = Variant<Idx, R, Vec<expression::Node<E, T>>, markup::Node<M, R>>;
 pub type NodeMeta<M, R> = Meta<markup::Node<M, R>>;
 
-impl<N, R, E, M> Node<N, R, E, M> {
-    pub fn empty(meta: NodeMeta<M, R>, variant: NodeVariant<R, E, M>) -> Self
+impl<N, R, T, E, M> Node<N, R, T, E, M> {
+    pub fn empty(meta: NodeMeta<M, R>, variant: NodeVariant<R, T, E, M>) -> Self
     where
         N: Default,
     {
@@ -25,7 +59,7 @@ impl<N, R, E, M> Node<N, R, E, M> {
         }
     }
 
-    pub fn new(payload: N, meta: NodeMeta<M, R>, variant: NodeVariant<R, E, M>) -> Self {
+    pub fn new(payload: N, meta: NodeMeta<M, R>, variant: NodeVariant<R, T, E, M>) -> Self {
         Self {
             payload,
             meta,
@@ -33,7 +67,7 @@ impl<N, R, E, M> Node<N, R, E, M> {
         }
     }
 
-    pub fn map<F, Q>(self, mut f: F) -> Node<Q, R, E, M>
+    pub fn map<F, Q>(self, mut f: F) -> Node<Q, R, T, E, M>
     where
         F: FnMut(N) -> Q,
     {
@@ -44,22 +78,31 @@ impl<N, R, E, M> Node<N, R, E, M> {
         }
     }
 
-    pub fn mapr<F, S>(self, mut f: F) -> Node<N, S, E, M>
+    pub fn mapr<F, S>(self, mut f: F) -> Node<N, S, T, E, M>
     where
         F: FnMut(R) -> S,
     {
         Node {
             payload: self.payload,
             meta: self.meta.mapm(|m| m.mapr(&mut f)),
-            variant: self
-                .variant
-                .mapr(&mut f)
-                .mape(|e| e.into_iter().map(|e| e.mapr(&mut f)).collect())
-                .mapm(|m| m.mapr(&mut f)),
+            variant: self.variant.mapr(&mut f).mapm(|m| m.mapr(&mut f)),
         }
     }
 
-    pub fn mape<F, G>(self, mut f: F) -> Node<N, R, G, M>
+    pub fn mapt<F, U>(self, mut f: F) -> Node<N, R, U, E, M>
+    where
+        F: FnMut(T) -> U,
+    {
+        Node {
+            payload: self.payload,
+            meta: self.meta,
+            variant: self
+                .variant
+                .mape(|e| e.into_iter().map(|e| e.mapr(&mut f)).collect()),
+        }
+    }
+
+    pub fn mape<F, G>(self, mut f: F) -> Node<N, R, T, G, M>
     where
         F: FnMut(E) -> G,
     {
@@ -72,7 +115,7 @@ impl<N, R, E, M> Node<N, R, E, M> {
         }
     }
 
-    pub fn mapm<F, G>(self, mut f: F) -> Node<N, R, E, G>
+    pub fn mapm<F, G>(self, mut f: F) -> Node<N, R, T, E, G>
     where
         F: FnMut(M) -> G,
     {

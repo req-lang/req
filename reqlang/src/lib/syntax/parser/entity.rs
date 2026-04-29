@@ -4,7 +4,8 @@ use crate::{
     node::{
         self,
         entity::{
-            self, Attribute, Meta, RequirementVariant, TraceabilityKind, TraceabilityLink, Variant,
+            self, Attribute, Idx, Meta, RequirementVariant, TraceabilityKind, TraceabilityLink,
+            Variant,
         },
     },
     reference::Reference,
@@ -15,10 +16,10 @@ use crate::{
     },
 };
 
-pub type Node = node::entity::Node<Span, Reference, Span, ()>;
+pub type Node = node::entity::Node<Span, Reference, Reference, Span, ()>;
 // INVARIANT: Always parsed in DFS order (to allow iterating directly over the Vec<Node>)
 // TODO: Use peek_nth to avoid reset_peek
-pub fn parse(tokens: &mut MultiPeek<TokenIterator>, arena: &mut Vec<Node>) -> Result<usize, Span> {
+pub fn parse(tokens: &mut MultiPeek<TokenIterator>, arena: &mut Vec<Node>) -> Result<Idx, Span> {
     use Keyword::*;
     use TokenVariant::*;
 
@@ -44,7 +45,7 @@ pub fn parse(tokens: &mut MultiPeek<TokenIterator>, arena: &mut Vec<Node>) -> Re
                 prt.children = parse_children(tokens, &Part, arena)?;
 
                 arena.push(Node::new(tok.span, meta, Variant::Part(prt)));
-                return Ok(arena.len());
+                return Ok(arena.len().into());
             }
 
             Reserved(Package) => {
@@ -55,7 +56,7 @@ pub fn parse(tokens: &mut MultiPeek<TokenIterator>, arena: &mut Vec<Node>) -> Re
                 pkg.children = parse_children(tokens, &Package, arena)?;
 
                 arena.push(Node::new(tok.span, meta, Variant::Package(pkg)));
-                return Ok(arena.len());
+                return Ok(arena.len().into());
             }
 
             Reserved(Let) => {
@@ -93,7 +94,7 @@ pub fn parse(tokens: &mut MultiPeek<TokenIterator>, arena: &mut Vec<Node>) -> Re
                 tokens.reset_peek();
 
                 arena.push(Node::new(span.clone(), meta, Variant::Attribute(atr)));
-                return Ok(arena.len());
+                return Ok(arena.len().into());
             }
 
             Reserved(Requirement) => {
@@ -153,7 +154,7 @@ pub fn parse(tokens: &mut MultiPeek<TokenIterator>, arena: &mut Vec<Node>) -> Re
                 }
 
                 arena.push(Node::new(token.span, meta, Variant::Requirement(req)));
-                return Ok(arena.len());
+                return Ok(arena.len().into());
             }
 
             _ => return Err(tok.span),
@@ -182,7 +183,7 @@ fn parse_children(
     tokens: &mut MultiPeek<TokenIterator>,
     stop: &Keyword,
     arena: &mut Vec<Node>,
-) -> Result<Vec<usize>, Span> {
+) -> Result<Vec<Idx>, Span> {
     let mut children = Vec::new();
 
     while !is_closing(tokens, stop) {

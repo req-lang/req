@@ -1,115 +1,90 @@
 use std::{cell::RefCell, collections::HashSet, rc::Rc};
 
 use crate::{
-    node::entity::TraceabilityKind,
-    node::{self, NodeRef},
+    node::{
+        self,
+        entity::{Idx, TraceabilityKind},
+    },
     semantics::connection::{entity::Node, issue::IssueKind},
-    utils::iter::NodeIter,
 };
 
 #[derive(Clone, Default)]
 struct PathCtx {
-    in_path: HashSet<*const RefCell<Node>>,
-    path: Vec<(NodeRef<Node>, TraceabilityKind)>,
+    in_path: HashSet<Idx>,
+    path: Vec<(Idx, TraceabilityKind)>,
 }
 
-pub(super) fn detect_traceability_cycles(node: NodeRef<Node>) {
+pub(super) fn detect_traceability_cycles<E, M>(arena: &Vec<Rc<RefCell<Node<E, M>>>>) {
     use node::entity::Variant::Requirement;
 
-    let mut visited: HashSet<*const RefCell<Node>> = HashSet::new();
-    for child in NodeIter::new(node) {
-        let ptr = Rc::as_ptr(&child);
-        if let Requirement(_) = &child.borrow().variant
-            && !visited.contains(&ptr)
+    let mut visited: HashSet<Idx> = HashSet::new();
+    for (idx, node) in arena.iter().enumerate() {
+        let idx = Idx::from(idx);
+        let node = node.borrow();
+        if let Requirement(_) = &node.variant
+            && !visited.contains(&idx)
         {
-            let neighbors = traceability_neighbors(&child);
+            let neighbors = node.payload.inbound.traceability.iter();
             for (neighbor, kind) in neighbors {
                 let ctx = PathCtx {
-                    in_path: HashSet::from([ptr]),
-                    path: vec![(child.clone(), kind)],
+                    in_path: HashSet::from([idx]),
+                    path: vec![(idx, kind)],
                 };
-                detect_cycle_from(neighbor, ctx, &mut visited);
+                detect_cycle_from(arena, neighbor.target, ctx, &mut visited);
             }
-            visited.insert(ptr);
+            visited.insert(idx);
         }
     }
 }
 
-fn detect_cycle_from(
-    node: NodeRef<Node>,
+fn detect_cycle_from<E, M>(
+    arena: &Vec<Rc<RefCell<Node<E, M>>>>,
+    idx: Idx,
     ctx: PathCtx,
-    visited: &mut HashSet<*const RefCell<Node>>,
+    visited: &mut HashSet<Idx>,
 ) {
-    let ptr = Rc::as_ptr(&node);
+    let idx = idx;
 
-    if ctx.in_path.contains(&ptr) {
-        let pos = ctx
-            .path
-            .iter()
-            .position(|(n, _)| Rc::as_ptr(n) == ptr)
-            .unwrap();
-        mark_cycle(&ctx.path[pos..]);
+    if ctx.in_path.contains(&idx) {
+        let pos = ctx.path.iter().position(|(n, _)| *n == idx).unwrap();
+        mark_cycle(arena, &ctx.path[pos..]);
         return;
     }
 
-    if visited.contains(&ptr) {
+    if visited.contains(&idx) {
         return;
     }
 
-    let neighbors = traceability_neighbors(&node);
+    let node = &arena[usize::from(idx)].borrow();
+    let neighbors = node.payload.inbound.traceability.iter();
     let mut ctx = ctx;
-    ctx.in_path.insert(ptr);
+    ctx.in_path.insert(idx);
 
-    for (neighbor, kind) in neighbors {
+    for (neighbor, kind) in neighbors
+        .map(|(t, k)| (t.target, k))
+        .collect::<Vec<_>>()
+        .into_iter()
+    {
         let mut next_ctx = ctx.clone();
-        next_ctx.path.push((node.clone(), kind));
-        detect_cycle_from(neighbor, next_ctx, visited);
+        next_ctx.path.push((idx, kind));
+        detect_cycle_from(arena, neighbor, next_ctx, visited);
     }
 
-    visited.insert(ptr);
+    visited.insert(idx);
 }
 
-fn traceability_neighbors(node: &NodeRef<Node>) -> Vec<(NodeRef<Node>, TraceabilityKind)> {
+fn mark_cycle<E, M>(arena: &Vec<Rc<RefCell<Node<E, M>>>>, path: &[(Idx, TraceabilityKind)]) {
     use TraceabilityKind::*;
 
-    let nd = node.borrow();
-    let ib = &nd.neighbors.inbound.traceability;
-
-    let derivations = ib
-        .derivations
-        .iter()
-        .map(|c| (c.target.upgrade().unwrap(), Derivation));
-
-    let refinements = ib
-        .refinements
-        .iter()
-        .map(|c| (c.target.upgrade().unwrap(), Refinement));
-
-    let specializations = ib
-        .specializations
-        .iter()
-        .map(|c| (c.target.upgrade().unwrap(), Specialization));
-
-    derivations
-        .chain(refinements)
-        .chain(specializations)
-        .collect()
-}
-
-fn mark_cycle(path: &[(NodeRef<Node>, TraceabilityKind)]) {
-    use TraceabilityKind::*;
-
-    for i in 0..path.len() {
-        let (node, kind) = &path[i];
-        let next_ptr = Rc::as_ptr(&path[(i + 1) % path.len()].0);
-
-        let mut nd = node.borrow_mut();
+    for (i, kind) in path {
+        let nd = &mut arena[usize::from(*i)].borrow_mut();
+        let (idx, _) = path[(usize::from(*i) + 1) % path.len()];
         let conns = match kind {
-            Derivation => &mut nd.neighbors.inbound.traceability.derivations,
-            Refinement => &mut nd.neighbors.inbound.traceability.refinements,
-            Specialization => &mut nd.neighbors.inbound.traceability.specializations,
+            Derivation => &mut nd.payload.inbound.traceability.derivations,
+            Refinement => &mut nd.payload.inbound.traceability.refinements,
+            Specialization => &mut nd.payload.inbound.traceability.specializations,
         };
-        if let Some(conn) = conns.iter_mut().find(|c| c.target.as_ptr() == next_ptr) {
+        if let Some(conn) = conns.iter_mut().find(|c| c.target == idx) {
             conn.issue.push(IssueKind::CyclicTrace);
         }
     }

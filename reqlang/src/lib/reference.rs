@@ -2,74 +2,64 @@ use std::{fmt::Display, ops::Add};
 
 use crate::syntax::tokenizer::entity::REFERENCE_SEPARATOR;
 
+// TODO: Rename with something more adequate, Reference collapses with Rust refs
+
 #[derive(Default, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Reference {
-    pub value: String,
-}
+pub struct Reference(String);
 
 impl Display for Reference {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.value)
+        let Self(v) = self;
+        write!(f, "{}", v)
     }
 }
 
 impl Reference {
-    pub fn new(value: String) -> Self {
-        Reference { value }
+    pub fn new<S: ToString>(value: S) -> Self {
+        Reference(value.to_string())
     }
 
     pub fn len(&self) -> usize {
-        self.value.split(REFERENCE_SEPARATOR).count()
-    }
-
-    pub fn replace_label(&mut self, label: &str) {
-        match self.value.rfind(REFERENCE_SEPARATOR) {
-            Some(slice_idx) => self.value.replace_range(slice_idx.., label),
-            None => self.value = label.to_string(),
-        }
+        self.as_str().split(REFERENCE_SEPARATOR).count()
     }
 
     pub fn label(&self) -> &str {
-        match self.value.rfind(REFERENCE_SEPARATOR) {
-            Some(slice_idx) => &self.value[slice_idx + 2..],
-            None => &self.value,
+        let v = self.as_str();
+        match v.rfind(REFERENCE_SEPARATOR) {
+            Some(idx) => &v[idx + 2..],
+            None => &v,
+        }
+    }
+
+    pub fn parent(&self) -> &str {
+        let v = self.as_str();
+        match v.rfind(REFERENCE_SEPARATOR) {
+            Some(idx) => &v[..idx],
+            None => &v,
         }
     }
 
     pub fn as_str(&self) -> &str {
-        &self.value
+        let Self(v) = self;
+        &v[..]
     }
 }
 
-impl Add<&str> for &Reference {
+impl<S: AsRef<str>> Add<S> for &Reference {
     type Output = Reference;
 
-    fn add(self, rhs: &str) -> Self::Output {
-        let value = &self.value[..];
-        let ret = match value {
-            "" => rhs.to_string(),
-            prefix => format!("{}{}{}", prefix, REFERENCE_SEPARATOR, rhs),
+    fn add(self, rhs: S) -> Self::Output {
+        let ret = match self.as_str() {
+            "" => format!("{}", rhs.as_ref()),
+            prefix => format!("{}{}{}", prefix, REFERENCE_SEPARATOR, rhs.as_ref()),
         };
 
         Reference::new(ret)
     }
 }
 
-impl Add<&Reference> for &Reference {
-    type Output = Reference;
-
-    fn add(self, rhs: &Reference) -> Self::Output {
-        let ret = match &self.value[..] {
-            "" => rhs.to_string(),
-            prefix => format!("{}{}{}", prefix, REFERENCE_SEPARATOR, rhs.value),
-        };
-
-        Reference::new(ret)
-    }
-}
-
-impl PartialEq<str> for Reference {
-    fn eq(&self, other: &str) -> bool {
-        self.value == other
+impl AsRef<str> for Reference {
+    fn as_ref(&self) -> &str {
+        self.as_str()
     }
 }
