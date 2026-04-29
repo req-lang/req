@@ -5,7 +5,7 @@ use crate::{
     utils::children::{Children, ChildrenIter, ChildrenMut, IntoChildren},
 };
 
-#[derive(Default, Debug, Copy, Clone, Eq, PartialEq, Hash)]
+#[derive(Default, Debug, Copy, Clone, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub struct Idx(usize);
 
 impl From<Idx> for usize {
@@ -67,9 +67,9 @@ impl<N, R, T, E, M> Node<N, R, T, E, M> {
         }
     }
 
-    pub fn map<F, Q>(self, mut f: F) -> Node<Q, R, T, E, M>
+    pub fn map<F, Q>(self, f: F) -> Node<Q, R, T, E, M>
     where
-        F: FnMut(N) -> Q,
+        F: FnOnce(N) -> Q,
     {
         Node {
             payload: f(self.payload),

@@ -2,7 +2,7 @@ use std::ops::{Index, IndexMut};
 
 use crate::utils::children::ChildrenIter;
 
-#[derive(Default, Debug, Copy, Clone, Eq, PartialEq, Hash)]
+#[derive(Default, Debug, Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct Idx(usize);
 
 impl From<Idx> for usize {
