@@ -581,6 +581,22 @@ impl<R, E, M> From<RequirementVariant<E, M>> for Requirement<R, E, M> {
 }
 
 impl<R, E, M> Requirement<R, E, M> {
+    pub fn mapm<F, O>(self, f: F) -> Requirement<R, E, O>
+    where
+        F: FnOnce(M) -> O,
+    {
+        Requirement {
+            restriction: self.restriction,
+            allocation: self.allocation,
+            traceability: self.traceability,
+            inhibitor: self.inhibitor,
+            variant: match self.variant {
+                RequirementVariant::Informal(markup) => RequirementVariant::Informal(f(markup)),
+                RequirementVariant::Formal(expr) => RequirementVariant::Formal(expr),
+            },
+        }
+    }
+
     pub fn informal(&self) -> Option<&M> {
         match &self.variant {
             RequirementVariant::Informal(markup) => Some(markup),

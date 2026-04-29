@@ -19,9 +19,9 @@ impl<P, R> Node<P, R> {
         Self { payload, container }
     }
 
-    pub fn map<F, Q>(self, mut f: F) -> Node<Q, R>
+    pub fn map<F, Q>(self, f: F) -> Node<Q, R>
     where
-        F: FnMut(P) -> Q,
+        F: FnOnce(P) -> Q,
     {
         Node {
             payload: f(self.payload),
@@ -48,9 +48,9 @@ pub enum Item<R> {
 }
 
 impl<R> Item<R> {
-    pub fn mapr<F, S>(self, mut f: F) -> Item<S>
+    pub fn mapr<F, S>(self, f: F) -> Item<S>
     where
-        F: FnMut(R) -> S,
+        F: FnOnce(R) -> S,
     {
         match self {
             Item::Reference(r) => Item::Reference(f(r)),
