@@ -83,12 +83,11 @@ pub fn parse(tokens: &mut MultiPeek<TokenIterator>, arena: &mut Vec<Node>) -> Re
 
                 meta.label = label;
                 let token = tokens.peek().ok_or(tok.span)?;
-                let start = token.span.start.clone();
                 let span = token.span.clone();
                 atr.unit = match token.variant {
                     TokenVariant::Unit(expr) => {
                         tokens.next();
-                        Some(expression::parse(expr, &start)?)
+                        Some(expr.to_string())
                     }
 
                     _ => None,

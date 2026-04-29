@@ -115,8 +115,8 @@ mod tests {
         p.variant.children_mut().unwrap().push(3.into());
 
         let mut u = mock::entity::attribute("u", "real");
-        let unit = mock::expression::identifier("m");
-        u.variant.attribute_mut().unwrap().unit = Some(vec![unit]);
+        let unit = "m".to_string();
+        u.variant.attribute_mut().unwrap().unit = Some(unit);
 
         let v = mock::entity::attribute("v", "integer");
 

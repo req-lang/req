@@ -5,18 +5,22 @@ pub mod simple {
 
     use reqlang::{
         mock::generator::ExponentialSizeIterator,
-        node::{self, NodeRef},
-        semantics::{connection, link, typing},
+        semantics::{
+            connection, link,
+            typing::{self, TypeResult},
+        },
         syntax,
     };
 
     use super::*;
 
-    fn complete_pipeline(root: NodeRef<syntax::entity::Node>) -> NodeRef<connection::entity::Node> {
-        let ast = node::map(root, syntax::entity::Node::from);
+    fn complete_pipeline(
+        root: Vec<syntax::entity::Node>,
+    ) -> Vec<connection::entity::Node<TypeResult, ()>> {
+        let ast = root;
         let resolved = link::resolve(ast);
-        let _ = typing::evaluate(resolved.clone());
-        connection::connect(resolved)
+        let typing = typing::evaluate(resolved);
+        connection::connect(typing)
     }
 
     pub fn package(c: &mut Criterion) {

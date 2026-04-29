@@ -18,11 +18,9 @@ pub(super) fn evaluate<N, E, M>(
         .into_iter()
         .zip(types)
         .map(|(node, t)| {
-            // Workaround because mape is FnMut. might be removed with proper units semantics
-            let mut typ = Some(t.into_inner());
             let variant = node
                 .variant
-                .mape(|n| expression::evaluate(n, typ.take().unwrap()));
+                .mape(|n| expression::evaluate(n, t.into_inner()));
             Node::new(node.payload, node.meta, variant)
         })
         .collect()
@@ -34,12 +32,7 @@ pub(super) fn init_types<N, E, M>(
     let mut types = Vec::with_capacity(arena.len());
     for expr in arena.iter().map(|n| n.variant.expressions().next()) {
         let init = match expr {
-            Some(expr) => {
-                let mut t = Vec::with_capacity(expr.len());
-                t.extend(std::iter::repeat(None).take(expr.len()));
-                t
-            }
-
+            Some(expr) => std::iter::repeat(None).take(expr.len()).collect(),
             None => Vec::new(),
         };
         types.push(RefCell::new(init));

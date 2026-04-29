@@ -126,13 +126,13 @@ pub mod generator {
                 for p in 0..self.packages {
                     let pkg = Rc::new(RefCell::new(package(format!("package_{p}"))));
                     arena.push(pkg.clone());
-                    push_child(&root, arena.len());
+                    push_child(&root, arena.len() - 1);
 
                     let mut prev = pkg;
                     for d in 0..self.depth {
                         let curr = Rc::new(RefCell::new(package(format!("package_{p}_{d}"))));
                         arena.push(curr.clone());
-                        let len = arena.len();
+                        let len = arena.len() - 1;
                         for r in 0..self.requirements {
                             let mut req = requirement(format!("requirement_{p}_{d}_{r}"));
                             let content = repeat_words(self.words as usize);
@@ -143,7 +143,7 @@ pub mod generator {
                             *informal.unwrap() = markup::Node::empty(markup);
 
                             arena.push(Rc::new(RefCell::new(req)));
-                            push_child(&curr, arena.len());
+                            push_child(&curr, arena.len() - 1);
                         }
 
                         push_child(&prev, len);

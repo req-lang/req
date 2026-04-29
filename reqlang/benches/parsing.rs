@@ -13,7 +13,7 @@ pub mod simple {
             let mut generator = generator::Simple::new();
             generator.packages = size;
             let root = generator.generate();
-            let input = renderer::formatter::format_string(root.borrow(), 0);
+            let input = renderer::formatter::format_string(&root, 0);
 
             let id = BenchmarkId::from_parameter(size);
             group.throughput(Throughput::Elements(generator.size()));
@@ -31,7 +31,7 @@ pub mod simple {
             let mut generator = generator::Simple::new();
             generator.depth = size;
             let root = generator.generate();
-            let input = renderer::formatter::format_string(root.borrow(), 0);
+            let input = renderer::formatter::format_string(&root, 0);
 
             let id = BenchmarkId::from_parameter(size);
             group.throughput(Throughput::Elements(generator.size()));
@@ -49,7 +49,7 @@ pub mod simple {
             let mut generator = generator::Simple::new();
             generator.words = size;
             let root = generator.generate();
-            let input = renderer::formatter::format_string(root.borrow(), 0);
+            let input = renderer::formatter::format_string(&root, 0);
             let id = BenchmarkId::from_parameter(size);
 
             group.throughput(Throughput::BytesDecimal(input.len() as u64));

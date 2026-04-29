@@ -263,15 +263,15 @@ impl<N, R, E, M> Variant<N, R, E, M> {
         }
     }
 
-    pub fn mape<F, G>(self, mut f: F) -> Variant<N, R, G, M>
+    pub fn mape<F, G>(self, f: F) -> Variant<N, R, G, M>
     where
-        F: FnMut(E) -> G,
+        F: FnOnce(E) -> G,
     {
         match self {
             Variant::Part(part) => Variant::Part(part),
             Variant::Attribute(attribute) => Variant::Attribute(Attribute {
                 domain: f(attribute.domain),
-                unit: attribute.unit.map(&mut f),
+                unit: attribute.unit,
             }),
             Variant::Package(package) => Variant::Package(package),
             Variant::Requirement(requirement) => Variant::Requirement(Requirement {
@@ -287,9 +287,9 @@ impl<N, R, E, M> Variant<N, R, E, M> {
         }
     }
 
-    pub fn mapm<F, O>(self, mut f: F) -> Variant<N, R, E, O>
+    pub fn mapm<F, O>(self, f: F) -> Variant<N, R, E, O>
     where
-        F: FnMut(M) -> O,
+        F: FnOnce(M) -> O,
     {
         match self {
             Variant::Part(part) => Variant::Part(Part {
@@ -529,7 +529,7 @@ impl<N, R> Part<N, R> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Attribute<E> {
     pub domain: E,
-    pub unit: Option<E>,
+    pub unit: Option<String>,
 }
 
 impl<E> Attribute<E> {
