@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashSet, rc::Rc};
+use std::{cell::RefCell, collections::HashSet};
 
 use crate::{
     issue::Severity,
@@ -89,7 +89,7 @@ impl From<&IssueKind> for Severity {
     }
 }
 
-type RcArena<E, M> = Vec<Rc<RefCell<Node<E, M>>>>;
+type RcArena<E, M> = Vec<RefCell<Node<E, M>>>;
 
 pub(super) fn collect_issues<E, M>(arena: &RcArena<E, M>, idx: Idx) {
     use node::entity::Variant::*;

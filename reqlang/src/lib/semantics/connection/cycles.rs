@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashSet, rc::Rc};
+use std::{cell::RefCell, collections::HashSet};
 
 use crate::{
     node::{
@@ -14,7 +14,7 @@ struct PathCtx {
     path: Vec<(Idx, TraceabilityKind)>,
 }
 
-pub(super) fn detect_traceability_cycles<E, M>(arena: &Vec<Rc<RefCell<Node<E, M>>>>) {
+pub(super) fn detect_traceability_cycles<E, M>(arena: &Vec<RefCell<Node<E, M>>>) {
     use node::entity::Variant::Requirement;
 
     let mut visited: HashSet<Idx> = HashSet::new();
@@ -38,7 +38,7 @@ pub(super) fn detect_traceability_cycles<E, M>(arena: &Vec<Rc<RefCell<Node<E, M>
 }
 
 fn detect_cycle_from<E, M>(
-    arena: &Vec<Rc<RefCell<Node<E, M>>>>,
+    arena: &Vec<RefCell<Node<E, M>>>,
     idx: Idx,
     ctx: PathCtx,
     visited: &mut HashSet<Idx>,
@@ -73,7 +73,7 @@ fn detect_cycle_from<E, M>(
     visited.insert(idx);
 }
 
-fn mark_cycle<E, M>(arena: &Vec<Rc<RefCell<Node<E, M>>>>, path: &[(Idx, TraceabilityKind)]) {
+fn mark_cycle<E, M>(arena: &Vec<RefCell<Node<E, M>>>, path: &[(Idx, TraceabilityKind)]) {
     use TraceabilityKind::*;
 
     for (i, kind) in path {

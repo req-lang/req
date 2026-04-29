@@ -1,4 +1,4 @@
-use std::{cell::RefCell, fmt::Debug, rc::Rc};
+use std::{cell::RefCell, fmt::Debug};
 
 use crate::{
     node::entity::Idx,
@@ -34,18 +34,11 @@ pub fn connect<N, E: Debug, M: Debug>(
     graph::build_graph(&arena, &mut graph, None);
     let arena = entity::connect(arena, &mut graph);
 
-    let arena: Vec<_> = arena
-        .into_iter()
-        .map(|a| Rc::new(RefCell::new(a)))
-        .collect();
-
+    let arena: Vec<_> = arena.into_iter().map(RefCell::new).collect();
     cycles::detect_traceability_cycles(&arena);
     for (idx, _) in arena.iter().enumerate() {
         issue::collect_issues(&arena, idx.into());
     }
 
-    arena
-        .into_iter()
-        .map(|n| Rc::try_unwrap(n).unwrap().into_inner())
-        .collect()
+    arena.into_iter().map(|n| n.into_inner()).collect()
 }

@@ -1,22 +1,16 @@
-use std::{collections::HashMap, fs, io, path::PathBuf, process};
+use std::{collections::HashMap, fs, io, path::PathBuf};
 
 use clap::Parser;
 use colored::Colorize;
 use reqlang::{
-    issue::{self, IssueIterator, Severity, connection_errors, expr_errors, reference_errors},
-    node::{self},
-    path::NodePathIter,
-    renderer::formatter::{self, entity},
+    issue::{self, Severity, connection_errors, expr_errors, reference_errors},
+    renderer::formatter::entity,
     semantics::{
         connection::{self},
         link::{self},
         typing::{self},
     },
-    syntax::{
-        self,
-        parser::{self},
-    },
-    utils::iter::NodeIter,
+    syntax::parser::{self},
 };
 
 #[derive(clap::Parser)]
@@ -51,7 +45,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let source = std::fs::read_to_string(&input)?;
             let arena = parser::parse(&source)?;
 
-            let result = match output {
+            match output {
                 Some(p) => entity::format(&arena, 0.into(), 0, &mut fs::File::create(p)?),
                 None => entity::format(&arena, 0.into(), 0, &mut io::stdout()),
             }?;

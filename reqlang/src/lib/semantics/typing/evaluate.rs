@@ -171,7 +171,10 @@ pub(super) fn evaluate_node<P>(
             Ok(TypeKind::Set(Box::new(first.clone())))
         }
 
-        Function(_) => todo!(),
+        Function(_) => {
+            eprintln!("not yet implemented");
+            Ok(TypeKind::Undefined)
+        }
 
         Identifier(ident) => match &ident.target.as_ref().map_err(|_| DomainNotFound)? {
             Target::Entity(tgt) => match types[usize::from(*tgt)].borrow().is_empty() {
