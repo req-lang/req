@@ -42,10 +42,11 @@ pub fn parse(tokens: &mut MultiPeek<TokenIterator>, arena: &mut Vec<Node>) -> Re
 
                 meta.label = parse_label(tokens)?;
                 prt.imports = parse_imports(tokens)?;
-                prt.children = parse_children(tokens, &Part, arena)?;
-
+                let idx = arena.len();
                 arena.push(Node::new(tok.span, meta, Variant::Part(prt)));
-                return Ok(arena.len().into());
+                let children = parse_children(tokens, &Part, arena)?;
+                arena[idx].variant.children_mut().unwrap().extend(children);
+                return Ok(idx.into());
             }
 
             Reserved(Package) => {
@@ -53,10 +54,11 @@ pub fn parse(tokens: &mut MultiPeek<TokenIterator>, arena: &mut Vec<Node>) -> Re
 
                 meta.label = parse_label(tokens)?;
                 pkg.imports = parse_imports(tokens)?;
-                pkg.children = parse_children(tokens, &Package, arena)?;
-
+                let idx = arena.len();
                 arena.push(Node::new(tok.span, meta, Variant::Package(pkg)));
-                return Ok(arena.len().into());
+                let children = parse_children(tokens, &Package, arena)?;
+                arena[idx].variant.children_mut().unwrap().extend(children);
+                return Ok(idx.into());
             }
 
             Reserved(Let) => {
@@ -93,8 +95,9 @@ pub fn parse(tokens: &mut MultiPeek<TokenIterator>, arena: &mut Vec<Node>) -> Re
                 };
                 tokens.reset_peek();
 
+                let idx = arena.len();
                 arena.push(Node::new(span.clone(), meta, Variant::Attribute(atr)));
-                return Ok(arena.len().into());
+                return Ok(idx.into());
             }
 
             Reserved(Requirement) => {
@@ -153,8 +156,9 @@ pub fn parse(tokens: &mut MultiPeek<TokenIterator>, arena: &mut Vec<Node>) -> Re
                     _ => return Err(token.span),
                 }
 
+                let idx = arena.len();
                 arena.push(Node::new(token.span, meta, Variant::Requirement(req)));
-                return Ok(arena.len().into());
+                return Ok(idx.into());
             }
 
             _ => return Err(tok.span),

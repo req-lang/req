@@ -69,7 +69,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             let resolved = link::resolve(root);
             let typed = typing::evaluate(resolved.clone());
-            let connected = connection::connect(resolved);
+            let connected = connection::connect(typed.clone());
             let elapsed = start.elapsed();
 
             let mut count = 0;

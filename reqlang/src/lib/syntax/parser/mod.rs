@@ -19,7 +19,6 @@ pub fn parse(input: &str) -> Result<Vec<Node>, Span> {
         .tokens()
         .multipeek();
     entity::parse(&mut tokens, &mut arena)?;
-    arena.reverse();
     Ok(arena)
 }
 
@@ -108,20 +107,20 @@ mod tests {
         let nodes = result.ok().unwrap();
         let ast: Vec<_> = nodes.into_iter().map(syntax::entity::Node::from).collect();
 
-        let mut expected = mock::entity::package("x");
-        expected.variant.children_mut().unwrap().push(1.into());
+        let mut x = mock::entity::package("x");
+        x.variant.children_mut().unwrap().push(1.into());
 
-        let mut first = mock::entity::part("p");
-        first.variant.children_mut().unwrap().push(2.into());
-        first.variant.children_mut().unwrap().push(3.into());
+        let mut p = mock::entity::part("p");
+        p.variant.children_mut().unwrap().push(2.into());
+        p.variant.children_mut().unwrap().push(3.into());
 
-        let mut second = mock::entity::attribute("u", "real");
+        let mut u = mock::entity::attribute("u", "real");
         let unit = mock::expression::identifier("m");
-        second.variant.attribute_mut().unwrap().unit = Some(vec![unit]);
+        u.variant.attribute_mut().unwrap().unit = Some(vec![unit]);
 
-        let third = mock::entity::attribute("v", "integer");
+        let v = mock::entity::attribute("v", "integer");
 
-        assert_eq!(ast, vec![expected, first, second, third]);
+        assert_eq!(ast, vec![x, p, u, v]);
     }
 
     #[test]
