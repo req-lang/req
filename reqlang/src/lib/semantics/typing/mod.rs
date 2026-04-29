@@ -21,9 +21,9 @@ pub trait Typed {
     fn type_result(&self) -> &TypeResult;
 }
 
-impl Typed for expression::Node {
+impl Typed for TypeResult {
     fn type_result(&self) -> &TypeResult {
-        &self.payload
+        self
     }
 }
 

@@ -20,9 +20,9 @@ pub trait Connected {
     fn neigbhors(&self) -> &Neighbors<Connection<Idx>>;
 }
 
-impl<E, M> Connected for entity::Node<E, M> {
+impl Connected for Neighbors<Connection<Idx>> {
     fn neigbhors(&self) -> &Neighbors<Connection<Idx>> {
-        &self.payload
+        &self
     }
 }
 

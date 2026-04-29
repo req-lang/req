@@ -63,25 +63,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let paths = link::paths(&root);
             let spans: HashMap<_, _> = paths
                 .iter()
-                .zip(root)
+                .zip(root.iter())
                 .map(|(path, node)| (path, node.payload))
                 .collect();
 
             let resolved = link::resolve(root);
-            let typed = typing::evaluate(resolved.clone());
-            let connected = connection::connect(typed.clone());
+            let typed = typing::evaluate(resolved);
+            let connected = connection::connect(typed);
             let elapsed = start.elapsed();
 
             let mut count = 0;
-            for (((path, conn), res), node) in paths
-                .iter()
-                .zip(connected.iter())
-                .zip(resolved.iter())
-                .zip(typed.iter())
-            {
+            for (path, node) in paths.iter().zip(connected.iter()) {
                 let issues: Vec<_> = expr_errors(node)
-                    .chain(connection_errors(conn))
-                    .chain(reference_errors(res))
+                    .chain(connection_errors(node))
+                    .chain(reference_errors(node))
                     .map(Issue::from)
                     .collect();
                 count += issues.len();
