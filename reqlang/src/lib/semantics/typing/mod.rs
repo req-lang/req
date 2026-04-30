@@ -39,7 +39,7 @@ mod tests {
             expression::{BinaryOperator::*, Variant::*},
         },
         semantics::{
-            link,
+            link, path,
             typing::{
                 entity, evaluate,
                 expression::{Issue, TypeKind},
@@ -49,10 +49,11 @@ mod tests {
         utils::children::ChildrenIter,
     };
 
-    type Node = entity::Node<(), ()>;
+    type Node = entity::Node<path::Location, ()>;
 
     fn resolve_and_evaluate(syn: Vec<syntax::entity::Node>) -> Vec<Node> {
-        let resolved = link::resolve(syn);
+        let resolved = path::discover(syn);
+        let resolved = link::resolve(resolved);
         let typed = evaluate(resolved);
         typed
     }

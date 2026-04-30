@@ -8,7 +8,6 @@ use pest::{
 
 use crate::{
     node::{self, expression::*},
-    reference::Reference,
     syntax::location::{Position, Span},
 };
 
@@ -17,7 +16,7 @@ use pest_derive;
 #[grammar = "grammars/expression.pest"]
 struct PairParser;
 
-pub(in crate::syntax) type Node = node::expression::Node<Span, Reference>;
+pub(in crate::syntax) type Node = node::expression::Node<Span, String>;
 
 pub fn parse(input: &str, offset: &Position) -> Result<Vec<Node>, Span> {
     let mut arena = Vec::new();
@@ -56,8 +55,8 @@ impl<'s> Builder<'s> {
                 let span = Span::from(primary.as_span()) + *self.offset;
                 match primary.as_rule() {
                     Rule::ident => {
-                        let value = primary.as_str().to_string();
-                        let reference = Reference::new(value);
+                        let value = primary.as_str();
+                        let reference = value.to_string();
                         let ident = Identifier::new(reference);
                         let variant = Variant::Identifier(ident);
                         Node::new(span, variant)

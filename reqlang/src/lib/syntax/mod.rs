@@ -3,9 +3,9 @@ pub mod parser;
 pub mod tokenizer;
 
 pub mod entity {
-    use crate::{node, reference::Reference, syntax::parser};
+    use crate::{node, syntax::parser};
 
-    pub type Node = node::entity::Node<(), Reference, Reference, (), ()>;
+    pub type Node = node::entity::Node<(), String, String, (), ()>;
 
     impl From<parser::entity::Node> for Node {
         fn from(value: parser::entity::Node) -> Self {
@@ -15,9 +15,9 @@ pub mod entity {
 }
 
 pub mod expression {
-    use crate::{node, reference::Reference, syntax::parser};
+    use crate::{node, syntax::parser};
 
-    pub type Node = node::expression::Node<(), Reference>;
+    pub type Node = node::expression::Node<(), String>;
 
     impl From<parser::expression::Node> for Node {
         fn from(value: parser::expression::Node) -> Self {
@@ -27,7 +27,7 @@ pub mod expression {
 }
 
 pub mod markup {
-    use crate::{node, reference::Reference};
+    use crate::node;
 
-    pub type Node = node::markup::Node<(), Reference>;
+    pub type Node = node::markup::Node<(), String>;
 }

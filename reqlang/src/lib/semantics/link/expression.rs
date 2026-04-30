@@ -2,11 +2,8 @@ use std::collections::HashMap;
 
 use crate::{
     node::{self, expression::Idx},
-    reference::Reference,
-    semantics::link::{
-        Result,
-        entity::{self},
-    },
+    semantics::link::entity::{self},
+    semantics::path::Path,
     utils::children::ChildrenIter,
 };
 
@@ -31,16 +28,17 @@ impl BuiltinKind {
 }
 
 #[derive(Debug, Clone)]
-pub enum Target {
-    Entity(node::entity::Idx),
-    Expression(String, Idx),
+pub enum Target<I = node::entity::Idx, J = Idx> {
+    Entity(I),
+    Expression(J),
     Builtin(BuiltinKind),
 }
 
-pub type Node<P> = node::expression::Node<P, Result<Target>>;
+pub type Link<I = node::entity::Idx, J = Idx> = super::Link<Target<I, J>>;
+pub type Node<P> = node::expression::Node<P, Link>;
 
-pub(super) fn link<P, R: Into<Reference> + AsRef<str> + Clone>(
-    ctx: &entity::FindCtx<R>,
+pub(super) fn link<P, R: Into<Path>>(
+    ctx: &entity::FindCtx,
     arena: Vec<node::expression::Node<P, R>>,
 ) -> Vec<Node<P>> {
     let mut local: Vec<HashMap<String, Idx>> = Vec::with_capacity(arena.len());
@@ -53,26 +51,27 @@ pub(super) fn link<P, R: Into<Reference> + AsRef<str> + Clone>(
     arena
         .into_iter()
         .zip(local.into_iter())
-        .map(|(node, scope)| node.mapr(|rf| find(ctx, &scope, rf)))
+        .map(|(node, scope)| node.mapr(|rf| find(ctx, &scope, rf.into())))
         .collect()
 }
 
-fn find<R: Into<Reference> + AsRef<str> + Clone>(
-    ctx: &entity::FindCtx<R>,
-    local: &HashMap<String, Idx>,
-    target: R,
-) -> Result<Target> {
-    let rf = target.as_ref();
-    if let Some(builtin) = BuiltinKind::find(rf) {
-        return Ok(Target::Builtin(builtin));
+fn find(ctx: &entity::FindCtx, local: &HashMap<String, Idx>, rf: Path) -> Link {
+    use Target::*;
+
+    if let Some(builtin) = BuiltinKind::find(rf.as_str()) {
+        return super::Link::valid(rf, Builtin(builtin));
     }
 
-    if let Some(expr) = local.get(rf) {
-        return Ok(Target::Expression(rf.to_string(), *expr));
+    if let Some(expr) = local.get(rf.as_str()) {
+        return super::Link::valid(rf, Expression(*expr));
     }
 
-    let entity = entity::find(ctx, target)?;
-    Ok(Target::Entity(entity))
+    let entity = entity::find(ctx, rf);
+    let rf = entity.original;
+    match entity.resolved {
+        Ok(idx) => super::Link::valid(rf, Entity(idx)),
+        Err(err) => super::Link::invalid(rf, err),
+    }
 }
 
 fn init_scope<P, R>(

@@ -1,39 +1,74 @@
-use std::collections::HashMap;
+use std::fmt::Display;
 
 use crate::{
     node::{self, entity::Idx},
-    reference::Reference,
-    semantics::link::entity::{init_imports, init_paths, iv_paths, link},
+    semantics::path::{self, Located, Path},
 };
 
 pub mod entity;
 pub mod expression;
 pub mod markup;
 
-pub type Result<N> = std::result::Result<N, Reference>;
-
-pub fn resolve<N, R: Into<Reference> + AsRef<str> + Clone, E, M>(
-    arena: Vec<node::entity::Node<N, R, R, E, M>>,
-) -> Vec<entity::Node<N, E, M>> {
-    let mut paths = HashMap::with_capacity(arena.len());
-    init_paths(&arena, Idx::default(), &Reference::default(), &mut paths);
-
-    let mut parents = Vec::with_capacity(arena.len());
-    init_imports(&arena, 0.into(), Vec::new(), &mut parents);
-
-    let iv = iv_paths(&arena, &paths);
-    link(&paths, iv, parents, arena)
+#[derive(Debug, Clone, thiserror::Error)]
+pub enum Issue {
+    #[error("Reference target does not exist")]
+    NotFound,
+    #[error("Reference target can points to several, diverging locations")]
+    Ambiguous,
 }
 
-pub fn paths<N, R: Into<Reference> + AsRef<str> + Clone, E, M>(
-    arena: &Vec<node::entity::Node<N, R, R, E, M>>,
-) -> Vec<Reference> {
-    let mut paths = HashMap::with_capacity(arena.len());
-    init_paths(&arena, Idx::default(), &Reference::default(), &mut paths);
-    iv_paths(&arena, &paths)
-        .into_iter()
-        .map(|p| p[0].clone())
-        .collect()
+#[derive(Debug, Clone)]
+pub struct Link<I = Idx> {
+    pub original: Path,
+    pub resolved: Result<I, Issue>,
+}
+
+impl<I> Link<I> {
+    pub fn valid(original: Path, resolved: I) -> Self {
+        Link {
+            original,
+            resolved: Ok(resolved),
+        }
+    }
+
+    pub fn invalid(original: Path, resolved: Issue) -> Self {
+        Link {
+            original,
+            resolved: Err(resolved),
+        }
+    }
+
+    pub fn is_valid(&self) -> bool {
+        self.resolved.is_ok()
+    }
+
+    pub fn target(&self) -> Option<&I> {
+        match &self.resolved {
+            Ok(i) => Some(i),
+            Err(_) => None,
+        }
+    }
+}
+
+impl<I> From<Link<I>> for Path {
+    fn from(value: Link<I>) -> Self {
+        value.original
+    }
+}
+
+impl<I> Display for Link<I> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.original)
+    }
+}
+
+pub fn resolve<N: Located, R: Into<Path> + Clone, T: Into<Path> + Clone, E, M>(
+    arena: Vec<node::entity::Node<N, R, T, E, M>>,
+) -> Vec<entity::Node<N, E, M>> {
+    let paths = path::collect(&arena);
+    let mut imports = Vec::new();
+    entity::collect_imports(&arena, 0.into(), Vec::new(), &mut imports);
+    entity::link(&paths, imports, arena)
 }
 
 #[cfg(test)]
@@ -41,14 +76,27 @@ mod tests {
     use pretty_assertions::assert_eq;
 
     use crate::{
-        mock,
-        node::{entity as entity_node, expression as expr_node, markup},
-        reference::Reference,
-        semantics::link::{entity, expression, resolve},
+        mock, node,
+        semantics::{
+            link::{
+                entity::{self, Node},
+                expression::Target,
+            },
+            path::{self},
+        },
         syntax,
     };
 
-    fn get_child(arena: &[entity::Node<(), (), ()>], parent_idx: usize, label: &str) -> usize {
+    fn resolve(arena: Vec<syntax::entity::Node>) -> Vec<Node<path::Location, (), ()>> {
+        let arena = path::discover(arena);
+        crate::semantics::link::resolve(arena)
+    }
+
+    fn get_child(
+        arena: &[entity::Node<path::Location, (), ()>],
+        parent_idx: usize,
+        label: &str,
+    ) -> usize {
         arena[parent_idx]
             .variant
             .children()
@@ -60,10 +108,10 @@ mod tests {
             .unwrap_or_else(|| panic!("child '{}' not found", label))
     }
 
-    fn assert_resolves_to(arena: &[entity::Node<(), (), ()>], idx: usize, label: &str) {
+    fn assert_resolves_to(arena: &[entity::Node<path::Location, (), ()>], idx: usize, label: &str) {
         let rf = arena[idx].variant.references().next().cloned().unwrap();
-        assert!(rf.is_ok(), "expected resolved reference, got: {:?}", rf);
-        assert_eq!(arena[usize::from(rf.unwrap())].meta.label, label);
+        assert!(rf.is_valid(), "expected resolved reference, got: {:?}", rf);
+        assert_eq!(arena[usize::from(*rf.target().unwrap())].meta.label, label);
     }
 
     #[test]
@@ -75,7 +123,7 @@ mod tests {
         let x = mock::entity::attribute("x", "real");
 
         let mut r1 = mock::entity::requirement("r1");
-        r1.variant.requirement_mut().unwrap().restriction = Some(Reference::new("p::x"));
+        r1.variant.requirement_mut().unwrap().restriction = Some("p::x".into());
 
         let resolved = resolve(vec![p, x, r1]);
 
@@ -91,7 +139,7 @@ mod tests {
         let x = mock::entity::attribute("x", "real");
 
         let mut r1 = mock::entity::requirement("r1");
-        r1.variant.requirement_mut().unwrap().restriction = Some(Reference::new("x"));
+        r1.variant.requirement_mut().unwrap().restriction = Some("x".into());
 
         let resolved = resolve(vec![p, x, r1]);
 
@@ -110,7 +158,7 @@ mod tests {
         let x = mock::entity::attribute("x", "real");
 
         let mut r1 = mock::entity::requirement("r1");
-        r1.variant.requirement_mut().unwrap().restriction = Some(Reference::new("y::x"));
+        r1.variant.requirement_mut().unwrap().restriction = Some("y::x".into());
 
         let resolved = resolve(vec![p, y, x, r1]);
 
@@ -128,13 +176,10 @@ mod tests {
         p.variant.children_mut().unwrap().push(1.into());
         p.variant.children_mut().unwrap().push(3.into());
         y.variant.children_mut().unwrap().push(2.into());
-        q.variant
-            .imports_mut()
-            .unwrap()
-            .push(Reference::new("p::y"));
+        q.variant.imports_mut().unwrap().push("p::y".into());
         q.variant.children_mut().unwrap().push(4.into());
 
-        r1.variant.requirement_mut().unwrap().restriction = Some(Reference::new("x"));
+        r1.variant.requirement_mut().unwrap().restriction = Some("x".into());
 
         let resolved = resolve(vec![p, y, x, q, r1]);
 
@@ -156,12 +201,13 @@ mod tests {
         let x_idx = get_child(&resolved, 0, "x");
         let domain = resolved[x_idx].variant.expressions().next().unwrap();
         let target = match &domain[0].variant {
-            expr_node::Variant::Identifier(ident) => ident.target.as_ref().unwrap(),
+            node::expression::Variant::Identifier(ident) => ident.target.target(),
             _ => panic!("expected identifier"),
         };
+
         match target {
-            expression::Target::Entity(entity_idx) => {
-                assert_eq!(resolved[usize::from(*entity_idx)].meta.label, "y");
+            Some(Target::Entity(idx)) => {
+                assert_eq!(resolved[usize::from(*idx)].meta.label, "y");
             }
             other => panic!("expected entity target, got {:?}", other),
         }
@@ -179,11 +225,11 @@ mod tests {
         let x_idx = get_child(&resolved, 0, "x");
         let domain = resolved[x_idx].variant.expressions().next().unwrap();
         let target = match &domain[0].variant {
-            expr_node::Variant::Identifier(ident) => ident.target.as_ref().unwrap(),
+            node::expression::Variant::Identifier(ident) => ident.target.target(),
             _ => panic!("expected identifier"),
         };
         assert!(
-            matches!(target, expression::Target::Builtin(_)),
+            matches!(target.unwrap(), Target::Builtin(_)),
             "expected builtin target, got {:?}",
             target,
         );
@@ -192,16 +238,17 @@ mod tests {
     #[test]
     fn resolves_forall_body_to_local_variable() {
         // Expression arena (pre-order): [forall(domain=Idx(1), body=Idx(2)), S, x]
-        let set = expr_node::SetElement::new("x".to_string(), 1.into());
-        let forall = expr_node::Forall::new(set, 2.into());
-        let forall_node = syntax::expression::Node::empty(expr_node::Variant::Forall(forall));
+        let set = node::expression::SetElement::new("x".to_string(), 1.into());
+        let forall = node::expression::Forall::new(set, 2.into());
+        let forall_node =
+            syntax::expression::Node::empty(node::expression::Variant::Forall(forall));
         let domain_s = mock::expression::identifier("S");
         let body_x = mock::expression::identifier("x");
         let expr_arena = vec![forall_node, domain_s, body_x];
 
         let a = syntax::entity::Node::empty(
-            entity_node::Meta::from("a".to_string()),
-            entity_node::Variant::Attribute(entity_node::Attribute::new(expr_arena)),
+            node::entity::Meta::from("a".to_string()),
+            node::entity::Variant::Attribute(node::entity::Attribute::new(expr_arena)),
         );
 
         let mut p = mock::entity::package("p");
@@ -213,16 +260,18 @@ mod tests {
         let expr_arena = resolved[a_idx].variant.expressions().next().unwrap();
 
         let (body_idx, domain_idx) = match &expr_arena[0].variant {
-            expr_node::Variant::Forall(f) => (usize::from(f.expression), usize::from(f.set.domain)),
+            node::expression::Variant::Forall(f) => {
+                (usize::from(f.expression), usize::from(f.set.domain))
+            }
             _ => panic!("expected forall"),
         };
 
         let target = match &expr_arena[body_idx].variant {
-            expr_node::Variant::Identifier(ident) => ident.target.as_ref().unwrap(),
+            node::expression::Variant::Identifier(ident) => ident.target.target(),
             _ => panic!("expected identifier"),
         };
         match target {
-            expression::Target::Expression(_, idx) => {
+            Some(Target::Expression(idx)) => {
                 assert_eq!(usize::from(*idx), domain_idx);
             }
             other => panic!("expected local variable target, got {:?}", other),
@@ -231,19 +280,19 @@ mod tests {
 
     #[test]
     fn resolves_markup_reference() {
-        let mut comment = markup::Container::default();
+        let mut comment = node::markup::Container::default();
         comment
             .items
-            .push(markup::Item::Reference(Reference::new("p")));
+            .push(node::markup::Item::Reference("p".into()));
 
         let mut p = mock::entity::package("p");
-        p.meta.comment = Some(markup::Node::empty(comment));
+        p.meta.comment = Some(node::markup::Node::empty(comment));
 
         let resolved = resolve(vec![p]);
 
         let markup = resolved[0].markups().next().cloned().unwrap();
         let rf = markup.container.references().next().cloned().unwrap();
-        assert!(rf.is_ok());
-        assert_eq!(resolved[usize::from(rf.unwrap())].meta.label, "p");
+        assert!(rf.is_valid());
+        assert_eq!(resolved[usize::from(*rf.target().unwrap())].meta.label, "p");
     }
 }

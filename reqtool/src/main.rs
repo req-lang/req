@@ -1,16 +1,25 @@
-use std::{collections::HashMap, fs, io, path::PathBuf};
+use std::{fs, io, path::PathBuf};
 
 use clap::Parser;
 use colored::Colorize;
+use itertools::izip;
 use reqlang::{
-    issue::{self, Severity, connection_errors, expr_errors, reference_errors},
+    issue::{self, Severity, connection_errors, expr_errors, path_issues, reference_errors},
+    node::entity::Idx,
     renderer::formatter::entity,
     semantics::{
-        connection::{self},
+        connection::{
+            self, Connected,
+            entity::{Connection, Neighbors},
+        },
         link::{self},
+        path::{self, Located, Location},
         typing::{self},
     },
-    syntax::parser::{self},
+    syntax::{
+        location::Span,
+        parser::{self},
+    },
 };
 
 #[derive(clap::Parser)]
@@ -53,32 +62,42 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Command::Check { input } => {
             let start = std::time::Instant::now();
             let source = fs::read_to_string(&input)?;
-            let root = parser::parse(&source)?;
-            let paths = link::paths(&root);
-            let spans: HashMap<_, _> = paths
-                .iter()
-                .zip(root.iter())
-                .map(|(path, node)| (path, node.payload))
+            let arena = parser::parse(&source)?;
+            let spans: Vec<_> = arena.iter().map(|n| n.payload.clone()).collect();
+
+            let arena = path::discover(arena);
+            let locations: Vec<_> = arena.iter().map(|n| n.payload.clone()).collect();
+
+            let arena = link::resolve(arena);
+            let arena = typing::evaluate(arena);
+            let arena = connection::connect(arena);
+
+            let arena: Vec<_> = izip!(arena, locations, spans)
+                .map(|(node, loc, span)| node.map(|conns| Payload::new(loc, span, conns)))
                 .collect();
 
-            let resolved = link::resolve(root);
-            let typed = typing::evaluate(resolved);
-            let connected = connection::connect(typed);
-            let elapsed = start.elapsed();
+            let issues: Vec<_> = arena
+                .iter()
+                .map(|node| {
+                    path_issues(node)
+                        .chain(reference_errors(node))
+                        .chain(connection_errors(node))
+                        .chain(expr_errors(node))
+                        .map(Issue::from)
+                        .collect::<Vec<_>>()
+                })
+                .collect();
 
-            let mut count = 0;
-            for (path, node) in paths.iter().zip(connected.iter()) {
-                let issues: Vec<_> = expr_errors(node)
-                    .chain(connection_errors(node))
-                    .chain(reference_errors(node))
-                    .map(Issue::from)
-                    .collect();
-                count += issues.len();
+            let elapsed = start.elapsed();
+            let count: usize = issues.iter().map(|i| i.len()).sum();
+            for (node, issues) in arena.into_iter().zip(issues) {
                 if issues.is_empty() {
                     continue;
                 }
 
-                let span = format!("{}", spans.get(&path).unwrap().start).bold();
+                let path = node.payload.location.path;
+                let span = node.payload.span;
+                let span = format!("{}", span.start).bold();
                 eprintln!("{:12} {}", span, path);
 
                 for issue in issues {
@@ -94,6 +113,34 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     Ok(())
+}
+
+struct Payload {
+    location: Location,
+    span: Span,
+    neighbors: Neighbors<Connection<Idx>>,
+}
+
+impl Located for Payload {
+    fn location(&self) -> &path::Location {
+        &self.location
+    }
+}
+
+impl Connected for Payload {
+    fn neigbhors(&self) -> &Neighbors<Connection<Idx>> {
+        &self.neighbors
+    }
+}
+
+impl Payload {
+    pub fn new(location: Location, span: Span, neighbors: Neighbors<Connection<Idx>>) -> Self {
+        Self {
+            location,
+            span,
+            neighbors,
+        }
+    }
 }
 
 struct Issue {

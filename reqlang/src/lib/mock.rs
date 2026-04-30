@@ -181,13 +181,11 @@ pub mod expression {
             self,
             expression::{Identifier, Variant},
         },
-        reference::Reference,
         syntax::expression::Node,
     };
 
     pub fn identifier<S: ToString>(location: S) -> Node {
-        let reference = Reference::new(location.to_string());
-        let variant = Variant::Identifier(Identifier::new(reference));
+        let variant = Variant::Identifier(Identifier::new(location.to_string()));
         Node::empty(variant)
     }
 

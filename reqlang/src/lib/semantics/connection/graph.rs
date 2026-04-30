@@ -48,12 +48,12 @@ pub(super) fn build_graph<N, E, M>(
         }
 
         if let Requirement(req) = &node.variant {
-            if let Some(Ok(alloc)) = &req.allocation {
+            if let Some(alloc) = req.allocation.as_ref().and_then(|a| a.target()) {
                 graph.inbound.allocations.upsert(*alloc, idx);
                 graph.outbound.allocation.insert(idx, *alloc);
             }
 
-            if let Some(Ok(restr)) = &req.restriction {
+            if let Some(restr) = req.restriction.as_ref().and_then(|a| a.target()) {
                 graph.inbound.restrictions.upsert(*restr, idx);
                 graph.outbound.restriction.insert(idx, *restr);
             }
@@ -61,7 +61,7 @@ pub(super) fn build_graph<N, E, M>(
             for trace in &req.traceability {
                 use node::entity::TraceabilityKind::*;
 
-                if let Ok(source) = &trace.target {
+                if let Some(source) = trace.target.target() {
                     let src = *source;
                     match trace.kind {
                         Specialization => graph.inbound.specializations.upsert(src, idx),
@@ -107,7 +107,7 @@ mod expression {
 
         for node in arena {
             if let Identifier(ident) = &node.variant
-                && let Ok(Entity(src)) = &ident.target
+                && let Some(Entity(src)) = ident.target.target()
             {
                 graph.inbound.usages.upsert(*src, parent);
                 graph.outbound.usages.upsert(parent, *src);
@@ -125,7 +125,7 @@ mod markup {
 
     pub(super) fn build_graph<P>(node: &link::markup::Node<P>, graph: &mut Graph, parent: Idx) {
         for rf in node.container.references() {
-            if let Ok(src) = rf {
+            if let Some(src) = rf.target() {
                 graph.inbound.usages.upsert(*src, parent);
                 graph.outbound.usages.upsert(parent, *src);
             }

@@ -8,7 +8,6 @@ use crate::{
             Variant,
         },
     },
-    reference::Reference,
     syntax::{
         location::Span,
         parser::{expression, markup},
@@ -16,7 +15,7 @@ use crate::{
     },
 };
 
-pub(in crate::syntax) type Node = node::entity::Node<Span, Reference, Reference, Span, ()>;
+pub(in crate::syntax) type Node = node::entity::Node<Span, String, String, Span, ()>;
 // INVARIANT: Always parsed in DFS order (to allow iterating directly over the Vec<Node>)
 // TODO: Use peek_nth to avoid reset_peek
 pub fn parse(tokens: &mut MultiPeek<TokenIterator>, arena: &mut Vec<Node>) -> Result<Idx, Span> {
@@ -115,14 +114,14 @@ pub fn parse(tokens: &mut MultiPeek<TokenIterator>, arena: &mut Vec<Node>) -> Re
 
                         Reserved(Keyword::On) => {
                             req.restriction = match parse_identifier(tokens) {
-                                Ok(ident) => Some(Reference::new(ident)),
+                                Ok(ident) => Some(ident.into()),
                                 Err(span) => return Err(span),
                             };
                         }
 
                         Reserved(Keyword::Via) => {
                             req.allocation = match parse_identifier(tokens) {
-                                Ok(ident) => Some(Reference::new(ident)),
+                                Ok(ident) => Some(ident.into()),
                                 Err(span) => return Err(span),
                             };
                         }
@@ -130,7 +129,7 @@ pub fn parse(tokens: &mut MultiPeek<TokenIterator>, arena: &mut Vec<Node>) -> Re
                         Reserved(ref k) if TraceabilityKind::is_traceability_keyword(&k) => {
                             let kind = TraceabilityKind::try_from(k).unwrap();
                             let target = match parse_identifier(tokens) {
-                                Ok(ident) => Reference::new(ident),
+                                Ok(ident) => ident.into(),
                                 Err(span) => return Err(span),
                             };
                             let link = TraceabilityLink::new(kind, target);
@@ -202,10 +201,10 @@ fn parse_identifier(tokens: &mut MultiPeek<TokenIterator>) -> Result<String, Spa
 
     match tokens.next() {
         Some(tok) => match tok.variant {
-            Identifier(identifier) => Ok(identifier.to_string()),
+            Identifier(identifier) => Ok(identifier.into()),
             _ => Err(tok.span),
         },
-        None => Ok(String::new()),
+        None => Ok(String::default()),
     }
 }
 
@@ -238,7 +237,7 @@ fn is_import(tokens: &mut MultiPeek<TokenIterator>) -> bool {
     ret
 }
 
-fn parse_imports(tokens: &mut MultiPeek<TokenIterator>) -> Result<Vec<Reference>, Span> {
+fn parse_imports(tokens: &mut MultiPeek<TokenIterator>) -> Result<Vec<String>, Span> {
     use TokenVariant::*;
 
     let mut imports = Vec::new();
@@ -246,7 +245,7 @@ fn parse_imports(tokens: &mut MultiPeek<TokenIterator>) -> Result<Vec<Reference>
         let _ = tokens.next().unwrap();
         let id = tokens.next().unwrap();
         match id.variant {
-            Identifier(ident) => imports.push(Reference::new(ident.to_string())),
+            Identifier(ident) => imports.push(ident.into()),
             _ => unreachable!(),
         }
     }

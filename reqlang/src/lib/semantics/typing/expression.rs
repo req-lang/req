@@ -99,11 +99,11 @@ fn ensure_typed<N, E, M>(
     }
 
     match &arena[usize::from(idx)].variant {
-        Identifier(ident) => match &ident.target {
-            Ok(Target::Entity(tgt)) if types[usize::from(*tgt)].borrow().is_empty() => {
+        Identifier(ident) => match &ident.target.target() {
+            Some(Target::Entity(tgt)) if types[usize::from(*tgt)].borrow().is_empty() => {
                 init_types(entities, arena, *tgt, types, None);
             }
-            Ok(Target::Expression(_, domain)) => {
+            Some(Target::Expression(domain)) => {
                 let is_untyped =
                     types[usize::from(entity)].borrow()[usize::from(*domain)].is_none();
                 if is_untyped {

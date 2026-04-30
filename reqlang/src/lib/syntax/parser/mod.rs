@@ -29,7 +29,6 @@ mod tests {
     use crate::{
         mock::{self, generator::Generate},
         node::entity::{Requirement, TraceabilityKind},
-        reference::Reference,
         syntax::{self, parser::parse},
     };
 
@@ -189,7 +188,7 @@ mod tests {
 
     fn get_requirement(
         input: &str,
-    ) -> Requirement<Reference, Vec<syntax::expression::Node>, syntax::markup::Node> {
+    ) -> Requirement<String, Vec<syntax::expression::Node>, syntax::markup::Node> {
         let nodes = parse(input).unwrap();
         let ast: Vec<_> = nodes.into_iter().map(syntax::entity::Node::from).collect();
         ast.into_iter()

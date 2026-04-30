@@ -1,10 +1,13 @@
 use crate::{
-    node::{entity::Idx, expression::Variant},
-    reference::Reference,
+    node::{
+        entity::{Idx, Node},
+        expression::Variant,
+    },
     semantics::{
-        connection::{self},
+        connection::{self, Connected},
         link::{self},
-        typing,
+        path::{self, Located},
+        typing::{self, Typed},
     },
 };
 
@@ -18,11 +21,13 @@ pub enum Severity {
 #[derive(Debug, thiserror::Error)]
 pub enum Issue {
     #[error("reference error: {0}")]
-    Reference(Reference),
+    Reference(link::Issue),
     #[error("type error: {0}")]
     Type(typing::expression::Issue),
     #[error("connection error: {0}")]
     Connection(connection::issue::IssueKind),
+    #[error("path error: {0}")]
+    Path(path::Issue),
 }
 
 impl From<&Issue> for Severity {
@@ -31,6 +36,7 @@ impl From<&Issue> for Severity {
             Issue::Reference(_) => Severity::Critical,
             Issue::Type(issue) => issue.into(),
             Issue::Connection(issue_kind) => issue_kind.into(),
+            Issue::Path(_) => Severity::Critical,
         }
     }
 }
@@ -39,7 +45,7 @@ pub struct IssueIterator {
     issues: Vec<Issue>,
 }
 
-pub fn expr_errors<N, E: typing::Typed, M>(value: &link::entity::Node<N, E, M>) -> IssueIterator {
+pub fn expr_errors<N, E: Typed, M>(value: &link::entity::Node<N, E, M>) -> IssueIterator {
     let mut issues = Vec::new();
 
     for ex in value.variant.expressions() {
@@ -53,9 +59,7 @@ pub fn expr_errors<N, E: typing::Typed, M>(value: &link::entity::Node<N, E, M>) 
     IssueIterator { issues }
 }
 
-pub fn connection_errors<N: connection::Connected, E, M>(
-    node: &link::entity::Node<N, E, M>,
-) -> IssueIterator {
+pub fn connection_errors<N: Connected, E, M>(node: &link::entity::Node<N, E, M>) -> IssueIterator {
     let mut issues = Vec::new();
 
     let neighbors = node.payload.neigbhors();
@@ -96,18 +100,22 @@ pub fn reference_errors<N, E, M>(node: &link::entity::Node<N, E, M>) -> IssueIte
     let mut issues = Vec::new();
 
     let variant = &node.variant;
-    let rf_errors = variant.references().filter_map(|r| r.as_ref().err());
+    let rf_errors = variant
+        .references()
+        .filter_map(|r| r.resolved.as_ref().err());
     issues.extend(rf_errors.map(|err| err.into()));
-
     for mk in variant.markups() {
-        let rf_errors = mk.container.references().filter_map(|r| r.as_ref().err());
+        let rf_errors = mk
+            .container
+            .references()
+            .filter_map(|r| r.resolved.as_ref().err());
         issues.extend(rf_errors.map(|err| err.into()));
     }
 
     for ex in node.variant.expressions() {
         for x in ex {
             if let Variant::Identifier(ident) = &x.variant
-                && let Err(rf) = &ident.target
+                && let Err(rf) = &ident.target.resolved
             {
                 issues.push(rf.into());
             }
@@ -115,6 +123,13 @@ pub fn reference_errors<N, E, M>(node: &link::entity::Node<N, E, M>) -> IssueIte
     }
 
     IssueIterator { issues }
+}
+
+pub fn path_issues<N: Located, R, T, E, M>(node: &Node<N, R, T, E, M>) -> IssueIterator {
+    let issue = &node.payload.location().issue;
+    IssueIterator {
+        issues: issue.iter().cloned().map(Issue::Path).collect(),
+    }
 }
 
 impl Iterator for IssueIterator {
@@ -125,12 +140,11 @@ impl Iterator for IssueIterator {
     }
 }
 
-impl From<&Reference> for Issue {
-    fn from(value: &Reference) -> Self {
+impl From<&link::Issue> for Issue {
+    fn from(value: &link::Issue) -> Self {
         Issue::Reference(value.clone())
     }
 }
-
 impl From<&typing::expression::Issue> for Issue {
     fn from(value: &typing::expression::Issue) -> Self {
         Issue::Type(value.clone())

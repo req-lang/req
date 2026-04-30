@@ -176,7 +176,7 @@ pub(super) fn evaluate_node<P>(
             Ok(TypeKind::Undefined)
         }
 
-        Identifier(ident) => match &ident.target.as_ref().map_err(|_| DomainNotFound)? {
+        Identifier(ident) => match &ident.target.target().ok_or(DomainNotFound)? {
             Target::Entity(tgt) => match types[usize::from(*tgt)].borrow().is_empty() {
                 false => match type_or_poison(&types[usize::from(*tgt)].borrow(), 0.into())? {
                     TypeKind::Set(inner) => Ok(inner.as_ref().clone()),
@@ -184,7 +184,7 @@ pub(super) fn evaluate_node<P>(
                 },
                 true => Err(DomainNotFound),
             },
-            Target::Expression(_, tgt) => match type_or_poison(&local, *tgt)? {
+            Target::Expression(tgt) => match type_or_poison(&local, *tgt)? {
                 TypeKind::Set(inner) => Ok(inner.as_ref().clone()),
                 typ => Err(NotASet(typ.clone())),
             },

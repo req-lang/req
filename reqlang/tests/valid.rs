@@ -5,7 +5,7 @@ use reqlang::{
             self,
             entity::{Connection, Neighbors},
         },
-        link,
+        link, path,
         typing::{self, TypeResult},
     },
     syntax,
@@ -27,7 +27,9 @@ fn assert_valid_parsing_and_analysis(
         .into_iter()
         .map(syntax::entity::Node::from)
         .collect();
-    let arena = link::resolve(ast);
+
+    let arena = path::discover(ast);
+    let arena = link::resolve(arena);
     let arena = typing::evaluate(arena);
     let arena = connection::connect(arena);
 
