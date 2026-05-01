@@ -290,6 +290,20 @@ impl<N, R> Variant<N, R> {
         }
     }
 
+    pub fn identifier(&self) -> Option<&Identifier<R>> {
+        match self {
+            Variant::Identifier(id) => Some(id),
+            _ => None,
+        }
+    }
+
+    pub fn identifier_mut(&mut self) -> Option<&mut Identifier<R>> {
+        match self {
+            Variant::Identifier(id) => Some(id),
+            _ => None,
+        }
+    }
+
     pub fn set_element(&self) -> Option<&SetElement<N>> {
         use Variant::*;
 

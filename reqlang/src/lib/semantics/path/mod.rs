@@ -21,14 +21,18 @@ pub enum Issue {
     Duplicated,
 }
 
-pub fn discover<N, R: Into<Path>, T: Into<Path>, E, M>(
-    arena: Vec<Node<N, R, T, E, M>>,
-) -> Vec<Node<Location, Path, Path, E, M>> {
-    let paths = count_duplicates(collect(&arena));
-    entity::discover(paths, arena)
+pub trait Locate<R, T, E, M> {
+    fn locate(self) -> Vec<Node<Location, R, T, E, M>>;
 }
 
-pub(crate) fn collect<P, R, T, E, M>(arena: &Vec<Node<P, R, T, E, M>>) -> HashMap<Path, Idx> {
+impl<N, R, T, E, M> Locate<R, T, E, M> for Vec<Node<N, R, T, E, M>> {
+    fn locate(self) -> Vec<Node<Location, R, T, E, M>> {
+        let paths = count_duplicates(collect(&self));
+        entity::discover(paths, self)
+    }
+}
+
+pub fn collect<P, R, T, E, M>(arena: &Vec<Node<P, R, T, E, M>>) -> HashMap<Path, Vec<Idx>> {
     let mut paths = HashMap::new();
     entity::collect(&arena, 0.into(), &Path::default(), &mut paths);
     paths

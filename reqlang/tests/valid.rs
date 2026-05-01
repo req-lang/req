@@ -2,11 +2,12 @@ use reqlang::{
     node::entity::Idx,
     semantics::{
         connection::{
-            self,
+            Connect,
             entity::{Connection, Neighbors},
         },
-        link, path,
-        typing::{self, TypeResult},
+        link::{self, Resolve},
+        path::Locate,
+        typing::{Evaluate, TypeResult},
     },
     syntax,
 };
@@ -22,16 +23,13 @@ fn assert_valid_parsing_and_analysis(
 
     assert!(result.is_ok());
 
-    let ast = result
+    let ast: Vec<_> = result
         .unwrap()
         .into_iter()
         .map(syntax::entity::Node::from)
         .collect();
 
-    let arena = path::discover(ast);
-    let arena = link::resolve(arena);
-    let arena = typing::evaluate(arena);
-    let arena = connection::connect(arena);
+    let arena = ast.locate().resolve().evaluate().connect();
 
     //
     // let issues: Vec<_> = NodeIter::new(connected.clone())

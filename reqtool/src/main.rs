@@ -9,12 +9,12 @@ use reqlang::{
     renderer::formatter::entity,
     semantics::{
         connection::{
-            self, Connected,
+            Connect, Connected,
             entity::{Connection, Neighbors},
         },
-        link::{self},
-        path::{self, Located, Location},
-        typing::{self},
+        link::Resolve,
+        path::{self, Locate, Located, Location},
+        typing::Evaluate,
     },
     syntax::{
         location::Span,
@@ -65,13 +65,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let arena = parser::parse(&source)?;
             let spans: Vec<_> = arena.iter().map(|n| n.payload.clone()).collect();
 
-            let arena = path::discover(arena);
+            let arena = arena.locate();
             let locations: Vec<_> = arena.iter().map(|n| n.payload.clone()).collect();
 
-            let arena = link::resolve(arena);
-            let arena = typing::evaluate(arena);
-            let arena = connection::connect(arena);
-
+            let arena = arena.resolve().evaluate().connect();
             let arena: Vec<_> = izip!(arena, locations, spans)
                 .map(|(node, loc, span)| node.map(|conns| Payload::new(loc, span, conns)))
                 .collect();

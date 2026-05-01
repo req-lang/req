@@ -253,10 +253,7 @@ impl<N, R, E, M> Variant<N, R, E, M> {
                 traceability: requirement
                     .traceability
                     .into_iter()
-                    .map(|t| TraceabilityLink {
-                        kind: t.kind,
-                        target: f(t.target),
-                    })
+                    .map(|t| t.mapr(&mut f))
                     .collect(),
                 inhibitor: requirement.inhibitor,
                 variant: requirement.variant,
@@ -457,6 +454,19 @@ impl<N, R, E, M> Variant<N, R, E, M> {
         ret.into_iter()
     }
 
+    pub fn expressions_mut(&mut self) -> impl Iterator<Item = &mut E> {
+        let mut ret = Vec::new();
+        match self {
+            Variant::Attribute(attribute) => ret.push(&mut attribute.domain),
+            Variant::Requirement(requirement) => match &mut requirement.variant {
+                RequirementVariant::Formal(expr) => ret.push(expr),
+                RequirementVariant::Informal(_) => {}
+            },
+            _ => {}
+        }
+        ret.into_iter()
+    }
+
     pub fn markups(&self) -> impl Iterator<Item = &M> {
         let mut ret = Vec::new();
 
@@ -647,6 +657,13 @@ pub struct TraceabilityLink<R> {
 impl<R> TraceabilityLink<R> {
     pub fn new(kind: TraceabilityKind, target: R) -> Self {
         TraceabilityLink { kind, target }
+    }
+
+    pub fn mapr<S, F: FnOnce(R) -> S>(self, f: F) -> TraceabilityLink<S> {
+        TraceabilityLink {
+            kind: self.kind,
+            target: f(self.target),
+        }
     }
 }
 

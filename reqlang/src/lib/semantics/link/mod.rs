@@ -62,13 +62,22 @@ impl<I> Display for Link<I> {
     }
 }
 
-pub fn resolve<N: Located, R: Into<Path> + Clone, T: Into<Path> + Clone, E, M>(
-    arena: Vec<node::entity::Node<N, R, T, E, M>>,
-) -> Vec<entity::Node<N, E, M>> {
-    let paths = path::collect(&arena);
-    let mut imports = Vec::new();
-    entity::collect_imports(&arena, 0.into(), Vec::new(), &mut imports);
-    entity::link(&paths, imports, arena)
+pub trait Resolve<N, E, M> {
+    fn resolve(self) -> Vec<entity::Node<N, E, M>>;
+}
+
+impl<N: Located, R: Into<Path> + Clone, T: Into<Path> + Clone, E, M> Resolve<N, E, M>
+    for Vec<node::entity::Node<N, R, T, E, M>>
+{
+    fn resolve(self) -> Vec<entity::Node<N, E, M>> {
+        let paths = path::collect(&self)
+            .into_iter()
+            .map(|(p, mut idxs)| (p, idxs.pop().unwrap()))
+            .collect();
+        let mut imports = Vec::new();
+        entity::collect_imports(&self, 0.into(), Vec::new(), &mut imports);
+        entity::link(&paths, imports, self)
+    }
 }
 
 #[cfg(test)]
@@ -79,17 +88,17 @@ mod tests {
         mock, node,
         semantics::{
             link::{
+                Resolve,
                 entity::{self, Node},
                 expression::Target,
             },
-            path::{self},
+            path::{self, Locate},
         },
         syntax,
     };
 
     fn resolve(arena: Vec<syntax::entity::Node>) -> Vec<Node<path::Location, (), ()>> {
-        let arena = path::discover(arena);
-        crate::semantics::link::resolve(arena)
+        arena.locate().resolve()
     }
 
     fn get_child(

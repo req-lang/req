@@ -12,9 +12,14 @@ pub mod expression;
 
 pub type TypeResult = std::result::Result<TypeKind, Issue>;
 
-pub fn evaluate<N, E, M>(arena: Vec<link::entity::Node<N, E, M>>) -> Vec<Node<N, M>> {
-    let types = init_types(&arena);
-    entity::evaluate(types, arena)
+pub trait Evaluate<N, M> {
+    fn evaluate(self) -> Vec<Node<N, M>>;
+}
+impl<N, E, M> Evaluate<N, M> for Vec<link::entity::Node<N, E, M>> {
+    fn evaluate(self) -> Vec<Node<N, M>> {
+        let types = init_types(&self);
+        entity::evaluate(types, self)
+    }
 }
 
 pub trait Typed {
@@ -39,9 +44,10 @@ mod tests {
             expression::{BinaryOperator::*, Variant::*},
         },
         semantics::{
-            link, path,
+            link::Resolve,
+            path::{self, Locate},
             typing::{
-                entity, evaluate,
+                Evaluate, entity,
                 expression::{Issue, TypeKind},
             },
         },
@@ -52,10 +58,7 @@ mod tests {
     type Node = entity::Node<path::Location, ()>;
 
     fn resolve_and_evaluate(syn: Vec<syntax::entity::Node>) -> Vec<Node> {
-        let resolved = path::discover(syn);
-        let resolved = link::resolve(resolved);
-        let typed = evaluate(resolved);
-        typed
+        syn.locate().resolve().evaluate()
     }
 
     fn get_child<'a>(arena: &'a Vec<Node>, parent: Idx, label: &str) -> &'a Node {

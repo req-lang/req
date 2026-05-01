@@ -1,7 +1,16 @@
-#[derive(Default, Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Node<P, R> {
     pub payload: P,
     pub container: Container<R>,
+}
+
+impl<P: Default, R> Default for Node<P, R> {
+    fn default() -> Self {
+        Self {
+            payload: Default::default(),
+            container: Default::default(),
+        }
+    }
 }
 
 impl<P, R> Node<P, R> {

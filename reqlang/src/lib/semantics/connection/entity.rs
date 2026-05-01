@@ -131,12 +131,12 @@ impl<R> Outbound<R> {
 
 pub(super) fn connect<N, E, M>(
     arena: Vec<link::entity::Node<N, E, M>>,
-    graph: &mut Graph,
+    mut graph: Graph,
 ) -> Vec<Node<E, M>> {
     arena
         .into_iter()
         .enumerate()
-        .map(|(idx, n)| n.map(|_| make_neighbors(idx.into(), graph)))
+        .map(|(idx, n)| n.map(|_| make_neighbors(idx.into(), &mut graph)))
         .collect()
 }
 

@@ -25,6 +25,14 @@ impl BuiltinKind {
             _ => None,
         }
     }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            BuiltinKind::Real => "real",
+            BuiltinKind::Integer => "integer",
+            BuiltinKind::Boolean => "boolean",
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
