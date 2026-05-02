@@ -6,7 +6,7 @@ use std::{
 mod entity;
 
 use crate::{
-    node::entity::{Idx, Node},
+    node::entity::{Arena, Idx, Node},
     semantics::path::entity::count_duplicates,
     syntax::tokenizer::entity::REFERENCE_SEPARATOR,
 };
@@ -22,19 +22,19 @@ pub enum Issue {
 }
 
 pub trait Locate<R, T, E, M> {
-    fn locate(self) -> Vec<Node<Location, R, T, E, M>>;
+    fn locate(self) -> Arena<Node<Location, R, T, E, M>>;
 }
 
-impl<N, R, T, E, M> Locate<R, T, E, M> for Vec<Node<N, R, T, E, M>> {
-    fn locate(self) -> Vec<Node<Location, R, T, E, M>> {
+impl<N, R, T, E, M> Locate<R, T, E, M> for Arena<Node<N, R, T, E, M>> {
+    fn locate(self) -> Arena<Node<Location, R, T, E, M>> {
         let paths = count_duplicates(collect(&self));
         entity::discover(paths, self)
     }
 }
 
-pub fn collect<P, R, T, E, M>(arena: &Vec<Node<P, R, T, E, M>>) -> HashMap<Path, Vec<Idx>> {
+pub fn collect<P, R, T, E, M>(arena: &Arena<Node<P, R, T, E, M>>) -> HashMap<Path, Vec<Idx>> {
     let mut paths = HashMap::new();
-    entity::collect(&arena, 0.into(), &Path::default(), &mut paths);
+    entity::collect(&arena, &mut paths);
     paths
 }
 

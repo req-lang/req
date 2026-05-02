@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use crate::node;
+use crate::node::entity::{Arena, Node};
 
 pub mod entity;
 pub mod expression;
@@ -8,14 +8,14 @@ pub mod markup;
 mod padding;
 
 pub fn format<W: std::io::Write, N, R: Display, T: Display, E, M>(
-    arena: &Vec<node::entity::Node<N, R, T, E, M>>,
+    arena: &Arena<Node<N, R, T, E, M>>,
     out: &mut W,
 ) -> std::io::Result<()> {
     entity::format(arena, 0.into(), 0, out)
 }
 
 pub fn format_string<N, R: Display, T: Display, E, M>(
-    arena: &Vec<node::entity::Node<N, R, T, E, M>>,
+    arena: &Arena<Node<N, R, T, E, M>>,
     indent: usize,
 ) -> String {
     let mut buf = Vec::new();
@@ -24,7 +24,7 @@ pub fn format_string<N, R: Display, T: Display, E, M>(
 }
 
 pub fn format_to_file<N, R: Display, T: Display, E, M>(
-    arena: &Vec<node::entity::Node<N, R, T, E, M>>,
+    arena: &Arena<Node<N, R, T, E, M>>,
     path: &std::path::Path,
 ) -> std::io::Result<()> {
     let mut file = std::fs::File::create(path)?;

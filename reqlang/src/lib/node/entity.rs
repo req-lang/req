@@ -1,41 +1,12 @@
-use std::ops::{Index, IndexMut};
-
 use crate::{
-    node::{expression, markup},
+    node::{arena, expression, markup},
     utils::children::{Children, ChildrenIter, ChildrenMut, IntoChildren},
 };
 
 #[derive(Default, Debug, Copy, Clone, Eq, PartialEq, Hash, PartialOrd, Ord)]
-pub struct Idx(usize);
-
-impl From<Idx> for usize {
-    fn from(value: Idx) -> Self {
-        let Idx(val) = value;
-        val
-    }
-}
-
-impl From<usize> for Idx {
-    fn from(value: usize) -> Self {
-        Self(value)
-    }
-}
-
-impl<N, R, T, E, M> IndexMut<Idx> for Vec<Node<N, R, T, E, M>> {
-    fn index_mut(&mut self, index: Idx) -> &mut Self::Output {
-        let Idx(val) = index;
-        self.index_mut(val)
-    }
-}
-
-impl<N, R, T, E, M> Index<Idx> for Vec<Node<N, R, T, E, M>> {
-    type Output = Node<N, R, T, E, M>;
-
-    fn index(&self, index: Idx) -> &Self::Output {
-        let Idx(val) = index;
-        self.index(val)
-    }
-}
+pub struct IdxMarker;
+pub type Idx = arena::Idx<IdxMarker>;
+pub type Arena<T> = arena::Arena<T, IdxMarker>;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Node<N, R, T, E, M, I = Idx, J = expression::Idx> {
@@ -144,6 +115,12 @@ impl<N, R, T, E, M, I, J> Node<N, R, T, E, M, I, J> {
     }
 }
 
+impl<'a, N, R, T, E, M, I: 'a, J> ChildrenIter<'a, I> for Node<N, R, T, E, M, I, J> {
+    fn children_iter(&'a self) -> impl Iterator<Item = &'a I> {
+        self.variant.children_iter()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Variant<N, R, E, M> {
     Part(Part<N, R>),
@@ -194,14 +171,9 @@ impl<N, R, E, M> IntoChildren<N> for Variant<N, R, E, M> {
     }
 }
 
-// TODO: Remove that messy clone
-impl<N: Clone, R, E, M> ChildrenIter<N> for Variant<N, R, E, M> {
-    fn children_iter(&self) -> impl Iterator<Item = N> {
-        self.children()
-            .into_iter()
-            .map(|c| c.iter())
-            .flatten()
-            .cloned()
+impl<'a, N: 'a, R, E, M> ChildrenIter<'a, N> for Variant<N, R, E, M> {
+    fn children_iter(&'a self) -> impl Iterator<Item = &'a N> {
+        self.children().into_iter().map(|c| c.iter()).flatten()
     }
 }
 
@@ -312,22 +284,6 @@ impl<N, R, E, M> Variant<N, R, E, M> {
                     RequirementVariant::Informal(markup) => RequirementVariant::Informal(f(markup)),
                 },
             }),
-        }
-    }
-
-    pub fn children(&self) -> Option<&Vec<N>> {
-        match self {
-            Variant::Part(part) => Some(&part.children),
-            Variant::Package(package) => Some(&package.children),
-            _ => None,
-        }
-    }
-
-    pub fn children_mut(&mut self) -> Option<&mut Vec<N>> {
-        match self {
-            Variant::Part(part) => Some(&mut part.children),
-            Variant::Package(package) => Some(&mut package.children),
-            _ => None,
         }
     }
 

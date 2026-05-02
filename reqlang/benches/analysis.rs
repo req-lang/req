@@ -5,7 +5,7 @@ pub mod simple {
 
     use reqlang::{
         mock::generator::ExponentialSizeIterator,
-        node::entity::Idx,
+        node::entity::{Arena, Idx},
         semantics::{
             connection::{
                 Connect,
@@ -21,8 +21,8 @@ pub mod simple {
     use super::*;
 
     fn complete_pipeline(
-        root: Vec<syntax::entity::Node>,
-    ) -> Vec<link::entity::Node<Neighbors<Connection<Idx>>, TypeResult, ()>> {
+        root: Arena<syntax::entity::Node>,
+    ) -> Arena<link::entity::Node<Neighbors<Connection<Idx>>, TypeResult, ()>> {
         root.locate().resolve().evaluate().connect()
     }
 

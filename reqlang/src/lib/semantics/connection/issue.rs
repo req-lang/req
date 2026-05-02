@@ -2,8 +2,14 @@ use std::{cell::RefCell, collections::HashSet};
 
 use crate::{
     issue::Severity,
-    node::{self, entity::Idx},
-    semantics::connection::entity::{Connection, Inbound, Node, Outbound, Traceability},
+    node::{
+        self,
+        entity::{Arena, Idx},
+    },
+    semantics::{
+        connection::entity::{Connection, Inbound, Neighbors, Outbound, Traceability},
+        link::entity::Node,
+    },
 };
 
 #[derive(Debug, Clone, thiserror::Error)]
@@ -89,12 +95,12 @@ impl From<&IssueKind> for Severity {
     }
 }
 
-type RcArena<E, M> = Vec<RefCell<Node<E, M>>>;
+type RcArena<E, M> = Arena<RefCell<Node<Neighbors<Connection<Idx>>, E, M>>>;
 
 pub(super) fn collect_issues<E, M>(arena: &RcArena<E, M>, idx: Idx) {
     use node::entity::Variant::*;
 
-    let nd = &mut arena[usize::from(idx)].borrow_mut();
+    let nd = &mut arena[idx].borrow_mut();
 
     match &mut nd.variant {
         Part(_) => {
@@ -203,7 +209,7 @@ fn collect_pkg_parent_issues<E, M>(arena: &RcArena<E, M>, parent: &mut Option<Co
     use node::entity::Variant::*;
 
     match parent {
-        Some(p) if let Package(_) = arena[usize::from(p.target)].borrow().variant => {}
+        Some(p) if let Package(_) = arena[p.target].borrow().variant => {}
         Some(p) => p.issue.push(IssueKind::InvalidPackageParent),
         None => {}
     }
@@ -213,7 +219,7 @@ fn collect_attr_parent_issues<E, M>(arena: &RcArena<E, M>, parent: &mut Option<C
     use node::entity::Variant::*;
 
     match parent {
-        Some(p) if let Part(_) = arena[usize::from(p.target)].borrow().variant => {}
+        Some(p) if let Part(_) = arena[p.target].borrow().variant => {}
         Some(p) => p.issue.push(IssueKind::InvalidAttributeParent),
         None => {}
     }
@@ -256,7 +262,7 @@ fn collect_req_parent_issues<E, M>(arena: &RcArena<E, M>, parent: &mut Option<Co
     use node::entity::Variant::*;
 
     match parent {
-        Some(p) if let Package(_) = arena[usize::from(p.target)].borrow().variant => {}
+        Some(p) if let Package(_) = arena[p.target].borrow().variant => {}
         Some(p) => p.issue.push(IssueKind::InvalidRequirementParent),
         None => {}
     }
@@ -291,7 +297,7 @@ fn collect_traceability_target_variant_issues<E, M>(
 ) {
     use node::entity::Variant::*;
 
-    if let Requirement(_) = arena[usize::from(conn.target)].borrow().variant {
+    if let Requirement(_) = arena[conn.target].borrow().variant {
         return;
     }
 
@@ -301,10 +307,10 @@ fn collect_traceability_target_variant_issues<E, M>(
 fn collect_refinement_issues<E, M>(arena: &RcArena<E, M>, restr: &Idx, conn: &mut Connection<Idx>) {
     use IssueKind::RefinementMismatch;
 
-    let upgraded = arena[usize::from(conn.target)].borrow();
+    let upgraded = arena[conn.target].borrow();
     let target_restr = &upgraded.payload.outbound.restriction;
 
-    let mut candidate = arena[usize::from(*restr)].borrow();
+    let mut candidate = arena[*restr].borrow();
     while let Ok(r) = target_restr
         && r.target != *restr
     {
@@ -317,7 +323,7 @@ fn collect_refinement_issues<E, M>(arena: &RcArena<E, M>, restr: &Idx, conn: &mu
             let p = &candidate.payload.parent;
             p.as_ref().unwrap().target.clone()
         };
-        candidate = arena[usize::from(parent)].borrow();
+        candidate = arena[parent].borrow();
     }
 }
 
@@ -329,7 +335,7 @@ fn collect_derivation_issues<E, M>(
 ) {
     use IssueKind::{DerivationMismatch, NoDerivedAllocation, UnrelatedDerivation};
 
-    let target = arena[usize::from(conn.target)].borrow();
+    let target = arena[conn.target].borrow();
     let target_alloc = &target.payload.outbound.allocation;
     match target_alloc {
         Some(al) if *restr != al.target => conn.issue.push(DerivationMismatch),
@@ -362,7 +368,7 @@ fn collect_restriction_issues<E, M>(
     use IssueKind::{NotAPartOrAttribute, UnrelatedRestriction};
     use node::entity::Variant::*;
 
-    match arena[usize::from(restr.target)].borrow().variant {
+    match arena[restr.target].borrow().variant {
         Part(_) | Attribute(_) => {}
         _ => restr.issue.push(NotAPartOrAttribute),
     }
@@ -382,7 +388,7 @@ fn collect_allocation_issues<E, M>(
     use IssueKind::{InhibitorForbidDerives, MissingDerivation, NotAPartOrAttribute};
     use node::entity::Variant::*;
 
-    match arena[usize::from(alloc.target)].borrow().variant {
+    match arena[alloc.target].borrow().variant {
         Part(_) | Attribute(_) => {}
         _ => alloc.issue.push(NotAPartOrAttribute),
     }
@@ -437,11 +443,7 @@ fn is_valid_derivation<E, M>(
     alloc: &Option<Connection<Idx>>,
 ) -> bool {
     if let Some(alloc) = alloc
-        && let Ok(restr) = &arena[usize::from(conn.target)]
-            .borrow()
-            .payload
-            .outbound
-            .restriction
+        && let Ok(restr) = &arena[conn.target].borrow().payload.outbound.restriction
         && restr.target == alloc.target
     {
         return true;

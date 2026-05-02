@@ -1,13 +1,13 @@
 use std::{cell::RefCell, fmt::Debug};
 
 use crate::{
-    node::entity::Idx,
+    node::entity::{Arena, Idx},
     semantics::{
         connection::{
             entity::{Connection, Neighbors},
             graph::Graph,
         },
-        link::{self},
+        link::{self, entity::Node},
     },
 };
 
@@ -17,24 +17,21 @@ pub mod graph;
 pub mod issue;
 
 pub trait Connect<E, M> {
-    fn connect(self) -> Vec<entity::Node<E, M>>;
+    fn connect(self) -> Arena<Node<Neighbors<Connection<Idx>>, E, M>>;
 }
 
-impl<N, E: Debug, M: Debug> Connect<E, M> for Vec<link::entity::Node<N, E, M>> {
-    fn connect(self) -> Vec<entity::Node<E, M>> {
+impl<N, E: Debug, M: Debug> Connect<E, M> for Arena<link::entity::Node<N, E, M>> {
+    fn connect(self) -> Arena<Node<Neighbors<Connection<Idx>>, E, M>> {
         let mut graph = Graph::default();
 
-        graph::build_parents(&self, 0.into(), None, &mut graph);
+        graph::build_parents(&self, &mut graph);
         graph::build_transverse(&self, &mut graph);
         let arena = entity::connect(self, graph);
 
-        let arena: Vec<_> = arena.into_iter().map(RefCell::new).collect();
+        let arena = arena.map(RefCell::new);
         cycles::detect_traceability_cycles(&arena);
-        for (idx, _) in arena.iter().enumerate() {
-            issue::collect_issues(&arena, idx.into());
-        }
-
-        arena.into_iter().map(|n| n.into_inner()).collect()
+        arena.for_each(|_, idx| issue::collect_issues(&arena, idx));
+        arena.map(|n| n.into_inner())
     }
 }
 

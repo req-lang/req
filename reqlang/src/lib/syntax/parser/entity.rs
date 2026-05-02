@@ -13,6 +13,7 @@ use crate::{
         parser::{expression, markup},
         tokenizer::entity::{Keyword, TokenIterator, TokenVariant},
     },
+    utils::children::ChildrenMut,
 };
 
 pub(in crate::syntax) type Node = node::entity::Node<Span, String, String, Span, ()>;

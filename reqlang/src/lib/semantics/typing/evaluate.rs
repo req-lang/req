@@ -16,7 +16,7 @@ use crate::{
 };
 
 pub(super) fn evaluate_node<P>(
-    types: &Vec<RefCell<Vec<Option<TypeResult>>>>,
+    types: &node::entity::Arena<RefCell<Vec<Option<TypeResult>>>>,
     entity: node::entity::Idx,
     arena: &[link::expression::Node<P>],
     idx: Idx,
@@ -24,7 +24,7 @@ pub(super) fn evaluate_node<P>(
     use Issue::*;
     use node::expression::Variant::*;
 
-    let local = types[usize::from(entity)].borrow();
+    let local = types[entity].borrow();
     match &arena[usize::from(idx)].variant {
         Branch(branch) => {
             let els = match &branch.otherwise {
@@ -177,8 +177,8 @@ pub(super) fn evaluate_node<P>(
         }
 
         Identifier(ident) => match &ident.target.target().ok_or(DomainNotFound)? {
-            Target::Entity(tgt) => match types[usize::from(*tgt)].borrow().is_empty() {
-                false => match type_or_poison(&types[usize::from(*tgt)].borrow(), 0.into())? {
+            Target::Entity(tgt) => match types[*tgt].borrow().is_empty() {
+                false => match type_or_poison(&types[*tgt].borrow(), 0.into())? {
                     TypeKind::Set(inner) => Ok(inner.as_ref().clone()),
                     typ => Err(NotASet(typ.clone())),
                 },

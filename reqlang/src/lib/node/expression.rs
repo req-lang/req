@@ -101,8 +101,8 @@ pub trait IntoVariable<N, R> {
     fn into_variant(self) -> Variant<N, R>;
 }
 
-impl<N: Clone, R> ChildrenIter<N> for Variant<N, R> {
-    fn children_iter(&self) -> impl Iterator<Item = N> {
+impl<'a, N: 'a, R> ChildrenIter<'a, N> for Variant<N, R> {
+    fn children_iter(&'a self) -> impl Iterator<Item = &'a N> {
         use Variant::*;
 
         let mut children = Vec::new();
@@ -177,7 +177,7 @@ impl<N: Clone, R> ChildrenIter<N> for Variant<N, R> {
             Undefined => {}
         };
 
-        children.into_iter().cloned()
+        children.into_iter()
     }
 }
 

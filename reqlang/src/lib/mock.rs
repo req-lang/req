@@ -1,7 +1,9 @@
 pub mod entity {
     use crate::{
         mock::expression,
-        node::entity::{Attribute, Meta, Package, Part, Requirement, RequirementVariant, Variant},
+        node::entity::{
+            Arena, Attribute, Meta, Package, Part, Requirement, RequirementVariant, Variant,
+        },
         syntax::{self, entity::Node},
     };
 
@@ -33,7 +35,7 @@ pub mod entity {
         req
     }
 
-    pub fn simple_tree() -> Vec<Node> {
+    pub fn simple_tree() -> Arena<Node> {
         let mut arena = vec![
             package("a"),
             package("b"),
@@ -52,7 +54,7 @@ pub mod entity {
         arena[0].variant = variant;
         arena.reverse();
 
-        return arena;
+        return arena.into();
     }
 }
 
@@ -63,8 +65,10 @@ pub mod generator {
     use super::entity::package;
     use crate::mock::entity::requirement;
     use crate::node;
+    use crate::node::entity::Arena;
     use crate::syntax::entity::Node;
     use crate::syntax::markup;
+    use crate::utils::children::ChildrenMut;
 
     pub struct ExponentialSizeIterator {
         value: f64,
@@ -87,7 +91,7 @@ pub mod generator {
     }
 
     pub trait Generate {
-        fn generate(&self) -> Vec<Node>;
+        fn generate(&self) -> Arena<Node>;
 
         fn size(&self) -> u64;
     }
@@ -118,7 +122,7 @@ pub mod generator {
     }
 
     impl Generate for Simple {
-        fn generate(&self) -> Vec<Node> {
+        fn generate(&self) -> Arena<Node> {
             let arena = {
                 let root = Rc::new(RefCell::new(package("root")));
                 let mut arena = vec![root.clone()];
@@ -155,7 +159,8 @@ pub mod generator {
             arena
                 .into_iter()
                 .map(|n| RefCell::into_inner(Rc::try_unwrap(n).unwrap()))
-                .collect()
+                .collect::<Vec<_>>()
+                .into()
         }
 
         fn size(&self) -> u64 {

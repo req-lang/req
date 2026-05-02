@@ -1,7 +1,10 @@
 use std::fmt::Display;
 
 use crate::{
-    node::{self, entity::Idx},
+    node::{
+        self,
+        entity::{Arena, Idx},
+    },
     semantics::path::{self, Located, Path},
 };
 
@@ -63,19 +66,18 @@ impl<I> Display for Link<I> {
 }
 
 pub trait Resolve<N, E, M> {
-    fn resolve(self) -> Vec<entity::Node<N, E, M>>;
+    fn resolve(self) -> Arena<entity::Node<N, E, M>>;
 }
 
 impl<N: Located, R: Into<Path> + Clone, T: Into<Path> + Clone, E, M> Resolve<N, E, M>
-    for Vec<node::entity::Node<N, R, T, E, M>>
+    for Arena<node::entity::Node<N, R, T, E, M>>
 {
-    fn resolve(self) -> Vec<entity::Node<N, E, M>> {
+    fn resolve(self) -> Arena<entity::Node<N, E, M>> {
         let paths = path::collect(&self)
             .into_iter()
             .map(|(p, mut idxs)| (p, idxs.pop().unwrap()))
             .collect();
-        let mut imports = Vec::new();
-        entity::collect_imports(&self, 0.into(), Vec::new(), &mut imports);
+        let imports = entity::collect_imports(&self);
         entity::link(&paths, imports, self)
     }
 }
@@ -85,7 +87,11 @@ mod tests {
     use pretty_assertions::assert_eq;
 
     use crate::{
-        mock, node,
+        mock,
+        node::{
+            self,
+            entity::{Arena, Idx},
+        },
         semantics::{
             link::{
                 Resolve,
@@ -95,32 +101,36 @@ mod tests {
             path::{self, Locate},
         },
         syntax,
+        utils::children::{Children, ChildrenMut},
     };
 
-    fn resolve(arena: Vec<syntax::entity::Node>) -> Vec<Node<path::Location, (), ()>> {
-        arena.locate().resolve()
+    fn resolve(arena: Vec<syntax::entity::Node>) -> Arena<Node<path::Location, (), ()>> {
+        Arena::from(arena).locate().resolve()
     }
 
     fn get_child(
-        arena: &[entity::Node<path::Location, (), ()>],
-        parent_idx: usize,
+        arena: &Arena<entity::Node<path::Location, (), ()>>,
+        parent_idx: Idx,
         label: &str,
-    ) -> usize {
+    ) -> Idx {
         arena[parent_idx]
             .variant
             .children()
             .expect("node has no children")
             .iter()
             .copied()
-            .find(|idx| arena[usize::from(*idx)].meta.label == label)
-            .map(usize::from)
+            .find(|idx| arena[*idx].meta.label == label)
             .unwrap_or_else(|| panic!("child '{}' not found", label))
     }
 
-    fn assert_resolves_to(arena: &[entity::Node<path::Location, (), ()>], idx: usize, label: &str) {
+    fn assert_resolves_to(
+        arena: &Arena<entity::Node<path::Location, (), ()>>,
+        idx: Idx,
+        label: &str,
+    ) {
         let rf = arena[idx].variant.references().next().cloned().unwrap();
         assert!(rf.is_valid(), "expected resolved reference, got: {:?}", rf);
-        assert_eq!(arena[usize::from(*rf.target().unwrap())].meta.label, label);
+        assert_eq!(arena[*rf.target().unwrap()].meta.label, label);
     }
 
     #[test]
@@ -136,7 +146,7 @@ mod tests {
 
         let resolved = resolve(vec![p, x, r1]);
 
-        assert_resolves_to(&resolved, 2, "x");
+        assert_resolves_to(&resolved, 2.into(), "x");
     }
 
     #[test]
@@ -152,7 +162,7 @@ mod tests {
 
         let resolved = resolve(vec![p, x, r1]);
 
-        assert_resolves_to(&resolved, 2, "x");
+        assert_resolves_to(&resolved, 2.into(), "x");
     }
 
     #[test]
@@ -171,7 +181,7 @@ mod tests {
 
         let resolved = resolve(vec![p, y, x, r1]);
 
-        assert_resolves_to(&resolved, 3, "x");
+        assert_resolves_to(&resolved, 3.into(), "x");
     }
 
     #[test]
@@ -192,7 +202,7 @@ mod tests {
 
         let resolved = resolve(vec![p, y, x, q, r1]);
 
-        let r1_idx = get_child(&resolved, 3, "r1");
+        let r1_idx = get_child(&resolved, 3.into(), "r1");
         assert_resolves_to(&resolved, r1_idx, "x");
     }
 
@@ -207,7 +217,7 @@ mod tests {
 
         let resolved = resolve(vec![p, y, x]);
 
-        let x_idx = get_child(&resolved, 0, "x");
+        let x_idx = get_child(&resolved, 0.into(), "x");
         let domain = resolved[x_idx].variant.expressions().next().unwrap();
         let target = match &domain[0].variant {
             node::expression::Variant::Identifier(ident) => ident.target.target(),
@@ -216,7 +226,7 @@ mod tests {
 
         match target {
             Some(Target::Entity(idx)) => {
-                assert_eq!(resolved[usize::from(*idx)].meta.label, "y");
+                assert_eq!(resolved[*idx].meta.label, "y");
             }
             other => panic!("expected entity target, got {:?}", other),
         }
@@ -231,7 +241,7 @@ mod tests {
 
         let resolved = resolve(vec![p, x]);
 
-        let x_idx = get_child(&resolved, 0, "x");
+        let x_idx = get_child(&resolved, 0.into(), "x");
         let domain = resolved[x_idx].variant.expressions().next().unwrap();
         let target = match &domain[0].variant {
             node::expression::Variant::Identifier(ident) => ident.target.target(),
@@ -265,7 +275,7 @@ mod tests {
 
         let resolved = resolve(vec![p, a]);
 
-        let a_idx = get_child(&resolved, 0, "a");
+        let a_idx = get_child(&resolved, 0.into(), "a");
         let expr_arena = resolved[a_idx].variant.expressions().next().unwrap();
 
         let (body_idx, domain_idx) = match &expr_arena[0].variant {
@@ -299,9 +309,9 @@ mod tests {
 
         let resolved = resolve(vec![p]);
 
-        let markup = resolved[0].markups().next().cloned().unwrap();
+        let markup = resolved[0.into()].markups().next().cloned().unwrap();
         let rf = markup.container.references().next().cloned().unwrap();
         assert!(rf.is_valid());
-        assert_eq!(resolved[usize::from(*rf.target().unwrap())].meta.label, "p");
+        assert_eq!(resolved[*rf.target().unwrap()].meta.label, "p");
     }
 }

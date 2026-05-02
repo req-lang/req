@@ -3,9 +3,15 @@ use std::{cell::RefCell, collections::HashSet};
 use crate::{
     node::{
         self,
-        entity::{Idx, TraceabilityKind},
+        entity::{Arena, Idx, TraceabilityKind},
     },
-    semantics::connection::{entity::Node, issue::IssueKind},
+    semantics::{
+        connection::{
+            entity::{Connection, Neighbors},
+            issue::IssueKind,
+        },
+        link::entity::Node,
+    },
 };
 
 #[derive(Clone, Default)]
@@ -14,11 +20,13 @@ struct PathCtx {
     path: Vec<(Idx, TraceabilityKind)>,
 }
 
-pub(super) fn detect_traceability_cycles<E, M>(arena: &Vec<RefCell<Node<E, M>>>) {
+pub(super) fn detect_traceability_cycles<E, M>(
+    arena: &Arena<RefCell<Node<Neighbors<Connection<Idx>>, E, M>>>,
+) {
     use node::entity::Variant::Requirement;
 
     let mut visited: HashSet<Idx> = HashSet::new();
-    for (idx, node) in arena.iter().enumerate() {
+    arena.for_each(|node, idx| {
         let idx = Idx::from(idx);
         let node = node.borrow();
         if let Requirement(_) = &node.variant
@@ -34,11 +42,11 @@ pub(super) fn detect_traceability_cycles<E, M>(arena: &Vec<RefCell<Node<E, M>>>)
             }
             visited.insert(idx);
         }
-    }
+    });
 }
 
 fn detect_cycle_from<E, M>(
-    arena: &Vec<RefCell<Node<E, M>>>,
+    arena: &Arena<RefCell<Node<Neighbors<Connection<Idx>>, E, M>>>,
     idx: Idx,
     ctx: PathCtx,
     visited: &mut HashSet<Idx>,
@@ -55,7 +63,7 @@ fn detect_cycle_from<E, M>(
         return;
     }
 
-    let node = &arena[usize::from(idx)].borrow();
+    let node = &arena[idx].borrow();
     let neighbors = node.payload.inbound.traceability.iter();
     let mut ctx = ctx;
     ctx.in_path.insert(idx);
@@ -73,11 +81,14 @@ fn detect_cycle_from<E, M>(
     visited.insert(idx);
 }
 
-fn mark_cycle<E, M>(arena: &Vec<RefCell<Node<E, M>>>, path: &[(Idx, TraceabilityKind)]) {
+fn mark_cycle<E, M>(
+    arena: &Arena<RefCell<Node<Neighbors<Connection<Idx>>, E, M>>>,
+    path: &[(Idx, TraceabilityKind)],
+) {
     use TraceabilityKind::*;
 
     for (i, kind) in path {
-        let nd = &mut arena[usize::from(*i)].borrow_mut();
+        let nd = &mut arena[*i].borrow_mut();
         let (idx, _) = path[(usize::from(*i) + 1) % path.len()];
         let conns = match kind {
             Derivation => &mut nd.payload.inbound.traceability.derivations,

@@ -1,9 +1,12 @@
 use std::collections::HashMap;
 
 use crate::{
-    node::{self, entity::Idx},
-    semantics::link,
-    utils::{children::ChildrenIter, upsert::Upsert},
+    node::{
+        self,
+        entity::{Arena, Idx},
+    },
+    semantics::link::{self, entity::Node},
+    utils::upsert::Upsert,
 };
 
 #[derive(Default)]
@@ -33,27 +36,22 @@ pub(super) struct Graph {
     pub parent: HashMap<Idx, Idx>,
 }
 
-pub(super) fn build_parents<N, E, M>(
-    arena: &Vec<link::entity::Node<N, E, M>>,
-    idx: Idx,
-    parent: Option<Idx>,
-    graph: &mut Graph,
-) {
-    if let Some(parent) = parent {
-        graph.parent.insert(idx, parent);
-    }
-    for child in arena[idx].variant.children_iter() {
-        build_parents(arena, child, Some(idx), graph);
-    }
+pub(super) fn build_parents<N, E, M>(arena: &Arena<Node<N, E, M>>, graph: &mut Graph) {
+    arena.idx_walk(|_, parent, idx| {
+        if let Some(parent) = parent {
+            graph.parent.insert(idx, parent);
+        }
+        Some(idx)
+    });
 }
 
 pub(super) fn build_transverse<N, E, M>(
-    arena: &Vec<link::entity::Node<N, E, M>>,
+    arena: &Arena<link::entity::Node<N, E, M>>,
     graph: &mut Graph,
 ) {
     use node::entity::Variant::*;
 
-    for (idx, node) in arena.iter().enumerate() {
+    arena.for_each(|node, idx| {
         let idx = Idx::from(idx);
         if let Requirement(req) = &node.variant {
             if let Some(alloc) = req.allocation.as_ref().and_then(|a| a.target()) {
@@ -91,7 +89,7 @@ pub(super) fn build_transverse<N, E, M>(
                 Informal(markup) => markup::build_graph(&markup, graph, idx),
             }
         }
-    }
+    });
 }
 
 mod expression {

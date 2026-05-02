@@ -1,13 +1,11 @@
 use crate::{
-    node::entity::{Idx, TraceabilityKind},
+    node::entity::{Arena, Idx, TraceabilityKind},
     semantics::{
         connection::{graph::Graph, issue::IssueKind},
-        link::{self},
+        link::entity::Node,
     },
     utils::take::Take,
 };
-
-pub(super) type Node<E, M> = link::entity::Node<Neighbors<Connection<Idx>>, E, M>;
 
 #[derive(Debug, Clone)]
 pub struct Neighbors<R> {
@@ -130,14 +128,10 @@ impl<R> Outbound<R> {
 }
 
 pub(super) fn connect<N, E, M>(
-    arena: Vec<link::entity::Node<N, E, M>>,
+    arena: Arena<Node<N, E, M>>,
     mut graph: Graph,
-) -> Vec<Node<E, M>> {
-    arena
-        .into_iter()
-        .enumerate()
-        .map(|(idx, n)| n.map(|_| make_neighbors(idx.into(), &mut graph)))
-        .collect()
+) -> Arena<Node<Neighbors<Connection<Idx>>, E, M>> {
+    arena.idx_map(|node, idx| node.map(|_| make_neighbors(idx, &mut graph)))
 }
 
 fn make_neighbors(nd: Idx, graph: &mut Graph) -> Neighbors<Connection<Idx>> {

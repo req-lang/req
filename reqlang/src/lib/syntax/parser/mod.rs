@@ -1,16 +1,19 @@
 use itertools::Itertools;
 
-use crate::syntax::{
-    location::Span,
-    parser::entity::Node,
-    tokenizer::entity::{IntoLexeme, IntoPosition, IntoTokens},
+use crate::{
+    node::entity::Arena,
+    syntax::{
+        location::Span,
+        parser::entity::Node,
+        tokenizer::entity::{IntoLexeme, IntoPosition, IntoTokens},
+    },
 };
 
 pub mod entity;
 pub mod expression;
 pub mod markup;
 
-pub fn parse(input: &str) -> Result<Vec<Node>, Span> {
+pub fn parse(input: &str) -> Result<Arena<Node>, Span> {
     let mut arena = Vec::new();
     let mut tokens = input
         .char_indices()
@@ -19,7 +22,7 @@ pub fn parse(input: &str) -> Result<Vec<Node>, Span> {
         .tokens()
         .multipeek();
     entity::parse(&mut tokens, &mut arena)?;
-    Ok(arena)
+    Ok(arena.into())
 }
 
 #[cfg(test)]
@@ -30,6 +33,7 @@ mod tests {
         mock::{self, generator::Generate},
         node::entity::{Requirement, TraceabilityKind},
         syntax::{self, parser::parse},
+        utils::children::ChildrenMut,
     };
 
     #[test]
@@ -37,12 +41,12 @@ mod tests {
         let input = "package x package";
         let result = parse(input);
 
-        let expected = vec![mock::entity::package("x")];
+        let expected = vec![mock::entity::package("x")].into();
 
         assert!(result.is_ok());
 
         let nodes = result.ok().unwrap();
-        let ast: Vec<_> = nodes.into_iter().map(syntax::entity::Node::from).collect();
+        let ast = nodes.map(syntax::entity::Node::from);
         assert_eq!(ast, expected);
     }
 
@@ -53,13 +57,13 @@ mod tests {
         assert!(result.is_ok());
 
         let nodes = result.ok().unwrap();
-        let ast: Vec<_> = nodes.into_iter().map(syntax::entity::Node::from).collect();
+        let ast = nodes.map(syntax::entity::Node::from);
 
         let mut x = mock::entity::package("x");
         x.variant.children_mut().unwrap().push(1.into());
         let p = mock::entity::package("p");
 
-        assert_eq!(ast, vec![x, p]);
+        assert_eq!(ast, vec![x, p].into());
     }
 
     #[test]
@@ -69,13 +73,13 @@ mod tests {
         assert!(result.is_ok());
 
         let nodes = result.ok().unwrap();
-        let ast: Vec<_> = nodes.into_iter().map(syntax::entity::Node::from).collect();
+        let ast = nodes.map(syntax::entity::Node::from);
 
         let mut expected = mock::entity::package("x");
         expected.variant.children_mut().unwrap().push(1.into());
         let first = mock::entity::part("p");
 
-        assert_eq!(ast, vec![expected, first]);
+        assert_eq!(ast, vec![expected, first].into());
     }
 
     #[test]
@@ -85,7 +89,7 @@ mod tests {
         assert!(result.is_ok());
 
         let nodes = result.ok().unwrap();
-        let ast: Vec<_> = nodes.into_iter().map(syntax::entity::Node::from).collect();
+        let ast = nodes.map(syntax::entity::Node::from);
 
         let mut x = mock::entity::package("x");
         let mut p = mock::entity::part("p");
@@ -94,7 +98,7 @@ mod tests {
         x.variant.children_mut().unwrap().push(1.into());
         p.variant.children_mut().unwrap().push(2.into());
 
-        assert_eq!(ast, vec![x, p, u]);
+        assert_eq!(ast, vec![x, p, u].into());
     }
 
     #[test]
@@ -104,7 +108,7 @@ mod tests {
         assert!(result.is_ok());
 
         let nodes = result.ok().unwrap();
-        let ast: Vec<_> = nodes.into_iter().map(syntax::entity::Node::from).collect();
+        let ast = nodes.map(syntax::entity::Node::from);
 
         let mut x = mock::entity::package("x");
         x.variant.children_mut().unwrap().push(1.into());
@@ -119,7 +123,7 @@ mod tests {
 
         let v = mock::entity::attribute("v", "integer");
 
-        assert_eq!(ast, vec![x, p, u, v]);
+        assert_eq!(ast, vec![x, p, u, v].into());
     }
 
     #[test]
@@ -129,7 +133,7 @@ mod tests {
         generator.depth = 1;
         generator.words = 2;
         let nodes = generator.generate();
-        assert_eq!(nodes.len(), generator.size() as usize);
+        assert_eq!(Vec::from(nodes).len(), generator.size() as usize);
     }
 
     #[test]
@@ -190,8 +194,9 @@ mod tests {
         input: &str,
     ) -> Requirement<String, Vec<syntax::expression::Node>, syntax::markup::Node> {
         let nodes = parse(input).unwrap();
-        let ast: Vec<_> = nodes.into_iter().map(syntax::entity::Node::from).collect();
-        ast.into_iter()
+        let ast = nodes.map(syntax::entity::Node::from);
+        Vec::from(ast)
+            .into_iter()
             .find_map(|n| n.variant.into_requirement())
             .expect("no requirement found")
     }

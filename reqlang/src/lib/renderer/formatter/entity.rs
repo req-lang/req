@@ -1,12 +1,12 @@
 use std::fmt::Display;
 
 use crate::{
-    node::entity::{Idx, Node, TraceabilityKind},
+    node::entity::{Arena, Idx, Node, TraceabilityKind},
     renderer::formatter::{expression, markup, padding::pad},
 };
 
 pub fn format<W: std::io::Write, N, R: Display, T: Display, E, M>(
-    arena: &Vec<Node<N, R, T, E, M>>,
+    arena: &Arena<Node<N, R, T, E, M>>,
     idx: Idx,
     indent: usize,
     out: &mut W,
@@ -101,7 +101,7 @@ fn traceability_keyword(kind: &TraceabilityKind) -> &'static str {
 
 fn format_container<W: std::io::Write, N, R: Display, T: Display, E, M>(
     imports: &[R],
-    arena: &Vec<Node<N, R, T, E, M>>,
+    arena: &Arena<Node<N, R, T, E, M>>,
     children: &Vec<Idx>,
     indent: usize,
     out: &mut W,

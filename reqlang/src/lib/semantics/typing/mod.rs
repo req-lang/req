@@ -1,8 +1,11 @@
-use crate::semantics::{
-    link::{self},
-    typing::{
-        entity::{Node, init_types},
-        expression::{Issue, TypeKind},
+use crate::{
+    node::entity::Arena,
+    semantics::{
+        link::{self, entity::Node},
+        typing::{
+            entity::init_types,
+            expression::{Issue, TypeKind},
+        },
     },
 };
 
@@ -13,10 +16,10 @@ pub mod expression;
 pub type TypeResult = std::result::Result<TypeKind, Issue>;
 
 pub trait Evaluate<N, M> {
-    fn evaluate(self) -> Vec<Node<N, M>>;
+    fn evaluate(self) -> Arena<Node<N, TypeResult, M>>;
 }
-impl<N, E, M> Evaluate<N, M> for Vec<link::entity::Node<N, E, M>> {
-    fn evaluate(self) -> Vec<Node<N, M>> {
+impl<N, E, M> Evaluate<N, M> for Arena<link::entity::Node<N, E, M>> {
+    fn evaluate(self) -> Arena<Node<N, TypeResult, M>> {
         let types = init_types(&self);
         entity::evaluate(types, self)
     }
@@ -34,37 +37,37 @@ impl Typed for TypeResult {
 
 #[cfg(test)]
 mod tests {
-    use pretty_assertions::assert_eq;
 
     use crate::{
         mock::{entity::*, expression::*},
         node::{
             self,
-            entity::Idx,
+            entity::{Arena, Idx},
             expression::{BinaryOperator::*, Variant::*},
         },
         semantics::{
-            link::Resolve,
+            link::{self, Resolve},
             path::{self, Locate},
             typing::{
-                Evaluate, entity,
+                Evaluate, TypeResult,
                 expression::{Issue, TypeKind},
             },
         },
         syntax,
-        utils::children::ChildrenIter,
+        utils::children::{ChildrenIter, ChildrenMut},
     };
 
-    type Node = entity::Node<path::Location, ()>;
+    type Node = link::entity::Node<path::Location, TypeResult, ()>;
 
-    fn resolve_and_evaluate(syn: Vec<syntax::entity::Node>) -> Vec<Node> {
+    fn resolve_and_evaluate(syn: Arena<syntax::entity::Node>) -> Arena<Node> {
         syn.locate().resolve().evaluate()
     }
 
-    fn get_child<'a>(arena: &'a Vec<Node>, parent: Idx, label: &str) -> &'a Node {
-        let parent = &arena[usize::from(parent)];
+    fn get_child<'a>(arena: &'a Arena<Node>, parent: Idx, label: &str) -> &'a Node {
+        let parent = &arena[parent];
         let mut children = parent.variant.children_iter();
-        &arena[children.find(|c| arena[*c].meta.label == label).unwrap()]
+        let idx = children.find(|c| arena[**c].meta.label == *label).unwrap();
+        &arena[*idx]
     }
 
     #[test]
@@ -73,7 +76,7 @@ mod tests {
         let x = attribute("x", "real");
         p.variant.children_mut().unwrap().push(1.into());
 
-        let typed = resolve_and_evaluate(vec![p, x]);
+        let typed = resolve_and_evaluate(vec![p, x].into());
         let x = get_child(&typed, 0.into(), "x");
 
         let attr = x.variant.attribute().unwrap();
@@ -89,7 +92,7 @@ mod tests {
         let x = attribute("x", "boolean");
         p.variant.children_mut().unwrap().push(1.into());
 
-        let typed = resolve_and_evaluate(vec![p, x]);
+        let typed = resolve_and_evaluate(vec![p, x].into());
         let x = get_child(&typed, 0.into(), "x");
 
         let attr = x.variant.attribute().unwrap();
@@ -109,7 +112,7 @@ mod tests {
         p.variant.children_mut().unwrap().push(1.into());
         p.variant.children_mut().unwrap().push(2.into());
 
-        let typed = resolve_and_evaluate(vec![p, x, y]);
+        let typed = resolve_and_evaluate(vec![p, x, y].into());
         let y = get_child(&typed, 0.into(), "y");
 
         let attr = y.variant.attribute().unwrap();
@@ -124,7 +127,7 @@ mod tests {
         let req = formal("r", vec![expr, n1, n2]);
         p.variant.children_mut().unwrap().push(1.into());
 
-        let typed = resolve_and_evaluate(vec![p, req]);
+        let typed = resolve_and_evaluate(vec![p, req].into());
         let r = get_child(&typed, 0.into(), "r");
 
         let expr = r.variant.expressions().next().unwrap().clone();
@@ -139,7 +142,7 @@ mod tests {
         let req = formal("r", vec![expr, n1, n2]);
         p.variant.children_mut().unwrap().push(1.into());
 
-        let typed = resolve_and_evaluate(vec![p, req]);
+        let typed = resolve_and_evaluate(vec![p, req].into());
         let r = get_child(&typed, 0.into(), "r");
 
         let expr = r.variant.expressions().next().unwrap().clone();
@@ -155,7 +158,7 @@ mod tests {
         let req = formal("r", vec![expr, n1, n2]);
         p.variant.children_mut().unwrap().push(1.into());
 
-        let typed = resolve_and_evaluate(vec![p, req]);
+        let typed = resolve_and_evaluate(vec![p, req].into());
         let r = get_child(&typed, 0.into(), "r");
 
         let expr = r.variant.expressions().next().unwrap().clone();
@@ -172,7 +175,7 @@ mod tests {
         let req = formal("r", vec![expr, n1, n2]);
         p.variant.children_mut().unwrap().push(1.into());
 
-        let typed = resolve_and_evaluate(vec![p, req]);
+        let typed = resolve_and_evaluate(vec![p, req].into());
         let r = get_child(&typed, 0.into(), "r");
 
         let expr = r.variant.expressions().next().unwrap().clone();
@@ -196,7 +199,7 @@ mod tests {
         let req = formal("r", vec![forall_expr, domain, body]);
         p.variant.children_mut().unwrap().push(1.into());
 
-        let typed = resolve_and_evaluate(vec![p, req]);
+        let typed = resolve_and_evaluate(vec![p, req].into());
         let r = get_child(&typed, 0.into(), "r");
 
         let expr = r.variant.expressions().next().unwrap().clone();
@@ -218,7 +221,7 @@ mod tests {
         let req = formal("r", vec![forall_expr, domain, body]);
         p.variant.children_mut().unwrap().push(1.into());
 
-        let typed = resolve_and_evaluate(vec![p, req]);
+        let typed = resolve_and_evaluate(vec![p, req].into());
         let r = get_child(&typed, 0.into(), "r");
 
         let expr = r.variant.expressions().next().unwrap().clone();

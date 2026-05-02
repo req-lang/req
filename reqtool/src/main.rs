@@ -63,33 +63,32 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let start = std::time::Instant::now();
             let source = fs::read_to_string(&input)?;
             let arena = parser::parse(&source)?;
-            let spans: Vec<_> = arena.iter().map(|n| n.payload.clone()).collect();
+            let spans = arena.as_ref().map(|n| n.payload.clone());
 
             let arena = arena.locate();
-            let locations: Vec<_> = arena.iter().map(|n| n.payload.clone()).collect();
+            let locations = arena.as_ref().map(|n| n.payload.clone());
 
             let arena = arena.resolve().evaluate().connect();
-            let arena: Vec<_> = izip!(arena, locations, spans)
-                .map(|(node, loc, span)| node.map(|conns| Payload::new(loc, span, conns)))
-                .collect();
+            let arena = arena
+                .zip(locations)
+                .zip(spans)
+                .map(|((node, loc), span)| node.map(|conns| Payload::new(loc, span, conns)));
 
-            let issues: Vec<_> = arena
-                .iter()
-                .map(|node| {
-                    path_issues(node)
-                        .chain(reference_errors(node))
-                        .chain(connection_errors(node))
-                        .chain(expr_errors(node))
-                        .map(Issue::from)
-                        .collect::<Vec<_>>()
-                })
-                .collect();
+            let issues = arena.as_ref().map(|node| {
+                path_issues(node)
+                    .chain(reference_errors(node))
+                    .chain(connection_errors(node))
+                    .chain(expr_errors(node))
+                    .map(Issue::from)
+                    .collect::<Vec<_>>()
+            });
 
             let elapsed = start.elapsed();
-            let count: usize = issues.iter().map(|i| i.len()).sum();
-            for (node, issues) in arena.into_iter().zip(issues) {
+            let mut count = 0;
+            arena.zip(issues).map(|(node, issues)| {
+                count += issues.len();
                 if issues.is_empty() {
-                    continue;
+                    return;
                 }
 
                 let path = node.payload.location.path;
@@ -100,7 +99,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 for issue in issues {
                     eprintln!("    {}", issue.colored_message());
                 }
-            }
+            });
 
             match count {
                 0 => println!("no issues ({:.2?})", elapsed),

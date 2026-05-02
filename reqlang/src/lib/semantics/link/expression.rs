@@ -95,7 +95,7 @@ fn init_scope<P, R>(
 
     let ext = scope.clone();
     for child in node.variant.children_iter() {
-        let idx = usize::from(child);
+        let idx = usize::from(*child);
         local[idx].extend(ext.clone());
         init_scope(arena, idx, local);
     }

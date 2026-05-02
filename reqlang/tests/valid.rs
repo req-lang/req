@@ -1,5 +1,5 @@
 use reqlang::{
-    node::entity::Idx,
+    node::entity::{Arena, Idx},
     semantics::{
         connection::{
             Connect,
@@ -16,19 +16,14 @@ pub const PATH_ROOT: &str = "tests/data/valid";
 
 fn assert_valid_parsing_and_analysis(
     filename: &str,
-) -> Vec<link::entity::Node<Neighbors<Connection<Idx>>, TypeResult, ()>> {
+) -> Arena<link::entity::Node<Neighbors<Connection<Idx>>, TypeResult, ()>> {
     let path = std::path::PathBuf::from(PATH_ROOT).join(filename);
     let input = std::fs::read_to_string(path).unwrap();
     let result = syntax::parser::parse(&input);
 
     assert!(result.is_ok());
 
-    let ast: Vec<_> = result
-        .unwrap()
-        .into_iter()
-        .map(syntax::entity::Node::from)
-        .collect();
-
+    let ast = result.unwrap().map(syntax::entity::Node::from);
     let arena = ast.locate().resolve().evaluate().connect();
 
     //
