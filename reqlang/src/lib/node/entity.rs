@@ -16,7 +16,7 @@ pub struct Node<N, R, T, E, M, I = Idx, J = expression::Idx> {
 }
 
 pub type NodeVariant<R, T, E, M, I = Idx, J = expression::Idx> =
-    Variant<I, R, Vec<expression::Node<E, T, J>>, markup::Node<M, R>>;
+    Variant<I, R, expression::Arena<expression::Node<E, T, J>>, markup::Node<M, R>>;
 pub type NodeMeta<M, R> = Meta<markup::Node<M, R>>;
 
 impl<N, R, T, E, M, I, J> Node<N, R, T, E, M, I, J> {
@@ -68,9 +68,7 @@ impl<N, R, T, E, M, I, J> Node<N, R, T, E, M, I, J> {
         Node {
             payload: self.payload,
             meta: self.meta,
-            variant: self
-                .variant
-                .mape(|e| e.into_iter().map(|e| e.mapr(&mut f)).collect()),
+            variant: self.variant.mape(|e| e.map(|e| e.mapr(&mut f))),
         }
     }
 
@@ -81,9 +79,7 @@ impl<N, R, T, E, M, I, J> Node<N, R, T, E, M, I, J> {
         Node {
             payload: self.payload,
             meta: self.meta,
-            variant: self
-                .variant
-                .mape(|e| e.into_iter().map(|e| e.map(&mut f)).collect()),
+            variant: self.variant.mape(|e| e.map(|e| e.map(&mut f))),
         }
     }
 

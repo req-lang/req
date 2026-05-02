@@ -12,6 +12,10 @@ pub struct Arena<T, M> {
 }
 
 impl<T, M> Arena<T, M> {
+    pub fn as_vec(&self) -> &Vec<T> {
+        &self.inner
+    }
+
     pub fn as_ref(&self) -> Arena<&T, M> {
         Arena {
             inner: self.inner.iter().collect(),
@@ -72,9 +76,9 @@ impl<T, M> Arena<T, M> {
         }
     }
 
-    pub fn from_walk<'a, U, V>(&'a self, f: impl FnMut(&T, U) -> (U, V)) -> Arena<V, M>
+    pub fn from_walk<'a, U, V>(&'a self, f: impl FnMut(&T, U, Idx<M>) -> (U, V)) -> Arena<V, M>
     where
-        M: 'a + Clone,
+        M: 'a + Clone + Copy,
         U: Default + Clone,
         T: ChildrenIter<'a, Idx<M>>,
     {
@@ -83,8 +87,8 @@ impl<T, M> Arena<T, M> {
 
     pub fn from_walk1<'a, U, V, F>(&'a self, idx: Idx<M>, ctx: U, mut f: F) -> Arena<V, M>
     where
-        M: 'a + Clone,
-        F: FnMut(&T, U) -> (U, V),
+        M: 'a + Clone + Copy,
+        F: FnMut(&T, U, Idx<M>) -> (U, V),
         T: ChildrenIter<'a, Idx<M>>,
         U: Clone,
     {
@@ -95,13 +99,13 @@ impl<T, M> Arena<T, M> {
 
     fn inner_from_walk<'a, U, V, F>(&'a self, idx: Idx<M>, ctx: U, f: &mut F, out: &mut Vec<V>)
     where
-        M: 'a + Clone,
+        M: 'a + Clone + Copy,
         U: Clone,
-        F: FnMut(&T, U) -> (U, V),
+        F: FnMut(&T, U, Idx<M>) -> (U, V),
         T: ChildrenIter<'a, Idx<M>>,
     {
         let current = &self[idx];
-        let (ctx, value) = f(current, ctx);
+        let (ctx, value) = f(current, ctx, idx);
         out.push(value);
 
         for child in current.children_iter() {

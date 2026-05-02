@@ -31,7 +31,10 @@ mod tests {
 
     use crate::{
         mock::{self, generator::Generate},
-        node::entity::{Requirement, TraceabilityKind},
+        node::{
+            self,
+            entity::{Requirement, TraceabilityKind},
+        },
         syntax::{self, parser::parse},
         utils::children::ChildrenMut,
     };
@@ -192,7 +195,8 @@ mod tests {
 
     fn get_requirement(
         input: &str,
-    ) -> Requirement<String, Vec<syntax::expression::Node>, syntax::markup::Node> {
+    ) -> Requirement<String, node::expression::Arena<syntax::expression::Node>, syntax::markup::Node>
+    {
         let nodes = parse(input).unwrap();
         let ast = nodes.map(syntax::entity::Node::from);
         Vec::from(ast)

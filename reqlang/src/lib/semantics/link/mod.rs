@@ -219,7 +219,7 @@ mod tests {
 
         let x_idx = get_child(&resolved, 0.into(), "x");
         let domain = resolved[x_idx].variant.expressions().next().unwrap();
-        let target = match &domain[0].variant {
+        let target = match &domain[0.into()].variant {
             node::expression::Variant::Identifier(ident) => ident.target.target(),
             _ => panic!("expected identifier"),
         };
@@ -243,7 +243,7 @@ mod tests {
 
         let x_idx = get_child(&resolved, 0.into(), "x");
         let domain = resolved[x_idx].variant.expressions().next().unwrap();
-        let target = match &domain[0].variant {
+        let target = match &domain[0.into()].variant {
             node::expression::Variant::Identifier(ident) => ident.target.target(),
             _ => panic!("expected identifier"),
         };
@@ -263,7 +263,7 @@ mod tests {
             syntax::expression::Node::empty(node::expression::Variant::Forall(forall));
         let domain_s = mock::expression::identifier("S");
         let body_x = mock::expression::identifier("x");
-        let expr_arena = vec![forall_node, domain_s, body_x];
+        let expr_arena = vec![forall_node, domain_s, body_x].into();
 
         let a = syntax::entity::Node::empty(
             node::entity::Meta::from("a".to_string()),
@@ -278,10 +278,8 @@ mod tests {
         let a_idx = get_child(&resolved, 0.into(), "a");
         let expr_arena = resolved[a_idx].variant.expressions().next().unwrap();
 
-        let (body_idx, domain_idx) = match &expr_arena[0].variant {
-            node::expression::Variant::Forall(f) => {
-                (usize::from(f.expression), usize::from(f.set.domain))
-            }
+        let (body_idx, domain_idx) = match &expr_arena[0.into()].variant {
+            node::expression::Variant::Forall(f) => (f.expression, f.set.domain),
             _ => panic!("expected forall"),
         };
 
@@ -291,7 +289,7 @@ mod tests {
         };
         match target {
             Some(Target::Expression(idx)) => {
-                assert_eq!(usize::from(*idx), domain_idx);
+                assert_eq!(*idx, domain_idx);
             }
             other => panic!("expected local variable target, got {:?}", other),
         }

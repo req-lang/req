@@ -3,29 +3,31 @@ use std::cell::{Ref, RefCell};
 use crate::{
     node::{
         self,
-        expression::{Case, Idx, SetElement},
+        expression::{Arena, Case, Idx, SetElement},
     },
     semantics::{
         link::{
             self,
             expression::{BuiltinKind, Target},
         },
-        typing::TypeResult,
-        typing::expression::{Issue, TypeKind},
+        typing::{
+            TypeResult,
+            expression::{Issue, TypeKind},
+        },
     },
 };
 
 pub(super) fn evaluate_node<P>(
-    types: &node::entity::Arena<RefCell<Vec<Option<TypeResult>>>>,
+    types: &node::entity::Arena<RefCell<Arena<Option<TypeResult>>>>,
     entity: node::entity::Idx,
-    arena: &[link::expression::Node<P>],
+    arena: &Arena<&link::expression::Node<P>>,
     idx: Idx,
 ) -> TypeResult {
     use Issue::*;
     use node::expression::Variant::*;
 
     let local = types[entity].borrow();
-    match &arena[usize::from(idx)].variant {
+    match &arena[idx].variant {
         Branch(branch) => {
             let els = match &branch.otherwise {
                 Some(expr) => Some(type_or_poison(&local, *expr)?),
@@ -177,7 +179,7 @@ pub(super) fn evaluate_node<P>(
         }
 
         Identifier(ident) => match &ident.target.target().ok_or(DomainNotFound)? {
-            Target::Entity(tgt) => match types[*tgt].borrow().is_empty() {
+            Target::Entity(tgt) => match types[*tgt].borrow().as_vec().is_empty() {
                 false => match type_or_poison(&types[*tgt].borrow(), 0.into())? {
                     TypeKind::Set(inner) => Ok(inner.as_ref().clone()),
                     typ => Err(NotASet(typ.clone())),
@@ -200,7 +202,7 @@ pub(super) fn evaluate_node<P>(
 }
 
 fn evaluate_case(
-    types: &Ref<'_, Vec<Option<TypeResult>>>,
+    types: &Ref<'_, Arena<Option<TypeResult>>>,
     case: &Case<Idx>,
     expected: Option<TypeKind>,
 ) -> TypeResult {
@@ -221,7 +223,7 @@ fn evaluate_case(
 }
 
 fn evaluate_set_element(
-    types: &Ref<'_, Vec<Option<TypeResult>>>,
+    types: &Ref<'_, Arena<Option<TypeResult>>>,
     set: &SetElement<Idx>,
 ) -> TypeResult {
     use Issue::*;
@@ -242,8 +244,8 @@ fn evaluate_set_element(
     Ok(*typ.clone())
 }
 
-fn type_or_poison(types: &Ref<'_, Vec<Option<TypeResult>>>, idx: Idx) -> TypeResult {
-    types[usize::from(idx)]
+fn type_or_poison(types: &Ref<'_, Arena<Option<TypeResult>>>, idx: Idx) -> TypeResult {
+    types[idx]
         .clone()
         .unwrap()
         .map_err(|_| Issue::Poison)

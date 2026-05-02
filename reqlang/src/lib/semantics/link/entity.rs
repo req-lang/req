@@ -67,7 +67,7 @@ pub(super) fn find(ctx: &FindCtx, rf: Path) -> Link {
 pub(super) fn collect_imports<'n, P, R: Into<Path> + Clone, T, E, M>(
     arena: &'n Arena<node::entity::Node<P, R, T, E, M>>,
 ) -> Arena<Vec<Path>> {
-    arena.from_walk::<Vec<Path>, Vec<Path>>(|node, prev| {
+    arena.from_walk::<Vec<Path>, Vec<Path>>(|node, prev, _| {
         let imports = match node.variant.imports() {
             Some(imports) => imports.iter().map(|i| i.clone().into()).collect(),
             None => Vec::new(),

@@ -2,7 +2,8 @@ use std::{fmt::Display, ops::Add};
 
 use crate::{
     node::expression::{
-        Aggregator, BinaryOperator, Case, Idx, Node, OptimizerKind, SetElement, UnaryOperator,
+        Aggregator, Arena, BinaryOperator, Case, Idx, Node, OptimizerKind, SetElement,
+        UnaryOperator,
     },
     renderer::formatter::padding::pad,
 };
@@ -54,7 +55,7 @@ impl Ctx {
 }
 
 pub fn format<W: std::io::Write, E, T: Display>(
-    arena: &Vec<Node<E, T>>,
+    arena: &Arena<Node<E, T>>,
     idx: Idx,
     ctx: Ctx,
     out: &mut W,
@@ -207,7 +208,7 @@ pub fn format<W: std::io::Write, E, T: Display>(
 }
 
 fn format_case<W: std::io::Write, E, T: Display>(
-    arena: &Vec<Node<E, T>>,
+    arena: &Arena<Node<E, T>>,
     case: &Case<Idx>,
     out: &mut W,
 ) -> std::io::Result<()> {
@@ -217,7 +218,7 @@ fn format_case<W: std::io::Write, E, T: Display>(
 }
 
 fn format_set_elem<W: std::io::Write, E, T: Display>(
-    arena: &Vec<Node<E, T>>,
+    arena: &Arena<Node<E, T>>,
     set: &SetElement<Idx>,
     out: &mut W,
 ) -> std::io::Result<()> {

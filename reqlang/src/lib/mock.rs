@@ -19,7 +19,7 @@ pub mod entity {
 
     pub fn attribute<S: ToString>(label: S, domain: S) -> Node {
         let domain = expression::identifier(domain);
-        let variant = Variant::Attribute(Attribute::new(vec![domain]));
+        let variant = Variant::Attribute(Attribute::new(vec![domain].into()));
         Node::empty(Meta::from(label.to_string()), variant)
     }
 
@@ -31,7 +31,7 @@ pub mod entity {
 
     pub fn formal(label: &str, expr: Vec<syntax::expression::Node>) -> Node {
         let mut req = requirement(label);
-        req.variant.requirement_mut().unwrap().variant = RequirementVariant::Formal(expr);
+        req.variant.requirement_mut().unwrap().variant = RequirementVariant::Formal(expr.into());
         req
     }
 

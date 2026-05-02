@@ -95,30 +95,26 @@ pub(super) fn build_transverse<N, E, M>(
 mod expression {
     use crate::{
         node::{self},
-        semantics::{
-            self,
-            connection::Graph,
-            link::{self},
-        },
+        semantics::{self, connection::Graph, link::expression},
         utils::upsert::Upsert,
     };
 
     pub(super) fn build_graph<P>(
-        arena: &Vec<link::expression::Node<P>>,
+        arena: &node::expression::Arena<expression::Node<P>>,
         graph: &mut Graph,
         parent: node::entity::Idx,
     ) {
         use node::expression::Variant::*;
         use semantics::link::expression::Target::*;
 
-        for node in arena {
+        arena.for_each(|node, _| {
             if let Identifier(ident) = &node.variant
                 && let Some(Entity(src)) = ident.target.target()
             {
                 graph.inbound.usages.upsert(*src, parent);
                 graph.outbound.usages.upsert(parent, *src);
             }
-        }
+        });
     }
 }
 

@@ -2,9 +2,15 @@ use std::{cell::RefCell, fmt::Display, ops::Range, usize};
 
 use crate::{
     issue::Severity,
-    node::{self, expression::Idx},
+    node::{
+        self,
+        expression::{Arena, Idx},
+    },
     semantics::{
-        link::{self, entity, expression::Target},
+        link::{
+            self, entity,
+            expression::{Node, Target},
+        },
         typing::{TypeResult, evaluate::evaluate_node},
     },
     utils::children::ChildrenIter,
@@ -54,59 +60,55 @@ impl From<&Issue> for Severity {
     }
 }
 
-type Node = link::expression::Node<super::TypeResult>;
-
 pub(super) fn evaluate<E>(
-    arena: Vec<link::expression::Node<E>>,
-    types: Vec<Option<TypeResult>>,
-) -> Vec<Node> {
+    arena: Arena<link::expression::Node<E>>,
+    types: Arena<Option<TypeResult>>,
+) -> Arena<Node<TypeResult>> {
     arena
-        .into_iter()
-        .zip(types.into_iter().map(|t| t.unwrap()))
+        .zip(types.map(|t| t.unwrap()))
         .map(|(node, typ)| node.map(|_| typ))
-        .collect()
 }
 
 // TODO: Circular references between domains and requirements can loop indefinitely
 pub(super) fn init_types<N, E, M>(
     entities: &node::entity::Arena<entity::Node<N, E, M>>,
-    arena: &[link::expression::Node<E>],
+    arena: &Arena<&Node<E>>,
     entity: node::entity::Idx,
-    types: &node::entity::Arena<RefCell<Vec<Option<TypeResult>>>>,
+    types: &node::entity::Arena<RefCell<Arena<Option<TypeResult>>>>,
     idx: Option<Range<usize>>,
 ) {
     let arena = match idx {
-        Some(rng) => &arena[rng],
+        Some(rng) => &Arena::from(Vec::from(&Vec::from(arena.clone())[rng])),
         None => arena,
     };
 
-    for idx in 0..arena.len() {
+    for idx in 0..arena.as_vec().len() {
         ensure_typed(entities, arena, entity, types, idx.into());
     }
 }
 
 fn ensure_typed<N, E, M>(
     entities: &node::entity::Arena<entity::Node<N, E, M>>,
-    arena: &[link::expression::Node<E>],
+    arena: &Arena<&Node<E>>,
     entity: node::entity::Idx,
-    types: &node::entity::Arena<RefCell<Vec<Option<TypeResult>>>>,
+    types: &node::entity::Arena<RefCell<Arena<Option<TypeResult>>>>,
     idx: Idx,
 ) {
     use node::expression::Variant::*;
 
-    if types[entity].borrow()[usize::from(idx)].is_some() {
+    if types[entity].borrow()[idx].is_some() {
         return;
     }
 
-    match &arena[usize::from(idx)].variant {
+    match &arena[idx].variant {
         Identifier(ident) => match &ident.target.target() {
-            Some(Target::Entity(tgt)) if types[*tgt].borrow().is_empty() => {
+            Some(Target::Entity(tgt)) if types[*tgt].borrow().as_vec().is_empty() => {
                 init_types(entities, arena, *tgt, types, None);
             }
             Some(Target::Expression(domain)) => {
-                let is_untyped = types[entity].borrow()[usize::from(*domain)].is_none();
+                let is_untyped = types[entity].borrow()[*domain].is_none();
                 if is_untyped {
-                    let len = count(arena, *domain);
+                    let len = count(&arena, *domain);
                     let start = usize::from(*domain);
                     let end = start + len;
                     init_types(entities, arena, entity, types, Some(start..end));
@@ -121,14 +123,14 @@ fn ensure_typed<N, E, M>(
         }
     }
 
-    if types[entity].borrow()[usize::from(idx)].is_none() {
+    if types[entity].borrow()[idx].is_none() {
         let result = Some(evaluate_node(types, entity, arena, idx));
-        types[entity].borrow_mut()[usize::from(idx)] = result;
+        types[entity].borrow_mut()[idx] = result;
     }
 }
 
-fn count<P>(arena: &[link::expression::Node<P>], idx: Idx) -> usize {
-    let node = &arena[usize::from(idx)];
+fn count<P>(arena: &Arena<&Node<P>>, idx: Idx) -> usize {
+    let node = &arena[idx];
     1 + node
         .variant
         .children_iter()

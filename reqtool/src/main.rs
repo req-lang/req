@@ -2,7 +2,6 @@ use std::{fs, io, path::PathBuf};
 
 use clap::Parser;
 use colored::Colorize;
-use itertools::izip;
 use reqlang::{
     issue::{self, Severity, connection_errors, expr_errors, path_issues, reference_errors},
     node::entity::Idx,

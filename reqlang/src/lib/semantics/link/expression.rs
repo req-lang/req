@@ -1,10 +1,14 @@
 use std::collections::HashMap;
 
 use crate::{
-    node::{self, expression::Idx},
-    semantics::link::entity::{self},
-    semantics::path::Path,
-    utils::children::ChildrenIter,
+    node::{
+        self,
+        expression::{Arena, Idx},
+    },
+    semantics::{
+        link::entity::{self},
+        path::Path,
+    },
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -47,20 +51,12 @@ pub type Node<P> = node::expression::Node<P, Link>;
 
 pub(super) fn link<P, R: Into<Path>>(
     ctx: &entity::FindCtx,
-    arena: Vec<node::expression::Node<P, R>>,
-) -> Vec<Node<P>> {
-    let mut local: Vec<HashMap<String, Idx>> = Vec::with_capacity(arena.len());
-
-    for _ in &arena {
-        local.push(HashMap::new());
-    }
-
-    init_scope(&arena, 0, &mut local);
+    arena: Arena<node::expression::Node<P, R>>,
+) -> Arena<Node<P>> {
+    let local = init_scope(&arena);
     arena
-        .into_iter()
-        .zip(local.into_iter())
+        .zip(local)
         .map(|(node, scope)| node.mapr(|rf| find(ctx, &scope, rf.into())))
-        .collect()
 }
 
 fn find(ctx: &entity::FindCtx, local: &HashMap<String, Idx>, rf: Path) -> Link {
@@ -82,21 +78,15 @@ fn find(ctx: &entity::FindCtx, local: &HashMap<String, Idx>, rf: Path) -> Link {
     }
 }
 
-fn init_scope<P, R>(
-    arena: &Vec<node::expression::Node<P, R>>,
-    idx: usize,
-    local: &mut Vec<HashMap<String, Idx>>,
-) {
-    let scope = &mut local[idx];
-    let node = &arena[idx];
-    if let Some(set) = node.variant.set_element() {
-        scope.insert(set.variable.clone(), set.domain);
-    }
-
-    let ext = scope.clone();
-    for child in node.variant.children_iter() {
-        let idx = usize::from(*child);
-        local[idx].extend(ext.clone());
-        init_scope(arena, idx, local);
-    }
+fn init_scope<P, R>(arena: &Arena<node::expression::Node<P, R>>) -> Arena<HashMap<String, Idx>> {
+    arena.from_walk::<HashMap<String, Idx>, HashMap<String, Idx>>(|node, mut current, _| {
+        let scope = current.clone();
+        match node.variant.set_element() {
+            None => (current, scope),
+            Some(set) => {
+                current.insert(set.variable.clone(), set.domain);
+                (current, scope)
+            }
+        }
+    })
 }

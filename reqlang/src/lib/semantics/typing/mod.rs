@@ -81,7 +81,7 @@ mod tests {
 
         let attr = x.variant.attribute().unwrap();
         assert_eq!(
-            attr.domain[0].payload,
+            attr.domain[0.into()].payload,
             Ok(TypeKind::Set(Box::new(TypeKind::Number)))
         );
     }
@@ -97,7 +97,7 @@ mod tests {
 
         let attr = x.variant.attribute().unwrap();
         assert_eq!(
-            attr.domain[0].payload,
+            attr.domain[0.into()].payload,
             Ok(TypeKind::Set(Box::new(TypeKind::Boolean)))
         );
     }
@@ -116,7 +116,7 @@ mod tests {
         let y = get_child(&typed, 0.into(), "y");
 
         let attr = y.variant.attribute().unwrap();
-        assert_eq!(attr.domain[0].payload, Ok(TypeKind::Number));
+        assert_eq!(attr.domain[0.into()].payload, Ok(TypeKind::Number));
     }
 
     #[test]
@@ -131,7 +131,7 @@ mod tests {
         let r = get_child(&typed, 0.into(), "r");
 
         let expr = r.variant.expressions().next().unwrap().clone();
-        assert_eq!(expr[0].payload, Ok(TypeKind::Number));
+        assert_eq!(expr[0.into()].payload, Ok(TypeKind::Number));
     }
 
     #[test]
@@ -146,7 +146,7 @@ mod tests {
         let r = get_child(&typed, 0.into(), "r");
 
         let expr = r.variant.expressions().next().unwrap().clone();
-        assert_eq!(expr[0].payload, Ok(TypeKind::Boolean));
+        assert_eq!(expr[0.into()].payload, Ok(TypeKind::Boolean));
     }
 
     #[test]
@@ -162,8 +162,8 @@ mod tests {
         let r = get_child(&typed, 0.into(), "r");
 
         let expr = r.variant.expressions().next().unwrap().clone();
-        assert_eq!(expr[0].payload, Err(Issue::Poison));
-        assert_eq!(expr[1].payload, Err(Issue::DomainNotFound));
+        assert_eq!(expr[0.into()].payload, Err(Issue::Poison));
+        assert_eq!(expr[1.into()].payload, Err(Issue::DomainNotFound));
     }
 
     #[test]
@@ -180,7 +180,7 @@ mod tests {
 
         let expr = r.variant.expressions().next().unwrap().clone();
         assert_eq!(
-            expr[0].payload,
+            expr[0.into()].payload,
             Err(Issue::UnexpectedType(TypeKind::Number, TypeKind::Boolean))
         );
     }
@@ -203,7 +203,7 @@ mod tests {
         let r = get_child(&typed, 0.into(), "r");
 
         let expr = r.variant.expressions().next().unwrap().clone();
-        assert_eq!(expr[0].payload, Ok(TypeKind::Boolean));
+        assert_eq!(expr[0.into()].payload, Ok(TypeKind::Boolean));
     }
 
     #[test]
@@ -226,7 +226,7 @@ mod tests {
 
         let expr = r.variant.expressions().next().unwrap().clone();
         assert_eq!(
-            expr[0].payload,
+            expr[0.into()].payload,
             Err(Issue::UnexpectedType(TypeKind::Boolean, TypeKind::Number))
         );
     }

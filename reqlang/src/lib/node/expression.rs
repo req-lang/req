@@ -1,40 +1,11 @@
-use std::ops::{Index, IndexMut};
+use crate::{node::arena, utils::children::ChildrenIter};
 
-use crate::utils::children::ChildrenIter;
+#[derive(Default, Debug, Copy, Clone, Eq, PartialEq, Hash, PartialOrd, Ord)]
+pub struct IdxMarker;
+pub type Idx = arena::Idx<IdxMarker>;
+pub type Arena<T> = arena::Arena<T, IdxMarker>;
 
-#[derive(Default, Debug, Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd)]
-pub struct Idx(usize);
-
-impl From<Idx> for usize {
-    fn from(value: Idx) -> Self {
-        let Idx(val) = value;
-        val
-    }
-}
-
-impl From<usize> for Idx {
-    fn from(value: usize) -> Self {
-        Self(value)
-    }
-}
-
-impl<P, R> IndexMut<Idx> for Vec<Node<P, R>> {
-    fn index_mut(&mut self, index: Idx) -> &mut Self::Output {
-        let Idx(val) = index;
-        self.index_mut(val)
-    }
-}
-
-impl<P, R> Index<Idx> for Vec<Node<P, R>> {
-    type Output = Node<P, R>;
-
-    fn index(&self, index: Idx) -> &Self::Output {
-        let Idx(val) = index;
-        self.index(val)
-    }
-}
-
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Default, Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Node<P, R, I = Idx> {
     pub payload: P,
     pub variant: Variant<I, R>,
@@ -73,6 +44,12 @@ impl<P, R, I> Node<P, R, I> {
             payload: self.payload,
             variant: self.variant.mapr(f),
         }
+    }
+}
+
+impl<'a, N, R, I: 'a> ChildrenIter<'a, I> for Node<N, R, I> {
+    fn children_iter(&'a self) -> impl Iterator<Item = &'a I> {
+        self.variant.children_iter()
     }
 }
 
@@ -202,9 +179,9 @@ impl<N, R> Variant<N, R> {
             Variant::UnaryOp(unary_op) => Variant::UnaryOp(unary_op),
             Variant::BinOp(bin_op) => Variant::BinOp(bin_op),
             Variant::Function(function) => Variant::Function(function),
-            Variant::Identifier(identifier) => Variant::Identifier(Identifier {
-                target: f(identifier.target),
-            }),
+            Variant::Identifier(identifier) => {
+                Variant::Identifier(Identifier::new(f(identifier.target)))
+            }
             Variant::Number(number) => Variant::Number(number),
             Variant::Boolean(boolean) => Variant::Boolean(boolean),
             Variant::Undefined => Variant::Undefined,

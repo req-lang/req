@@ -18,21 +18,21 @@ struct PairParser;
 
 pub(in crate::syntax) type Node = node::expression::Node<Span, String>;
 
-pub fn parse(input: &str, offset: &Position) -> Result<Vec<Node>, Span> {
+pub fn parse(input: &str, offset: &Position) -> Result<Arena<Node>, Span> {
     let mut arena = Vec::new();
     match PairParser::parse(Rule::expr, input) {
         Ok(mut pair) => {
             Builder::new(offset).build(pair.next().unwrap(), &mut arena);
             let len = arena.len();
             arena.reverse();
-            let arena = arena
+            let arena: Vec<_> = arena
                 .into_iter()
                 .map(|node| {
                     let variant = node.variant.mape(|idx| (len - 1 - usize::from(idx)).into());
                     Node::new(node.payload, variant)
                 })
                 .collect();
-            Ok(arena)
+            Ok(arena.into())
         }
         Err(err) => Err(Span::from((err.line_col, err.location)) + *offset),
     }
