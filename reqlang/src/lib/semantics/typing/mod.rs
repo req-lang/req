@@ -2,10 +2,7 @@ use crate::{
     node::entity::Arena,
     semantics::{
         link::{self, entity::Node},
-        typing::{
-            entity::init_types,
-            expression::{Issue, TypeKind},
-        },
+        typing::expression::{Issue, TypeKind},
     },
 };
 
@@ -20,8 +17,7 @@ pub trait Evaluate<N, M> {
 }
 impl<N, E, M> Evaluate<N, M> for Arena<link::entity::Node<N, E, M>> {
     fn evaluate(self) -> Arena<Node<N, TypeResult, M>> {
-        let types = init_types(&self);
-        entity::evaluate(types, self)
+        entity::evaluate(self)
     }
 }
 
@@ -163,7 +159,7 @@ mod tests {
 
         let expr = r.variant.expressions().next().unwrap().clone();
         assert_eq!(expr[0.into()].payload, Err(Issue::Poison));
-        assert_eq!(expr[1.into()].payload, Err(Issue::DomainNotFound));
+        assert_eq!(expr[1.into()].payload, Err(Issue::Poison));
     }
 
     #[test]

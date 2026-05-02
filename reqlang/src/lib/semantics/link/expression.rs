@@ -56,7 +56,7 @@ pub(super) fn link<P, R: Into<Path>>(
     let local = init_scope(&arena);
     arena
         .zip(local)
-        .map(|(node, scope)| node.mapr(|rf| find(ctx, &scope, rf.into())))
+        .map_(|(node, scope)| node.mapr(|rf| find(ctx, &scope, rf.into())))
 }
 
 fn find(ctx: &entity::FindCtx, local: &HashMap<String, Idx>, rf: Path) -> Link {

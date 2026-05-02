@@ -1,6 +1,6 @@
 use std::{
     marker::PhantomData,
-    ops::{Index, IndexMut},
+    ops::{Index, IndexMut, Range},
 };
 
 use crate::utils::children::ChildrenIter;
@@ -16,18 +16,34 @@ impl<T, M> Arena<T, M> {
         &self.inner
     }
 
-    pub fn as_ref(&self) -> Arena<&T, M> {
-        Arena {
-            inner: self.inner.iter().collect(),
-            phantom: self.phantom,
-        }
+    pub fn empty<U: Default + Clone>(&self) -> Arena<U, M> {
+        std::iter::repeat(Default::default())
+            .take(self.inner.len())
+            .collect::<Vec<_>>()
+            .into()
     }
 
-    pub fn map<U, F: FnMut(T) -> U>(self, f: F) -> Arena<U, M> {
-        Arena {
-            inner: self.inner.into_iter().map(f).collect(),
-            phantom: self.phantom,
-        }
+    // INVARIANT: Assumes the arena is in DFS order
+    pub fn descendants<'a>(&'a self, start: Idx<M>) -> Range<Idx<M>>
+    where
+        T: ChildrenIter<'a, Idx<M>> + 'a,
+        M: 'a + Copy + PartialOrd + Ord,
+    {
+        let mut end = start;
+        self.walk1(start, (), |node, _, _| match node.children_iter().last() {
+            Some(idx) if *idx > end => end = *idx,
+            _ => {}
+        });
+
+        Range { start, end }
+    }
+
+    pub fn as_ref(&self) -> Arena<&T, M> {
+        self.inner.iter().collect::<Vec<_>>().into()
+    }
+
+    pub fn map_<U, F: FnMut(T) -> U>(self, f: F) -> Arena<U, M> {
+        self.inner.into_iter().map(f).collect::<Vec<_>>().into()
     }
 
     pub fn for_each<F: FnMut(&T, Idx<M>)>(&self, mut f: F) {
@@ -37,46 +53,46 @@ impl<T, M> Arena<T, M> {
             .for_each(|(idx, t)| f(t, idx.into()));
     }
 
-    pub fn idx_map<U, F: FnMut(T, Idx<M>) -> U>(self, mut f: F) -> Arena<U, M> {
-        Arena {
-            inner: self
-                .inner
-                .into_iter()
-                .enumerate()
-                .map(|(idx, t)| f(t, idx.into()))
-                .collect(),
-            phantom: self.phantom,
-        }
+    pub fn map<U, F: FnMut(T, Idx<M>) -> U>(self, mut f: F) -> Arena<U, M> {
+        self.inner
+            .into_iter()
+            .enumerate()
+            .map(|(idx, t)| f(t, idx.into()))
+            .collect::<Vec<_>>()
+            .into()
+    }
+
+    pub fn subrange(&self, range: Range<Idx<M>>) -> Arena<&T, M> {
+        self.inner[usize::from(range.start)..usize::from(range.end)]
+            .iter()
+            .collect::<Vec<_>>()
+            .into()
     }
 
     pub fn zip<U>(self, other: Arena<U, M>) -> Arena<(T, U), M> {
         if self.inner.len() != other.inner.len() {
             panic!("Arena of different sizes");
         }
-
-        Arena {
-            inner: self
-                .inner
-                .into_iter()
-                .zip(other.inner.into_iter())
-                .collect(),
-            phantom: self.phantom,
-        }
+        self.inner
+            .into_iter()
+            .zip(other.inner.into_iter())
+            .collect::<Vec<_>>()
+            .into()
     }
 
     pub fn zip_map<U, V, F: FnMut(T, U) -> V>(self, other: Arena<U, M>, mut f: F) -> Arena<V, M> {
-        Arena {
-            inner: self
-                .inner
-                .into_iter()
-                .zip(other.inner)
-                .map(|(t, u)| f(t, u))
-                .collect(),
-            phantom: self.phantom,
+        if self.inner.len() != other.inner.len() {
+            panic!("Arena of different sizes");
         }
+        self.inner
+            .into_iter()
+            .zip(other.inner)
+            .map(|(t, u)| f(t, u))
+            .collect::<Vec<_>>()
+            .into()
     }
 
-    pub fn from_walk<'a, U, V>(&'a self, f: impl FnMut(&T, U, Idx<M>) -> (U, V)) -> Arena<V, M>
+    pub fn from_walk<'a, U, V>(&'a self, f: impl FnMut(&'a T, U, Idx<M>) -> (U, V)) -> Arena<V, M>
     where
         M: 'a + Clone + Copy,
         U: Default + Clone,
@@ -88,7 +104,7 @@ impl<T, M> Arena<T, M> {
     pub fn from_walk1<'a, U, V, F>(&'a self, idx: Idx<M>, ctx: U, mut f: F) -> Arena<V, M>
     where
         M: 'a + Clone + Copy,
-        F: FnMut(&T, U, Idx<M>) -> (U, V),
+        F: FnMut(&'a T, U, Idx<M>) -> (U, V),
         T: ChildrenIter<'a, Idx<M>>,
         U: Clone,
     {
@@ -101,7 +117,7 @@ impl<T, M> Arena<T, M> {
     where
         M: 'a + Clone + Copy,
         U: Clone,
-        F: FnMut(&T, U, Idx<M>) -> (U, V),
+        F: FnMut(&'a T, U, Idx<M>) -> (U, V),
         T: ChildrenIter<'a, Idx<M>>,
     {
         let current = &self[idx];
@@ -113,37 +129,37 @@ impl<T, M> Arena<T, M> {
         }
     }
 
-    pub fn idx_walk<'a, U>(&'a self, f: impl FnMut(&T, U, Idx<M>) -> U)
+    pub fn walk<'a, U>(&'a self, f: impl FnMut(&'a T, U, Idx<M>) -> U)
     where
         M: 'a + Clone,
         U: Default + Clone,
         T: ChildrenIter<'a, Idx<M>>,
     {
-        self.idx_walk1(Default::default(), Default::default(), f);
+        self.walk1(Default::default(), Default::default(), f);
     }
 
-    pub fn idx_walk1<'a, U, F>(&'a self, idx: Idx<M>, ctx: U, mut f: F)
+    pub fn walk1<'a, U, F>(&'a self, idx: Idx<M>, ctx: U, mut f: F)
     where
         M: 'a + Clone,
         U: Clone,
-        F: FnMut(&T, U, Idx<M>) -> U,
+        F: FnMut(&'a T, U, Idx<M>) -> U,
         T: ChildrenIter<'a, Idx<M>>,
     {
-        self.inner_idx_walk1(idx, ctx, &mut f);
+        self.inner_walk1(idx, ctx, &mut f);
     }
 
-    fn inner_idx_walk1<'a, U, F>(&'a self, idx: Idx<M>, ctx: U, f: &mut F)
+    fn inner_walk1<'a, U, F>(&'a self, idx: Idx<M>, ctx: U, f: &mut F)
     where
         M: 'a + Clone,
         U: Clone,
-        F: FnMut(&T, U, Idx<M>) -> U,
+        F: FnMut(&'a T, U, Idx<M>) -> U,
         T: ChildrenIter<'a, Idx<M>>,
     {
         let current = &self[idx.clone()];
         let ctx = f(current, ctx, idx);
 
         for child in current.children_iter() {
-            self.inner_idx_walk1(child.clone(), ctx.clone(), f);
+            self.inner_walk1(child.clone(), ctx.clone(), f);
         }
     }
 }

@@ -37,7 +37,7 @@ pub(super) struct Graph {
 }
 
 pub(super) fn build_parents<N, E, M>(arena: &Arena<Node<N, E, M>>, graph: &mut Graph) {
-    arena.idx_walk(|_, parent, idx| {
+    arena.walk(|_, parent, idx| {
         if let Some(parent) = parent {
             graph.parent.insert(idx, parent);
         }

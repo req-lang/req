@@ -49,7 +49,7 @@ mod tests {
         assert!(result.is_ok());
 
         let nodes = result.ok().unwrap();
-        let ast = nodes.map(syntax::entity::Node::from);
+        let ast = nodes.map_(syntax::entity::Node::from);
         assert_eq!(ast, expected);
     }
 
@@ -60,7 +60,7 @@ mod tests {
         assert!(result.is_ok());
 
         let nodes = result.ok().unwrap();
-        let ast = nodes.map(syntax::entity::Node::from);
+        let ast = nodes.map_(syntax::entity::Node::from);
 
         let mut x = mock::entity::package("x");
         x.variant.children_mut().unwrap().push(1.into());
@@ -76,7 +76,7 @@ mod tests {
         assert!(result.is_ok());
 
         let nodes = result.ok().unwrap();
-        let ast = nodes.map(syntax::entity::Node::from);
+        let ast = nodes.map_(syntax::entity::Node::from);
 
         let mut expected = mock::entity::package("x");
         expected.variant.children_mut().unwrap().push(1.into());
@@ -92,7 +92,7 @@ mod tests {
         assert!(result.is_ok());
 
         let nodes = result.ok().unwrap();
-        let ast = nodes.map(syntax::entity::Node::from);
+        let ast = nodes.map_(syntax::entity::Node::from);
 
         let mut x = mock::entity::package("x");
         let mut p = mock::entity::part("p");
@@ -111,7 +111,7 @@ mod tests {
         assert!(result.is_ok());
 
         let nodes = result.ok().unwrap();
-        let ast = nodes.map(syntax::entity::Node::from);
+        let ast = nodes.map_(syntax::entity::Node::from);
 
         let mut x = mock::entity::package("x");
         x.variant.children_mut().unwrap().push(1.into());
@@ -198,7 +198,7 @@ mod tests {
     ) -> Requirement<String, node::expression::Arena<syntax::expression::Node>, syntax::markup::Node>
     {
         let nodes = parse(input).unwrap();
-        let ast = nodes.map(syntax::entity::Node::from);
+        let ast = nodes.map_(syntax::entity::Node::from);
         Vec::from(ast)
             .into_iter()
             .find_map(|n| n.variant.into_requirement())

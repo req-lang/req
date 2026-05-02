@@ -68,7 +68,7 @@ impl<N, R, T, E, M, I, J> Node<N, R, T, E, M, I, J> {
         Node {
             payload: self.payload,
             meta: self.meta,
-            variant: self.variant.mape(|e| e.map(|e| e.mapr(&mut f))),
+            variant: self.variant.mape(|e| e.map_(|e| e.mapr(&mut f))),
         }
     }
 
@@ -79,7 +79,7 @@ impl<N, R, T, E, M, I, J> Node<N, R, T, E, M, I, J> {
         Node {
             payload: self.payload,
             meta: self.meta,
-            variant: self.variant.mape(|e| e.map(|e| e.map(&mut f))),
+            variant: self.variant.mape(|e| e.map_(|e| e.map(&mut f))),
         }
     }
 

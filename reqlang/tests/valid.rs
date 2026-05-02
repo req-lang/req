@@ -23,7 +23,7 @@ fn assert_valid_parsing_and_analysis(
 
     assert!(result.is_ok());
 
-    let ast = result.unwrap().map(syntax::entity::Node::from);
+    let ast = result.unwrap().map_(syntax::entity::Node::from);
     let arena = ast.locate().resolve().evaluate().connect();
 
     //

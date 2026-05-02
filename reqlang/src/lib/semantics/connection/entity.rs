@@ -131,7 +131,7 @@ pub(super) fn connect<N, E, M>(
     arena: Arena<Node<N, E, M>>,
     mut graph: Graph,
 ) -> Arena<Node<Neighbors<Connection<Idx>>, E, M>> {
-    arena.idx_map(|node, idx| node.map(|_| make_neighbors(idx, &mut graph)))
+    arena.map(|node, idx| node.map(|_| make_neighbors(idx, &mut graph)))
 }
 
 fn make_neighbors(nd: Idx, graph: &mut Graph) -> Neighbors<Connection<Idx>> {

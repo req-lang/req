@@ -22,3 +22,9 @@ where
 pub trait ChildrenIter<'a, N: 'a> {
     fn children_iter(&'a self) -> impl Iterator<Item = &'a N>;
 }
+
+impl<'a, N: 'a, T: ChildrenIter<'a, N>> ChildrenIter<'a, N> for &T {
+    fn children_iter(&'a self) -> impl Iterator<Item = &'a N> {
+        (*self).children_iter()
+    }
+}

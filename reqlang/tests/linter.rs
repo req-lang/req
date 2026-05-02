@@ -7,12 +7,12 @@ fn assert_isomorphic_formatter(filename: &str) {
     let input = std::fs::read_to_string(path).unwrap();
     let expected = syntax::parser::parse(&input)
         .unwrap()
-        .map(syntax::entity::Node::from);
+        .map_(syntax::entity::Node::from);
 
     let output = renderer::formatter::format_string(&expected, 0);
     let actual = syntax::parser::parse(&output)
         .unwrap()
-        .map(syntax::entity::Node::from);
+        .map_(syntax::entity::Node::from);
 
     if actual != expected || input != output {
         eprintln!("*** INPUT ***\n{}\n\n", input);

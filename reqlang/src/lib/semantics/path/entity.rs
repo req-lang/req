@@ -10,7 +10,7 @@ pub fn discover<N, R, T, E, M>(
     mut paths: HashMap<Idx, (Path, bool)>,
     arena: Arena<Node<N, R, T, E, M>>,
 ) -> Arena<Node<Location, R, T, E, M>> {
-    arena.idx_map(|node, idx| {
+    arena.map(|node, idx| {
         let (path, is_duplicate) = paths.remove(&idx.into()).unwrap();
         node.map(|_| match is_duplicate {
             true => Location::valid(path),
@@ -23,7 +23,7 @@ pub(crate) fn collect<'n, P, R, T, E, M>(
     arena: &Arena<Node<P, R, T, E, M>>,
     out: &mut HashMap<Path, Vec<Idx>>,
 ) {
-    arena.idx_walk::<Path>(|node, parent, idx| {
+    arena.walk::<Path>(|node, parent, idx| {
         let current = parent.join(&node.meta.label);
         out.upsert(current.clone(), idx);
         current

@@ -1,4 +1,4 @@
-use std::{cell::RefCell, fmt::Display, ops::Range, usize};
+use std::{cell::RefCell, fmt::Display};
 
 use crate::{
     issue::Severity,
@@ -8,7 +8,7 @@ use crate::{
     },
     semantics::{
         link::{
-            self, entity,
+            entity,
             expression::{Node, Target},
         },
         typing::{TypeResult, evaluate::evaluate_node},
@@ -50,6 +50,8 @@ pub enum Issue {
     UnexpectedType(TypeKind, TypeKind),
     #[error("cannot retrieve the domain for this identifier")]
     DomainNotFound,
+    #[error("this expression points to an entity that has no type")]
+    NotEvaluable,
 }
 
 impl From<&Issue> for Severity {
@@ -59,81 +61,58 @@ impl From<&Issue> for Severity {
         Critical
     }
 }
-
-pub(super) fn evaluate<E>(
-    arena: Arena<link::expression::Node<E>>,
-    types: Arena<Option<TypeResult>>,
-) -> Arena<Node<TypeResult>> {
-    arena
-        .zip(types.map(|t| t.unwrap()))
-        .map(|(node, typ)| node.map(|_| typ))
-}
-
+//
 // TODO: Circular references between domains and requirements can loop indefinitely
-pub(super) fn init_types<N, E, M>(
+pub(super) fn collect_types<N, E, M>(
     entities: &node::entity::Arena<entity::Node<N, E, M>>,
     arena: &Arena<&Node<E>>,
     entity: node::entity::Idx,
-    types: &node::entity::Arena<RefCell<Arena<Option<TypeResult>>>>,
-    idx: Option<Range<usize>>,
+    types: &node::entity::Arena<Option<RefCell<Arena<Option<TypeResult>>>>>,
 ) {
-    let arena = match idx {
-        Some(rng) => &Arena::from(Vec::from(&Vec::from(arena.clone())[rng])),
-        None => arena,
-    };
-
     for idx in 0..arena.as_vec().len() {
-        ensure_typed(entities, arena, entity, types, idx.into());
+        collect_in_order(entities, arena, entity, types, idx.into());
     }
 }
 
-fn ensure_typed<N, E, M>(
+fn collect_in_order<N, E, M>(
     entities: &node::entity::Arena<entity::Node<N, E, M>>,
     arena: &Arena<&Node<E>>,
     entity: node::entity::Idx,
-    types: &node::entity::Arena<RefCell<Arena<Option<TypeResult>>>>,
+    types: &node::entity::Arena<Option<RefCell<Arena<Option<TypeResult>>>>>,
     idx: Idx,
 ) {
     use node::expression::Variant::*;
 
-    if types[entity].borrow()[idx].is_some() {
-        return;
-    }
+    let typs = match &types[entity] {
+        None => return,
+        Some(typs) if typs.borrow()[idx].is_some() => return,
+        Some(typs) => typs,
+    };
 
     match &arena[idx].variant {
         Identifier(ident) => match &ident.target.target() {
-            Some(Target::Entity(tgt)) if types[*tgt].borrow().as_vec().is_empty() => {
-                init_types(entities, arena, *tgt, types, None);
+            Some(Target::Entity(tgt))
+                if let Some(typs) = &types[*tgt]
+                    && typs.borrow()[Idx::root()].is_none() =>
+            {
+                collect_types(entities, arena, *tgt, types);
             }
-            Some(Target::Expression(domain)) => {
-                let is_untyped = types[entity].borrow()[*domain].is_none();
-                if is_untyped {
-                    let len = count(&arena, *domain);
-                    let start = usize::from(*domain);
-                    let end = start + len;
-                    init_types(entities, arena, entity, types, Some(start..end));
-                }
+            Some(Target::Expression(domain)) if typs.borrow()[*domain].is_none() => {
+                let descendants = arena.descendants(*domain);
+                let arena = arena.subrange(descendants).map(|n, _| *n);
+                collect_types(entities, &arena, entity, types);
             }
             _ => {}
         },
         variant => {
             for child in variant.children_iter() {
-                ensure_typed(entities, arena, entity, types, *child);
+                collect_in_order(entities, arena, entity, types, *child);
             }
         }
     }
 
-    if types[entity].borrow()[idx].is_none() {
+    if typs.borrow()[idx].is_none() {
         let result = Some(evaluate_node(types, entity, arena, idx));
-        types[entity].borrow_mut()[idx] = result;
+        typs.borrow_mut()[idx] = result;
     }
-}
-
-fn count<P>(arena: &Arena<&Node<P>>, idx: Idx) -> usize {
-    let node = &arena[idx];
-    1 + node
-        .variant
-        .children_iter()
-        .map(|c| count(arena, *c))
-        .sum::<usize>()
 }

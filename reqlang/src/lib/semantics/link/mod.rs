@@ -77,8 +77,7 @@ impl<N: Located, R: Into<Path> + Clone, T: Into<Path> + Clone, E, M> Resolve<N, 
             .into_iter()
             .map(|(p, mut idxs)| (p, idxs.pop().unwrap()))
             .collect();
-        let imports = entity::collect_imports(&self);
-        entity::link(&paths, imports, self)
+        entity::link(&paths, self)
     }
 }
 

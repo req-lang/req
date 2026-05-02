@@ -62,18 +62,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let start = std::time::Instant::now();
             let source = fs::read_to_string(&input)?;
             let arena = parser::parse(&source)?;
-            let spans = arena.as_ref().map(|n| n.payload.clone());
+            let spans = arena.as_ref().map(|n, _| n.payload.clone());
 
             let arena = arena.locate();
-            let locations = arena.as_ref().map(|n| n.payload.clone());
+            let locations = arena.as_ref().map(|n, _| n.payload.clone());
 
             let arena = arena.resolve().evaluate().connect();
             let arena = arena
                 .zip(locations)
                 .zip(spans)
-                .map(|((node, loc), span)| node.map(|conns| Payload::new(loc, span, conns)));
+                .map(|((node, loc), span), _| node.map(|conns| Payload::new(loc, span, conns)));
 
-            let issues = arena.as_ref().map(|node| {
+            let issues = arena.as_ref().map(|node, _| {
                 path_issues(node)
                     .chain(reference_errors(node))
                     .chain(connection_errors(node))
@@ -84,7 +84,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             let elapsed = start.elapsed();
             let mut count = 0;
-            arena.zip(issues).map(|(node, issues)| {
+            arena.zip(issues).map(|(node, issues), _| {
                 count += issues.len();
                 if issues.is_empty() {
                     return;

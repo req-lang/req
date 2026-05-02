@@ -18,7 +18,7 @@ use crate::{
 };
 
 pub(super) fn evaluate_node<P>(
-    types: &node::entity::Arena<RefCell<Arena<Option<TypeResult>>>>,
+    types: &node::entity::Arena<Option<RefCell<Arena<Option<TypeResult>>>>>,
     entity: node::entity::Idx,
     arena: &Arena<&link::expression::Node<P>>,
     idx: Idx,
@@ -26,7 +26,7 @@ pub(super) fn evaluate_node<P>(
     use Issue::*;
     use node::expression::Variant::*;
 
-    let local = types[entity].borrow();
+    let local = &types[entity].as_ref().unwrap().borrow();
     match &arena[idx].variant {
         Branch(branch) => {
             let els = match &branch.otherwise {
@@ -178,13 +178,13 @@ pub(super) fn evaluate_node<P>(
             Ok(TypeKind::Undefined)
         }
 
-        Identifier(ident) => match &ident.target.target().ok_or(DomainNotFound)? {
-            Target::Entity(tgt) => match types[*tgt].borrow().as_vec().is_empty() {
-                false => match type_or_poison(&types[*tgt].borrow(), 0.into())? {
+        Identifier(ident) => match &ident.target.target().ok_or(Poison)? {
+            Target::Entity(tgt) => match &types[*tgt] {
+                Some(typs) => match type_or_poison(&typs.borrow(), 0.into())? {
                     TypeKind::Set(inner) => Ok(inner.as_ref().clone()),
                     typ => Err(NotASet(typ.clone())),
                 },
-                true => Err(DomainNotFound),
+                None => Err(NotEvaluable),
             },
             Target::Expression(tgt) => match type_or_poison(&local, *tgt)? {
                 TypeKind::Set(inner) => Ok(inner.as_ref().clone()),

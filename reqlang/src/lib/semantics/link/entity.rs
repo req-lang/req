@@ -10,11 +10,18 @@ use crate::{
 
 pub type Node<N, E, M> = node::entity::Node<N, Link, expression::Link, E, M>;
 
-pub(super) fn link<N: Located, R: Into<Path>, T: Into<Path>, E, M>(
+pub(super) fn link<N: Located, R: Into<Path> + Clone, T: Into<Path>, E, M>(
     paths: &HashMap<Path, Idx>,
-    imports: Arena<Vec<Path>>,
     arena: Arena<node::entity::Node<N, R, T, E, M>>,
 ) -> Arena<Node<N, E, M>> {
+    let imports = arena.from_walk::<Vec<Path>, Vec<Path>>(|node, prev, _| {
+        let imports = match node.variant.imports() {
+            Some(imports) => imports.iter().map(|i| i.clone().into()).collect(),
+            None => Vec::new(),
+        };
+        (imports, prev)
+    });
+
     arena.zip_map(imports, |node, imports| {
         let parent = node.payload.location().path().parent().unwrap_or_default();
         let ctx = FindCtx::new(&paths, &parent, imports);
@@ -62,16 +69,4 @@ pub(super) fn find(ctx: &FindCtx, rf: Path) -> Link {
     }
 
     Link::invalid(rf, Issue::NotFound)
-}
-
-pub(super) fn collect_imports<'n, P, R: Into<Path> + Clone, T, E, M>(
-    arena: &'n Arena<node::entity::Node<P, R, T, E, M>>,
-) -> Arena<Vec<Path>> {
-    arena.from_walk::<Vec<Path>, Vec<Path>>(|node, prev, _| {
-        let imports = match node.variant.imports() {
-            Some(imports) => imports.iter().map(|i| i.clone().into()).collect(),
-            None => Vec::new(),
-        };
-        (imports, prev)
-    })
 }
