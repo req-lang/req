@@ -1,69 +1,8 @@
-pub mod entity {
-    use crate::{
-        mock::expression,
-        node::entity::{
-            Arena, Attribute, Meta, Package, Part, Requirement, RequirementVariant, Variant,
-        },
-        syntax::{self, entity::Node},
-    };
-
-    pub fn package<S: ToString>(label: S) -> Node {
-        let variant = Variant::Package(Package::new(vec![], vec![]));
-        Node::empty(Meta::from(label.to_string()), variant)
-    }
-
-    pub fn part<S: ToString>(label: S) -> Node {
-        let variant = Variant::Part(Part::new(vec![], vec![]));
-        Node::empty(Meta::from(label.to_string()), variant)
-    }
-
-    pub fn attribute<S: ToString>(label: S, domain: S) -> Node {
-        let domain = expression::identifier(domain);
-        let variant = Variant::Attribute(Attribute::new(vec![domain].into()));
-        Node::empty(Meta::from(label.to_string()), variant)
-    }
-
-    pub fn requirement<S: ToString>(label: S) -> Node {
-        let variant = RequirementVariant::default();
-        let variant = Variant::Requirement(Requirement::from(variant));
-        Node::empty(Meta::from(label.to_string()), variant)
-    }
-
-    pub fn formal(label: &str, expr: Vec<syntax::expression::Node>) -> Node {
-        let mut req = requirement(label);
-        req.variant.requirement_mut().unwrap().variant = RequirementVariant::Formal(expr.into());
-        req
-    }
-
-    pub fn simple_tree() -> Arena<Node> {
-        let mut arena = vec![
-            package("a"),
-            package("b"),
-            package("c"),
-            package("d"),
-            package("e"),
-        ];
-
-        let variant = Variant::Package(Package::new(vec![], vec![3.into()]));
-        arena[1].variant = variant;
-
-        let variant = Variant::Package(Package::new(vec![], vec![4.into()]));
-        arena[2].variant = variant;
-
-        let variant = Variant::Package(Package::new(vec![], vec![1.into(), 2.into()]));
-        arena[0].variant = variant;
-        arena.reverse();
-
-        return arena.into();
-    }
-}
-
 pub mod generator {
     use std::cell::RefCell;
     use std::rc::Rc;
 
-    use super::entity::package;
-    use crate::mock::entity::requirement;
+    use super::entity::{package, part, requirement};
     use crate::node;
     use crate::node::entity::Arena;
     use crate::syntax::entity::Node;
@@ -177,6 +116,130 @@ pub mod generator {
                 words: 200,
             }
         }
+    }
+
+    /// Flat tree: one root package, two parts ("my::part", "my::other_part"),
+    /// and N informal requirements each linking to one part and restricting to the other.
+    /// Intended for benchmarking reference resolution under increasing requirement counts.
+    pub struct ReferenceResolution {
+        pub requirements: u64,
+    }
+
+    impl ReferenceResolution {
+        pub fn new(requirements: u64) -> Self {
+            Self { requirements }
+        }
+    }
+
+    impl Generate for ReferenceResolution {
+        fn generate(&self) -> Arena<Node> {
+            let arena = {
+                let root = Rc::new(RefCell::new(package("root")));
+                let mut arena: Vec<Rc<RefCell<Node>>> = vec![
+                    root.clone(),
+                    Rc::new(RefCell::new(part("part"))), // 1
+                    Rc::new(RefCell::new(part("other_part"))), // 2
+                ];
+
+                push_child(&root, 1);
+                push_child(&root, 2);
+
+                for i in 0..self.requirements {
+                    let mut req = requirement(format!("req_{i}"));
+                    req.variant.requirement_mut().unwrap().restriction =
+                        Some("root::other_part".to_string());
+                    let informal = req
+                        .variant
+                        .requirement_mut()
+                        .unwrap()
+                        .informal_mut()
+                        .unwrap();
+                    let mut container = node::markup::Container::default();
+                    container
+                        .items
+                        .push(node::markup::Item::Reference("root::part".to_string()));
+                    container.items.push(node::markup::Item::Reference(
+                        "root::not_existing".to_string(),
+                    ));
+                    *informal = markup::Node::empty(container);
+
+                    let idx = arena.len();
+                    arena.push(Rc::new(RefCell::new(req)));
+                    push_child(&root, idx);
+                }
+                arena
+            };
+
+            arena
+                .into_iter()
+                .map(|n| RefCell::into_inner(Rc::try_unwrap(n).unwrap()))
+                .collect::<Vec<_>>()
+                .into()
+        }
+
+        fn size(&self) -> u64 {
+            3 + self.requirements
+        }
+    }
+}
+
+pub mod entity {
+    use crate::{
+        mock::expression,
+        node::entity::{
+            Arena, Attribute, Meta, Package, Part, Requirement, RequirementVariant, Variant,
+        },
+        syntax::{self, entity::Node},
+    };
+
+    pub fn package<S: ToString>(label: S) -> Node {
+        let variant = Variant::Package(Package::new(vec![], vec![]));
+        Node::empty(Meta::from(label.to_string()), variant)
+    }
+
+    pub fn part<S: ToString>(label: S) -> Node {
+        let variant = Variant::Part(Part::new(vec![], vec![]));
+        Node::empty(Meta::from(label.to_string()), variant)
+    }
+
+    pub fn attribute<S: ToString>(label: S, domain: S) -> Node {
+        let domain = expression::identifier(domain);
+        let variant = Variant::Attribute(Attribute::new(vec![domain].into()));
+        Node::empty(Meta::from(label.to_string()), variant)
+    }
+
+    pub fn requirement<S: ToString>(label: S) -> Node {
+        let variant = RequirementVariant::default();
+        let variant = Variant::Requirement(Requirement::from(variant));
+        Node::empty(Meta::from(label.to_string()), variant)
+    }
+
+    pub fn formal(label: &str, expr: Vec<syntax::expression::Node>) -> Node {
+        let mut req = requirement(label);
+        req.variant.requirement_mut().unwrap().variant = RequirementVariant::Formal(expr.into());
+        req
+    }
+
+    pub fn simple_tree() -> Arena<Node> {
+        let mut arena = vec![
+            package("a"),
+            package("b"),
+            package("c"),
+            package("d"),
+            package("e"),
+        ];
+
+        let variant = Variant::Package(Package::new(vec![], vec![3.into()]));
+        arena[1].variant = variant;
+
+        let variant = Variant::Package(Package::new(vec![], vec![4.into()]));
+        arena[2].variant = variant;
+
+        let variant = Variant::Package(Package::new(vec![], vec![1.into(), 2.into()]));
+        arena[0].variant = variant;
+        arena.reverse();
+
+        return arena.into();
     }
 }
 
