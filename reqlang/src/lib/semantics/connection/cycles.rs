@@ -3,7 +3,7 @@ use std::{cell::RefCell, collections::HashSet};
 use crate::{
     node::{
         self,
-        entity::{Arena, Idx, TraceabilityKind},
+        entity::{Arena, Idx, Selector, TraceabilityKind},
     },
     semantics::{
         connection::{
@@ -38,7 +38,7 @@ pub(super) fn detect_traceability_cycles<E, M>(
                     in_path: HashSet::from([idx]),
                     path: vec![(idx, kind)],
                 };
-                detect_cycle_from(arena, neighbor.target, ctx, &mut visited);
+                detect_cycle_from(Selector::new(arena, neighbor.target), ctx, &mut visited);
             }
             visited.insert(idx);
         }
@@ -46,16 +46,15 @@ pub(super) fn detect_traceability_cycles<E, M>(
 }
 
 fn detect_cycle_from<E, M>(
-    arena: &Arena<RefCell<Node<Neighbors<Connection<Idx>>, E, M>>>,
-    idx: Idx,
+    entity: Selector<RefCell<Node<Neighbors<Connection<Idx>>, E, M>>>,
     ctx: PathCtx,
     visited: &mut HashSet<Idx>,
 ) {
-    let idx = idx;
+    let idx = entity.idx();
 
     if ctx.in_path.contains(&idx) {
         let pos = ctx.path.iter().position(|(n, _)| *n == idx).unwrap();
-        mark_cycle(arena, &ctx.path[pos..]);
+        mark_cycle(entity.arena(), &ctx.path[pos..]);
         return;
     }
 
@@ -63,7 +62,7 @@ fn detect_cycle_from<E, M>(
         return;
     }
 
-    let node = &arena[idx].borrow();
+    let node = &entity.get().borrow();
     let neighbors = node.payload.inbound.traceability.iter();
     let mut ctx = ctx;
     ctx.in_path.insert(idx);
@@ -75,7 +74,7 @@ fn detect_cycle_from<E, M>(
     {
         let mut next_ctx = ctx.clone();
         next_ctx.path.push((idx, kind));
-        detect_cycle_from(arena, neighbor, next_ctx, visited);
+        detect_cycle_from(Selector::new(entity.arena(), neighbor), next_ctx, visited);
     }
 
     visited.insert(idx);

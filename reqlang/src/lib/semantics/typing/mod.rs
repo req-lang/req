@@ -203,6 +203,48 @@ mod tests {
     }
 
     #[test]
+    fn nested_forall_variables_have_number_type() {
+        // forall x in real, forall y in {x}, y > 1 end end
+        let mut p = package("p");
+
+        let outer_set = node::expression::SetElement::new("x".to_string(), 1.into());
+        let outer_forall = syntax::expression::Node::new(
+            (),
+            Forall(node::expression::Forall::new(outer_set, 2.into())),
+        );
+
+        let inner_set = node::expression::SetElement::new("y".to_string(), 3.into());
+        let inner_forall = syntax::expression::Node::new(
+            (),
+            Forall(node::expression::Forall::new(inner_set, 5.into())),
+        );
+
+        let set_x = syntax::expression::Node::new(
+            (),
+            Set(node::expression::Set { elements: vec![4.into()] }),
+        );
+
+        let req = formal("r", vec![
+            outer_forall,               // 0: outer forall
+            identifier("real"),         // 1: domain of x
+            inner_forall,               // 2: inner forall (body of outer)
+            set_x,                      // 3: {x} (domain of y)
+            identifier("x"),            // 4: x (element of {x})
+            binary(GreaterThan, 6, 7),  // 5: y > 1 (body of inner)
+            identifier("y"),            // 6: y
+            number(1),                  // 7: 1
+        ]);
+        p.variant.children_mut().unwrap().push(1.into());
+
+        let typed = resolve_and_evaluate(vec![p, req].into());
+        let r = get_child(&typed, 0.into(), "r");
+
+        let expr = r.variant.expressions().next().unwrap().clone();
+        assert_eq!(expr[4.into()].payload, Ok(TypeKind::Number)); // x is Number
+        assert_eq!(expr[6.into()].payload, Ok(TypeKind::Number)); // y is Number
+    }
+
+    #[test]
     fn forall_with_non_boolean_body_is_type_error() {
         // forall x in real, 1  — body is Number, not Boolean
 
