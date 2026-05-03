@@ -7,6 +7,7 @@ use crate::{
 pub struct IdxMarker;
 pub type Idx = arena::Idx<IdxMarker>;
 pub type Arena<T> = arena::Arena<T, IdxMarker>;
+pub type Selector<'a, T> = arena::Selector<'a, T, IdxMarker>;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Node<N, R, T, E, M, I = Idx, J = expression::Idx> {

@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 
 use crate::{
-    node::entity::Arena,
+    node::entity::{Arena, Selector},
     semantics::{
         link::entity::Node,
         typing::{
@@ -24,7 +24,9 @@ pub(super) fn evaluate<N, E, M>(arena: Arena<Node<N, E, M>>) -> Arena<Node<N, Ty
     // TODO: Refactor this mess
     arena.for_each(|node, idx| {
         if let Some(expr) = node.variant.expressions().next() {
-            expression::collect_types(&arena, &expr.as_ref(), idx.into(), &types);
+            let ents = arena.as_ref();
+            let entity = Selector::new(&ents, idx);
+            expression::collect_types(entity, &expr.as_ref(), &types);
         }
     });
 

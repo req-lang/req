@@ -3,13 +3,10 @@ use std::cell::{Ref, RefCell};
 use crate::{
     node::{
         self,
-        expression::{Arena, Case, Idx, SetElement},
+        expression::{Arena, Case, Idx, Selector, SetElement},
     },
     semantics::{
-        link::{
-            self,
-            expression::{BuiltinKind, Target},
-        },
+        link::expression::{BuiltinKind, Node, Target},
         typing::{
             TypeResult,
             expression::{Issue, TypeKind},
@@ -18,16 +15,14 @@ use crate::{
 };
 
 pub(super) fn evaluate_node<P>(
-    types: &node::entity::Arena<Option<RefCell<Arena<Option<TypeResult>>>>>,
-    entity: node::entity::Idx,
-    arena: &Arena<&link::expression::Node<P>>,
-    idx: Idx,
+    types: node::entity::Selector<Option<RefCell<Arena<Option<TypeResult>>>>>,
+    expression: Selector<&Node<P>>,
 ) -> TypeResult {
     use Issue::*;
     use node::expression::Variant::*;
-
-    let local = &types[entity].as_ref().unwrap().borrow();
-    match &arena[idx].variant {
+    let typs = types.clone().get();
+    let local = typs.as_ref().unwrap().borrow();
+    match &expression.get().variant {
         Branch(branch) => {
             let els = match &branch.otherwise {
                 Some(expr) => Some(type_or_poison(&local, *expr)?),
@@ -179,7 +174,7 @@ pub(super) fn evaluate_node<P>(
         }
 
         Identifier(ident) => match &ident.target.target().ok_or(Poison)? {
-            Target::Entity(tgt) => match &types[*tgt] {
+            Target::Entity(tgt) => match &types.set(*tgt).get() {
                 Some(typs) => match type_or_poison(&typs.borrow(), 0.into())? {
                     TypeKind::Set(inner) => Ok(inner.as_ref().clone()),
                     typ => Err(NotASet(typ.clone())),

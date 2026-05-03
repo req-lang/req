@@ -12,10 +12,6 @@ pub struct Arena<T, M> {
 }
 
 impl<T, M> Arena<T, M> {
-    pub fn as_vec(&self) -> &Vec<T> {
-        &self.inner
-    }
-
     pub fn empty<U: Default + Clone>(&self) -> Arena<U, M> {
         std::iter::repeat(Default::default())
             .take(self.inner.len())
@@ -235,5 +231,45 @@ impl<T, M> Index<Idx<M>> for Arena<T, M> {
 
     fn index(&self, index: Idx<M>) -> &Self::Output {
         &self.inner[usize::from(index)]
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct Selector<'a, T, M> {
+    arena: &'a Arena<T, M>,
+    idx: Idx<M>,
+}
+
+impl<'a, T, M> Selector<'a, T, M> {
+    pub fn arena(&self) -> &'a Arena<T, M> {
+        &self.arena
+    }
+
+    pub fn idx(&self) -> Idx<M> {
+        self.idx.clone()
+    }
+
+    pub fn get(&self) -> &'a T {
+        &self.arena[self.idx.clone()]
+    }
+
+    pub fn new(arena: &'a Arena<T, M>, idx: Idx<M>) -> Self {
+        Self { arena, idx }
+    }
+
+    pub fn set(self, idx: Idx<M>) -> Self {
+        Self {
+            arena: self.arena,
+            idx,
+        }
+    }
+}
+
+impl<'a, T, M> From<&'a Arena<T, M>> for Selector<'a, T, M> {
+    fn from(value: &'a Arena<T, M>) -> Self {
+        Self {
+            arena: value,
+            idx: Idx::root(),
+        }
     }
 }

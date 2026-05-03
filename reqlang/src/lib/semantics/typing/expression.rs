@@ -4,7 +4,7 @@ use crate::{
     issue::Severity,
     node::{
         self,
-        expression::{Arena, Idx},
+        expression::{Arena, Idx, Selector},
     },
     semantics::{
         link::{
@@ -64,55 +64,55 @@ impl From<&Issue> for Severity {
 //
 // TODO: Circular references between domains and requirements can loop indefinitely
 pub(super) fn collect_types<N, E, M>(
-    entities: &node::entity::Arena<entity::Node<N, E, M>>,
+    entity: node::entity::Selector<&entity::Node<N, E, M>>,
     arena: &Arena<&Node<E>>,
-    entity: node::entity::Idx,
     types: &node::entity::Arena<Option<RefCell<Arena<Option<TypeResult>>>>>,
 ) {
-    for idx in 0..arena.as_vec().len() {
-        collect_in_order(entities, arena, entity, types, idx.into());
-    }
+    arena.for_each(|_, idx| {
+        collect_in_order(entity, Selector::new(arena, idx), types);
+    });
 }
 
 fn collect_in_order<N, E, M>(
-    entities: &node::entity::Arena<entity::Node<N, E, M>>,
-    arena: &Arena<&Node<E>>,
-    entity: node::entity::Idx,
+    entity: node::entity::Selector<&entity::Node<N, E, M>>,
+    expression: Selector<&Node<E>>,
     types: &node::entity::Arena<Option<RefCell<Arena<Option<TypeResult>>>>>,
-    idx: Idx,
 ) {
     use node::expression::Variant::*;
 
-    let typs = match &types[entity] {
+    let typs = match &types[entity.idx()] {
         None => return,
-        Some(typs) if typs.borrow()[idx].is_some() => return,
+        Some(typs) if typs.borrow()[expression.idx()].is_some() => return,
         Some(typs) => typs,
     };
 
-    match &arena[idx].variant {
+    match &expression.get().variant {
         Identifier(ident) => match &ident.target.target() {
             Some(Target::Entity(tgt))
                 if let Some(typs) = &types[*tgt]
                     && typs.borrow()[Idx::root()].is_none() =>
             {
-                collect_types(entities, arena, *tgt, types);
+                let sel = entity.clone().set(*tgt);
+                collect_types(sel, expression.arena(), types);
             }
             Some(Target::Expression(domain)) if typs.borrow()[*domain].is_none() => {
+                let arena = expression.arena();
                 let descendants = arena.descendants(*domain);
                 let arena = arena.subrange(descendants).map(|n, _| *n);
-                collect_types(entities, &arena, entity, types);
+                collect_types(entity, &arena, types);
             }
             _ => {}
         },
         variant => {
             for child in variant.children_iter() {
-                collect_in_order(entities, arena, entity, types, *child);
+                collect_in_order(entity, expression.clone().set(*child), types);
             }
         }
     }
 
-    if typs.borrow()[idx].is_none() {
-        let result = Some(evaluate_node(types, entity, arena, idx));
-        typs.borrow_mut()[idx] = result;
+    if typs.borrow()[expression.idx()].is_none() {
+        let sel = node::entity::Selector::new(types, entity.idx());
+        let result = Some(evaluate_node(sel, expression));
+        typs.borrow_mut()[expression.idx()] = result;
     }
 }
