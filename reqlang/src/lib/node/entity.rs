@@ -5,9 +5,9 @@ use crate::{
 
 #[derive(Default, Debug, Copy, Clone, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub struct IdxMarker;
-pub type Idx = arena::Idx<IdxMarker>;
+pub type Idx = arena::idx::Idx<IdxMarker>;
 pub type Arena<T> = arena::Arena<T, IdxMarker>;
-pub type Selector<'a, T> = arena::Selector<'a, T, IdxMarker>;
+pub type Selector<'a, T> = arena::selector::Selector<'a, T, IdxMarker>;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Node<N, R, T, E, M, I = Idx, J = expression::Idx> {
@@ -69,7 +69,9 @@ impl<N, R, T, E, M, I, J> Node<N, R, T, E, M, I, J> {
         Node {
             payload: self.payload,
             meta: self.meta,
-            variant: self.variant.mape(|e| e.map_(|e| e.mapr(&mut f))),
+            variant: self
+                .variant
+                .mape(|e| e.into_iter().map(|e| e.mapr(&mut f)).collect()),
         }
     }
 
@@ -80,7 +82,9 @@ impl<N, R, T, E, M, I, J> Node<N, R, T, E, M, I, J> {
         Node {
             payload: self.payload,
             meta: self.meta,
-            variant: self.variant.mape(|e| e.map_(|e| e.map(&mut f))),
+            variant: self
+                .variant
+                .mape(|e| e.into_iter().map(|e| e.map(&mut f)).collect()),
         }
     }
 
@@ -112,17 +116,17 @@ impl<N, R, T, E, M, I, J> Node<N, R, T, E, M, I, J> {
     }
 }
 
-impl<'a, N, R, T, E, M, I: 'a, J> ChildrenIter<'a, I> for Node<N, R, T, E, M, I, J> {
-    fn children_iter(&'a self) -> impl Iterator<Item = &'a I> {
+impl<N, R, T, E, M, I: Copy, J> ChildrenIter<I> for Node<N, R, T, E, M, I, J> {
+    fn children_iter(&self) -> impl DoubleEndedIterator<Item = I> {
         self.variant.children_iter()
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Variant<N, R, E, M> {
-    Part(Part<N, R>),
+pub enum Variant<I, R, E, M> {
+    Part(Part<I, R>),
     Attribute(Attribute<E>),
-    Package(Package<N, R>),
+    Package(Package<I, R>),
     Requirement(Requirement<R, E, M>),
 }
 
@@ -168,9 +172,12 @@ impl<N, R, E, M> IntoChildren<N> for Variant<N, R, E, M> {
     }
 }
 
-impl<'a, N: 'a, R, E, M> ChildrenIter<'a, N> for Variant<N, R, E, M> {
-    fn children_iter(&'a self) -> impl Iterator<Item = &'a N> {
-        self.children().into_iter().map(|c| c.iter()).flatten()
+impl<I: Copy, R, E, M> ChildrenIter<I> for Variant<I, R, E, M> {
+    fn children_iter(&self) -> impl DoubleEndedIterator<Item = I> {
+        self.children()
+            .into_iter()
+            .map(|c| c.iter().map(|i| *i))
+            .flatten()
     }
 }
 
@@ -594,7 +601,7 @@ pub struct TraceabilityInhibitor {
     pub bottom: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TraceabilityKind {
     Specialization,
     Refinement,

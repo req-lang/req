@@ -199,7 +199,7 @@ pub mod generator {
 
     impl Generate for ExpressionTyping {
         fn generate(&self) -> Arena<Node> {
-            let mut arena: Vec<Rc<RefCell<Node>>> = {
+            let arena: Vec<Rc<RefCell<Node>>> = {
                 let root = Rc::new(RefCell::new(package("root")));
                 let attrs = Rc::new(RefCell::new(part("attrs")));
                 let mut arena = vec![

@@ -53,10 +53,13 @@ pub(super) fn link<P, R: Into<Path>>(
     ctx: &entity::FindCtx,
     arena: Arena<node::expression::Node<P, R>>,
 ) -> Arena<Node<P>> {
-    let local = init_scope(&arena);
-    arena
-        .zip(local)
-        .map_(|(node, scope)| node.mapr(|rf| find(ctx, &scope, rf.into())))
+    arena.from_walk(HashMap::new(), |node, mut current, _| {
+        let node = node.mapr(|rf| find(ctx, &current, rf.into()));
+        if let Some(set) = node.variant.set_element() {
+            current.insert(set.variable.clone(), set.domain);
+        }
+        (current, node)
+    })
 }
 
 fn find(ctx: &entity::FindCtx, local: &HashMap<String, Idx>, rf: Path) -> Link {
@@ -76,17 +79,4 @@ fn find(ctx: &entity::FindCtx, local: &HashMap<String, Idx>, rf: Path) -> Link {
         Ok(idx) => super::Link::valid(rf, Entity(idx)),
         Err(err) => super::Link::invalid(rf, err),
     }
-}
-
-fn init_scope<P, R>(arena: &Arena<node::expression::Node<P, R>>) -> Arena<HashMap<String, Idx>> {
-    arena.from_walk::<HashMap<String, Idx>, HashMap<String, Idx>>(|node, mut current, _| {
-        let scope = current.clone();
-        match node.variant.set_element() {
-            None => (current, scope),
-            Some(set) => {
-                current.insert(set.variable.clone(), set.domain);
-                (current, scope)
-            }
-        }
-    })
 }

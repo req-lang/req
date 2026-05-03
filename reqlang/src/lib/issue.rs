@@ -49,7 +49,7 @@ pub fn expr_errors<N, E: Typed, M>(value: &link::entity::Node<N, E, M>) -> Issue
     let mut issues = Vec::new();
 
     for ex in value.variant.expressions() {
-        ex.for_each(|x, _| {
+        ex.into_iter().for_each(|x| {
             if let Err(typ) = x.payload.type_result() {
                 issues.push(typ.into());
             }
@@ -113,7 +113,7 @@ pub fn reference_errors<N, E, M>(node: &link::entity::Node<N, E, M>) -> IssueIte
     }
 
     for ex in node.variant.expressions() {
-        ex.for_each(|x, _| {
+        ex.into_iter().for_each(|x| {
             if let Variant::Identifier(ident) = &x.variant
                 && let Err(rf) = &ident.target.resolved
             {

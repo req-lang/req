@@ -14,24 +14,21 @@ pub(super) fn link<N: Located, R: Into<Path> + Clone, T: Into<Path>, E, M>(
     paths: &HashMap<Path, Idx>,
     arena: Arena<node::entity::Node<N, R, T, E, M>>,
 ) -> Arena<Node<N, E, M>> {
-    let imports = arena.from_walk::<Vec<Path>, Vec<Path>>(|node, prev, _| {
+    arena.from_walk(Vec::new(), |node, imports, _| {
+        let parent = node.payload.location().path().parent().unwrap_or_default();
+        let ctx = FindCtx::new(&paths, &parent, imports);
         let imports = match node.variant.imports() {
             Some(imports) => imports.iter().map(|i| i.clone().into()).collect(),
             None => Vec::new(),
         };
-        (imports, prev)
-    });
-
-    arena.zip_map(imports, |node, imports| {
-        let parent = node.payload.location().path().parent().unwrap_or_default();
-        let ctx = FindCtx::new(&paths, &parent, imports);
         let meta = node.meta.mapm(|r| markup::link(&ctx, r));
         let variant = node
             .variant
             .mapr(|r| find(&ctx, r.into()))
             .mape(|e| expression::link(&ctx, e))
             .mapm(|m| markup::link(&ctx, m));
-        Node::new(node.payload, meta, variant)
+
+        (imports, Node::new(node.payload, meta, variant))
     })
 }
 

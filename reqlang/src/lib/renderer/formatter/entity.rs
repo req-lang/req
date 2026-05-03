@@ -30,13 +30,13 @@ pub fn format<W: std::io::Write, N, R: Display, T: Display, E, M>(
     match &node.variant {
         Part(prt) => {
             writeln!(out, "{}part {}", pd, node.meta.label)?;
-            format_container(&prt.imports, arena, &prt.children, indent, out)?;
+            format_block(&prt.imports, arena, &prt.children, indent, out)?;
             writeln!(out, "{}part", pd)
         }
 
         Package(pkg) => {
             writeln!(out, "{}package {}", pd, node.meta.label)?;
-            format_container(&pkg.imports, arena, &pkg.children, indent, out)?;
+            format_block(&pkg.imports, arena, &pkg.children, indent, out)?;
             writeln!(out, "{}package", pd)
         }
 
@@ -99,7 +99,7 @@ fn traceability_keyword(kind: &TraceabilityKind) -> &'static str {
     }
 }
 
-fn format_container<W: std::io::Write, N, R: Display, T: Display, E, M>(
+fn format_block<W: std::io::Write, N, R: Display, T: Display, E, M>(
     imports: &[R],
     arena: &Arena<Node<N, R, T, E, M>>,
     children: &Vec<Idx>,

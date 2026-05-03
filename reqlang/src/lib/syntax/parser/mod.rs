@@ -33,7 +33,7 @@ mod tests {
         mock::{self, generator::Generate},
         node::{
             self,
-            entity::{Requirement, TraceabilityKind},
+            entity::{Arena, Requirement, TraceabilityKind},
         },
         syntax::{self, parser::parse},
         utils::children::ChildrenMut,
@@ -44,12 +44,12 @@ mod tests {
         let input = "package x package";
         let result = parse(input);
 
-        let expected = vec![mock::entity::package("x")].into();
+        let expected: Arena<_> = vec![mock::entity::package("x")].into();
 
         assert!(result.is_ok());
 
         let nodes = result.ok().unwrap();
-        let ast = nodes.map_(syntax::entity::Node::from);
+        let ast: Arena<_> = nodes.into_iter().map(syntax::entity::Node::from).collect();
         assert_eq!(ast, expected);
     }
 
@@ -60,7 +60,7 @@ mod tests {
         assert!(result.is_ok());
 
         let nodes = result.ok().unwrap();
-        let ast = nodes.map_(syntax::entity::Node::from);
+        let ast: Arena<_> = nodes.into_iter().map(syntax::entity::Node::from).collect();
 
         let mut x = mock::entity::package("x");
         x.variant.children_mut().unwrap().push(1.into());
@@ -76,7 +76,7 @@ mod tests {
         assert!(result.is_ok());
 
         let nodes = result.ok().unwrap();
-        let ast = nodes.map_(syntax::entity::Node::from);
+        let ast: Arena<_> = nodes.into_iter().map(syntax::entity::Node::from).collect();
 
         let mut expected = mock::entity::package("x");
         expected.variant.children_mut().unwrap().push(1.into());
@@ -92,7 +92,7 @@ mod tests {
         assert!(result.is_ok());
 
         let nodes = result.ok().unwrap();
-        let ast = nodes.map_(syntax::entity::Node::from);
+        let ast: Arena<_> = nodes.into_iter().map(syntax::entity::Node::from).collect();
 
         let mut x = mock::entity::package("x");
         let mut p = mock::entity::part("p");
@@ -111,7 +111,7 @@ mod tests {
         assert!(result.is_ok());
 
         let nodes = result.ok().unwrap();
-        let ast = nodes.map_(syntax::entity::Node::from);
+        let ast: Arena<_> = nodes.into_iter().map(syntax::entity::Node::from).collect();
 
         let mut x = mock::entity::package("x");
         x.variant.children_mut().unwrap().push(1.into());
@@ -198,7 +198,7 @@ mod tests {
     ) -> Requirement<String, node::expression::Arena<syntax::expression::Node>, syntax::markup::Node>
     {
         let nodes = parse(input).unwrap();
-        let ast = nodes.map_(syntax::entity::Node::from);
+        let ast: Arena<_> = nodes.into_iter().map(syntax::entity::Node::from).collect();
         Vec::from(ast)
             .into_iter()
             .find_map(|n| n.variant.into_requirement())

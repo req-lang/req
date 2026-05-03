@@ -19,12 +19,12 @@ where
     fn into_children(self) -> Option<Vec<N>>;
 }
 
-pub trait ChildrenIter<'a, N: 'a> {
-    fn children_iter(&'a self) -> impl Iterator<Item = &'a N>;
+pub trait ChildrenIter<N> {
+    fn children_iter(&self) -> impl DoubleEndedIterator<Item = N>;
 }
 
-impl<'a, N: 'a, T: ChildrenIter<'a, N>> ChildrenIter<'a, N> for &T {
-    fn children_iter(&'a self) -> impl Iterator<Item = &'a N> {
+impl<N, T: ChildrenIter<N>> ChildrenIter<N> for &T {
+    fn children_iter(&self) -> impl DoubleEndedIterator<Item = N> {
         (*self).children_iter()
     }
 }

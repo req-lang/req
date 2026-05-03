@@ -62,8 +62,8 @@ mod tests {
     fn get_child<'a>(arena: &'a Arena<Node>, parent: Idx, label: &str) -> &'a Node {
         let parent = &arena[parent];
         let mut children = parent.variant.children_iter();
-        let idx = children.find(|c| arena[**c].meta.label == *label).unwrap();
-        &arena[*idx]
+        let idx = children.find(|c| arena[*c].meta.label == *label).unwrap();
+        &arena[idx]
     }
 
     #[test]

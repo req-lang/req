@@ -4,7 +4,7 @@ use clap::Parser;
 use colored::Colorize;
 use reqlang::{
     issue::{self, Severity, connection_errors, expr_errors, path_issues, reference_errors},
-    node::entity::Idx,
+    node::entity::{Arena, Idx},
     renderer::formatter::entity,
     semantics::{
         connection::{
@@ -62,29 +62,34 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let start = std::time::Instant::now();
             let source = fs::read_to_string(&input)?;
             let arena = parser::parse(&source)?;
-            let spans = arena.as_ref().map(|n, _| n.payload.clone());
+            let spans: Arena<_> = (&arena).into_iter().map(|n| n.payload.clone()).collect();
 
             let arena = arena.locate();
-            let locations = arena.as_ref().map(|n, _| n.payload.clone());
+            let locations: Arena<_> = (&arena).into_iter().map(|n| n.payload.clone()).collect();
 
             let arena = arena.resolve().evaluate().connect();
-            let arena = arena
+            let arena: Arena<_> = arena
+                .into_iter()
                 .zip(locations)
                 .zip(spans)
-                .map(|((node, loc), span), _| node.map(|conns| Payload::new(loc, span, conns)));
+                .map(|((node, loc), span)| node.map(|conns| Payload::new(loc, span, conns)))
+                .collect();
 
-            let issues = arena.as_ref().map(|node, _| {
-                path_issues(node)
-                    .chain(reference_errors(node))
-                    .chain(connection_errors(node))
-                    .chain(expr_errors(node))
-                    .map(Issue::from)
-                    .collect::<Vec<_>>()
-            });
+            let issues: Arena<_> = (&arena)
+                .into_iter()
+                .map(|node| {
+                    path_issues(node)
+                        .chain(reference_errors(node))
+                        .chain(connection_errors(node))
+                        .chain(expr_errors(node))
+                        .map(Issue::from)
+                        .collect::<Vec<_>>()
+                })
+                .collect();
 
             let elapsed = start.elapsed();
             let mut count = 0;
-            arena.zip(issues).map(|(node, issues), _| {
+            arena.into_iter().zip(issues).for_each(|(node, issues)| {
                 count += issues.len();
                 if issues.is_empty() {
                     return;

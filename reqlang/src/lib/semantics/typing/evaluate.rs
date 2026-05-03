@@ -14,7 +14,7 @@ use crate::{
 
 pub(super) fn evaluate_node<P>(
     types: node::entity::Selector<Option<Arena<Option<TypeResult>>>>,
-    expression: Selector<&Node<P>>,
+    expression: Selector<Node<P>>,
 ) -> TypeResult {
     use Issue::*;
     use node::expression::Variant::*;

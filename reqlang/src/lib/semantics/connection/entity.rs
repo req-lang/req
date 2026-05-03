@@ -1,13 +1,23 @@
-use crate::{
-    node::entity::{Arena, Idx, TraceabilityKind},
-    semantics::{
-        connection::{graph::Graph, issue::IssueKind},
-        link::entity::Node,
-    },
-    utils::take::Take,
+use std::{
+    cell::RefCell,
+    ops::{Index, IndexMut},
 };
 
-#[derive(Debug, Clone)]
+use crate::{
+    node::{
+        arena::ArenaEnumerate,
+        entity::{Arena, Idx, TraceabilityKind},
+    },
+    semantics::{
+        connection::{
+            graph,
+            issue::{self, IssueKind},
+        },
+        link::entity::Node,
+    },
+};
+
+#[derive(Default, Debug, Clone)]
 pub struct Neighbors<R> {
     pub inbound: Inbound<R>,
     pub outbound: Outbound<R>,
@@ -28,10 +38,6 @@ impl<R> Neighbors<R> {
 pub struct Connection<R> {
     pub target: R,
     pub issue: Vec<IssueKind>,
-}
-
-fn from_vec(x: Vec<Idx>) -> Vec<Connection<Idx>> {
-    x.into_iter().map(|ptr| Connection::from(ptr)).collect()
 }
 
 impl<R> From<R> for Connection<R> {
@@ -81,6 +87,32 @@ impl<R> Traceability<R> {
     }
 }
 
+impl<R> IndexMut<TraceabilityKind> for Traceability<R> {
+    fn index_mut(&mut self, index: TraceabilityKind) -> &mut Self::Output {
+        use TraceabilityKind::*;
+
+        match index {
+            Specialization => &mut self.specializations,
+            Refinement => &mut self.refinements,
+            Derivation => &mut self.derivations,
+        }
+    }
+}
+
+impl<R> Index<TraceabilityKind> for Traceability<R> {
+    type Output = Vec<R>;
+
+    fn index(&self, index: TraceabilityKind) -> &Self::Output {
+        use TraceabilityKind::*;
+
+        match index {
+            Specialization => &self.specializations,
+            Refinement => &self.refinements,
+            Derivation => &self.derivations,
+        }
+    }
+}
+
 // Derived from outbound connections
 #[derive(Default, Debug, Clone)]
 pub struct Inbound<R> {
@@ -127,43 +159,63 @@ impl<R> Outbound<R> {
     }
 }
 
-pub(super) fn connect<N, E, M>(
-    arena: Arena<Node<N, E, M>>,
-    mut graph: Graph,
-) -> Arena<Node<Neighbors<Connection<Idx>>, E, M>> {
-    arena.map(|node, idx| node.map(|_| make_neighbors(idx, &mut graph)))
+impl<R: Default> Default for Outbound<R> {
+    fn default() -> Self {
+        Self {
+            usages: Default::default(),
+            restriction: Err(IssueKind::MissingRequirementBinding),
+            allocation: Default::default(),
+            traceability: Default::default(),
+        }
+    }
 }
 
-fn make_neighbors(nd: Idx, graph: &mut Graph) -> Neighbors<Connection<Idx>> {
-    Neighbors {
-        parent: graph.parent.remove(&nd).map(Connection::from),
-        inbound: Inbound {
-            restrictions: from_vec(graph.inbound.restrictions.take(&nd)),
-            allocations: from_vec(graph.inbound.allocations.take(&nd)),
-            usages: from_vec(graph.inbound.usages.take(&nd)),
-            traceability: Traceability {
-                derivations: from_vec(graph.inbound.derivations.take(&nd)),
-                refinements: from_vec(graph.inbound.refinements.take(&nd)),
-                specializations: from_vec(graph.inbound.specializations.take(&nd)),
-                issues: Vec::new(),
-            },
-            issues: Vec::new(),
-        },
-        outbound: Outbound {
-            restriction: graph
-                .outbound
-                .restriction
-                .remove(&nd)
-                .map(Connection::from)
-                .ok_or(IssueKind::MissingRequirementBinding),
-            allocation: graph.outbound.allocation.remove(&nd).map(Connection::from),
-            usages: from_vec(graph.outbound.usages.take(&nd)),
-            traceability: Traceability {
-                derivations: from_vec(graph.outbound.derivations.take(&nd)),
-                refinements: from_vec(graph.outbound.refinements.take(&nd)),
-                specializations: from_vec(graph.outbound.specializations.take(&nd)),
-                issues: Vec::new(),
-            },
-        },
-    }
+pub(super) fn connect<N, E, M>(
+    arena: Arena<Node<N, E, M>>,
+) -> Arena<Node<Neighbors<Connection<Idx>>, E, M>> {
+    let mut neighbors = arena.with_capacity();
+    graph::collect_neighbors(&arena, &mut neighbors);
+    let cycles = detect_traceability_cycles(&neighbors);
+    let neighbors: Arena<_> = neighbors
+        .into_iter()
+        .map(|n| n.mapr(Connection::from))
+        .collect();
+    let mut arena = arena
+        .into_iter()
+        .zip(neighbors)
+        .map(|(node, neighbors)| node.map(|_| neighbors))
+        .collect::<Arena<_>>();
+
+    collect_cycles_isses(cycles, &mut arena);
+    // Using Rc for performance reasons, otherwise neighbors might need to be cloned
+    let arena = arena.into_iter().map(RefCell::new).collect::<Arena<_>>();
+    (&arena)
+        .into_iter()
+        .indices()
+        .for_each(|(idx, _)| issue::collect_issues(&arena, idx));
+    arena.into_iter().map(|r| r.into_inner()).collect()
+}
+
+fn detect_traceability_cycles(arena: &Arena<Neighbors<Idx>>) -> Vec<Vec<Idx>> {
+    arena.cycles(|node| {
+        node.inbound
+            .traceability
+            .iter()
+            .map(|(t, _)| *t)
+            .collect::<Vec<_>>()
+    })
+}
+
+fn collect_cycles_isses<E, M>(
+    cycles: Vec<Vec<Idx>>,
+    arena: &mut Arena<Node<Neighbors<Connection<Idx>>, E, M>>,
+) {
+    cycles.into_iter().flatten().for_each(|idx| {
+        arena[idx]
+            .payload
+            .inbound
+            .traceability
+            .issues
+            .push(IssueKind::CyclicTrace);
+    });
 }

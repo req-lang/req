@@ -1,118 +1,72 @@
-use std::collections::HashMap;
-
 use crate::{
     node::{
         self,
         entity::{Arena, Idx},
     },
-    semantics::link::{self, entity::Node},
-    utils::upsert::Upsert,
+    semantics::{connection::entity::Neighbors, link::entity::Node},
 };
 
-#[derive(Default)]
-pub(super) struct OutboundGraph {
-    pub derivations: HashMap<Idx, Vec<Idx>>,
-    pub refinements: HashMap<Idx, Vec<Idx>>,
-    pub specializations: HashMap<Idx, Vec<Idx>>,
-    pub restriction: HashMap<Idx, Idx>,
-    pub allocation: HashMap<Idx, Idx>,
-    pub usages: HashMap<Idx, Vec<Idx>>,
-}
-
-#[derive(Default)]
-pub(super) struct InboundGraph {
-    pub derivations: HashMap<Idx, Vec<Idx>>,
-    pub refinements: HashMap<Idx, Vec<Idx>>,
-    pub specializations: HashMap<Idx, Vec<Idx>>,
-    pub restrictions: HashMap<Idx, Vec<Idx>>,
-    pub allocations: HashMap<Idx, Vec<Idx>>,
-    pub usages: HashMap<Idx, Vec<Idx>>,
-}
-
-#[derive(Default)]
-pub(super) struct Graph {
-    pub outbound: OutboundGraph,
-    pub inbound: InboundGraph,
-    pub parent: HashMap<Idx, Idx>,
-}
-
-pub(super) fn build_parents<N, E, M>(arena: &Arena<Node<N, E, M>>, graph: &mut Graph) {
-    arena.walk(|_, parent, idx| {
-        if let Some(parent) = parent {
-            graph.parent.insert(idx, parent);
-        }
-        Some(idx)
-    });
-}
-
-pub(super) fn build_transverse<N, E, M>(
-    arena: &Arena<link::entity::Node<N, E, M>>,
-    graph: &mut Graph,
+pub(super) fn collect_neighbors<N, E, M>(
+    arena: &Arena<Node<N, E, M>>,
+    neighbors: &mut Arena<Neighbors<Idx>>,
 ) {
     use node::entity::Variant::*;
 
-    arena.for_each(|node, idx| {
-        let idx = Idx::from(idx);
-        if let Requirement(req) = &node.variant {
-            if let Some(alloc) = req.allocation.as_ref().and_then(|a| a.target()) {
-                graph.inbound.allocations.upsert(*alloc, idx);
-                graph.outbound.allocation.insert(idx, *alloc);
-            }
+    arena
+        .walk(None, |node, parent, idx| {
+            neighbors[idx].parent = parent;
 
-            if let Some(restr) = req.restriction.as_ref().and_then(|a| a.target()) {
-                graph.inbound.restrictions.upsert(*restr, idx);
-                graph.outbound.restriction.insert(idx, *restr);
-            }
+            if let Requirement(req) = &node.variant {
+                if let Some(alloc) = req.allocation.as_ref().and_then(|a| a.target()) {
+                    neighbors[*alloc].inbound.allocations.push(idx);
+                    neighbors[idx].outbound.allocation = Some(*alloc);
+                }
 
-            for trace in &req.traceability {
-                use node::entity::TraceabilityKind::*;
+                if let Some(restr) = req.restriction.as_ref().and_then(|a| a.target()) {
+                    neighbors[*restr].inbound.restrictions.push(idx);
+                    neighbors[idx].outbound.restriction = Ok(*restr);
+                }
 
-                if let Some(source) = trace.target.target() {
-                    let src = *source;
-                    match trace.kind {
-                        Specialization => graph.inbound.specializations.upsert(src, idx),
-                        Refinement => graph.inbound.refinements.upsert(src, idx),
-                        Derivation => graph.inbound.derivations.upsert(src, idx),
+                for trace in &req.traceability {
+                    if let Some(source) = trace.target.target() {
+                        neighbors[*source].inbound.traceability[trace.kind].push(idx);
+                        neighbors[idx].outbound.traceability[trace.kind].push(*source);
                     }
-                    match trace.kind {
-                        Specialization => graph.outbound.specializations.upsert(idx, src),
-                        Refinement => graph.outbound.refinements.upsert(idx, src),
-                        Derivation => graph.outbound.derivations.upsert(idx, src),
-                    }
+                }
+
+                use node::entity::RequirementVariant::*;
+
+                match &req.variant {
+                    Formal(expr) => expression::collect_neighbors(&expr, neighbors, idx),
+                    Informal(markup) => markup::collect_neighbors(&markup, neighbors, idx),
                 }
             }
 
-            use node::entity::RequirementVariant::*;
-
-            match &req.variant {
-                Formal(expr) => expression::build_graph(&expr, graph, idx),
-                Informal(markup) => markup::build_graph(&markup, graph, idx),
-            }
-        }
-    });
+            Some(idx)
+        })
+        .for_each(drop);
 }
 
 mod expression {
     use crate::{
-        node::{self},
-        semantics::{self, connection::Graph, link::expression},
-        utils::upsert::Upsert,
+        node::{self, expression::Arena},
+        semantics::{self, connection::entity::Neighbors, link::expression::Node},
     };
 
-    pub(super) fn build_graph<P>(
-        arena: &node::expression::Arena<expression::Node<P>>,
-        graph: &mut Graph,
+    pub(super) fn collect_neighbors<P>(
+        arena: &Arena<Node<P>>,
+        neighbors: &mut node::entity::Arena<Neighbors<node::entity::Idx>>,
         parent: node::entity::Idx,
     ) {
         use node::expression::Variant::*;
         use semantics::link::expression::Target::*;
 
-        arena.for_each(|node, _| {
+        arena.into_iter().for_each(|node| {
             if let Identifier(ident) = &node.variant
                 && let Some(Entity(src)) = ident.target.target()
             {
-                graph.inbound.usages.upsert(*src, parent);
-                graph.outbound.usages.upsert(parent, *src);
+                neighbors[*src].inbound.usages.push(parent);
+                neighbors[parent].outbound.usages.push(*src);
             }
         });
     }
@@ -120,16 +74,19 @@ mod expression {
 
 mod markup {
     use crate::{
-        node::entity::Idx,
-        semantics::{connection::Graph, link},
-        utils::upsert::Upsert,
+        node::entity::{Arena, Idx},
+        semantics::{connection::entity::Neighbors, link::markup::Node},
     };
 
-    pub(super) fn build_graph<P>(node: &link::markup::Node<P>, graph: &mut Graph, parent: Idx) {
+    pub(super) fn collect_neighbors<P>(
+        node: &Node<P>,
+        graph: &mut Arena<Neighbors<Idx>>,
+        parent: Idx,
+    ) {
         for rf in node.container.references() {
             if let Some(src) = rf.target() {
-                graph.inbound.usages.upsert(*src, parent);
-                graph.outbound.usages.upsert(parent, *src);
+                graph[*src].inbound.usages.push(parent);
+                graph[parent].outbound.usages.push(*src);
             }
         }
     }

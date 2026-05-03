@@ -2,9 +2,9 @@ use crate::{node::arena, utils::children::ChildrenIter};
 
 #[derive(Default, Debug, Copy, Clone, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub struct IdxMarker;
-pub type Idx = arena::Idx<IdxMarker>;
+pub type Idx = arena::idx::Idx<IdxMarker>;
 pub type Arena<T> = arena::Arena<T, IdxMarker>;
-pub type Selector<'a, T> = arena::Selector<'a, T, IdxMarker>;
+pub type Selector<'a, T> = arena::selector::Selector<'a, T, IdxMarker>;
 
 #[derive(Default, Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Node<P, R, I = Idx> {
@@ -48,39 +48,39 @@ impl<P, R, I> Node<P, R, I> {
     }
 }
 
-impl<'a, N, R, I: 'a> ChildrenIter<'a, I> for Node<N, R, I> {
-    fn children_iter(&'a self) -> impl Iterator<Item = &'a I> {
+impl<N, R, I: Copy> ChildrenIter<I> for Node<N, R, I> {
+    fn children_iter(&self) -> impl DoubleEndedIterator<Item = I> {
         self.variant.children_iter()
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum Variant<N, R> {
-    Branch(Branch<N>),
-    When(When<N>),
-    Forall(Forall<N>),
-    Exists(Exists<N>),
-    Select(Select<N>),
-    Aggregation(Aggregation<N>),
+pub enum Variant<I, R> {
+    Branch(Branch<I>),
+    When(When<I>),
+    Forall(Forall<I>),
+    Exists(Exists<I>),
+    Select(Select<I>),
+    Aggregation(Aggregation<I>),
 
-    UnaryOp(UnaryOp<N>),
-    BinOp(BinOp<N>),
-    Function(Function<N>),
+    UnaryOp(UnaryOp<I>),
+    BinOp(BinOp<I>),
+    Function(Function<I>),
 
     Identifier(Identifier<R>),
     Number(Number),
     Boolean(Boolean),
     Undefined,
 
-    Set(Set<N>),
+    Set(Set<I>),
 }
 
 pub trait IntoVariable<N, R> {
     fn into_variant(self) -> Variant<N, R>;
 }
 
-impl<'a, N: 'a, R> ChildrenIter<'a, N> for Variant<N, R> {
-    fn children_iter(&'a self) -> impl Iterator<Item = &'a N> {
+impl<I: Copy, R> ChildrenIter<I> for Variant<I, R> {
+    fn children_iter(&self) -> impl DoubleEndedIterator<Item = I> {
         use Variant::*;
 
         let mut children = Vec::new();
@@ -155,7 +155,7 @@ impl<'a, N: 'a, R> ChildrenIter<'a, N> for Variant<N, R> {
             Undefined => {}
         };
 
-        children.into_iter()
+        children.into_iter().map(|i| *i)
     }
 }
 
