@@ -221,19 +221,24 @@ mod tests {
 
         let set_x = syntax::expression::Node::new(
             (),
-            Set(node::expression::Set { elements: vec![4.into()] }),
+            Set(node::expression::Set {
+                elements: vec![4.into()],
+            }),
         );
 
-        let req = formal("r", vec![
-            outer_forall,               // 0: outer forall
-            identifier("real"),         // 1: domain of x
-            inner_forall,               // 2: inner forall (body of outer)
-            set_x,                      // 3: {x} (domain of y)
-            identifier("x"),            // 4: x (element of {x})
-            binary(GreaterThan, 6, 7),  // 5: y > 1 (body of inner)
-            identifier("y"),            // 6: y
-            number(1),                  // 7: 1
-        ]);
+        let req = formal(
+            "r",
+            vec![
+                outer_forall,              // 0: outer forall
+                identifier("real"),        // 1: domain of x
+                inner_forall,              // 2: inner forall (body of outer)
+                set_x,                     // 3: {x} (domain of y)
+                identifier("x"),           // 4: x (element of {x})
+                binary(GreaterThan, 6, 7), // 5: y > 1 (body of inner)
+                identifier("y"),           // 6: y
+                identifier("x"),           // 7: 1
+            ],
+        );
         p.variant.children_mut().unwrap().push(1.into());
 
         let typed = resolve_and_evaluate(vec![p, req].into());
@@ -242,6 +247,7 @@ mod tests {
         let expr = r.variant.expressions().next().unwrap().clone();
         assert_eq!(expr[4.into()].payload, Ok(TypeKind::Number)); // x is Number
         assert_eq!(expr[6.into()].payload, Ok(TypeKind::Number)); // y is Number
+        assert_eq!(expr[7.into()].payload, Ok(TypeKind::Number)); // y is Number
     }
 
     #[test]

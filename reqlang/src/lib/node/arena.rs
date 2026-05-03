@@ -1,6 +1,6 @@
 use std::{
     marker::PhantomData,
-    ops::{Index, IndexMut, Range},
+    ops::{Index, IndexMut},
 };
 
 use crate::utils::children::ChildrenIter;
@@ -17,21 +17,6 @@ impl<T, M> Arena<T, M> {
             .take(self.inner.len())
             .collect::<Vec<_>>()
             .into()
-    }
-
-    // INVARIANT: Assumes the arena is in DFS order
-    pub fn descendants<'a>(&'a self, start: Idx<M>) -> Range<Idx<M>>
-    where
-        T: ChildrenIter<'a, Idx<M>> + 'a,
-        M: 'a + Copy + PartialOrd + Ord,
-    {
-        let mut end = start;
-        self.walk1(start, (), |node, _, _| match node.children_iter().last() {
-            Some(idx) if *idx > end => end = *idx,
-            _ => {}
-        });
-
-        Range { start, end }
     }
 
     pub fn as_ref(&self) -> Arena<&T, M> {
@@ -54,13 +39,6 @@ impl<T, M> Arena<T, M> {
             .into_iter()
             .enumerate()
             .map(|(idx, t)| f(t, idx.into()))
-            .collect::<Vec<_>>()
-            .into()
-    }
-
-    pub fn subrange(&self, range: Range<Idx<M>>) -> Arena<&T, M> {
-        self.inner[usize::from(range.start)..usize::from(range.end)]
-            .iter()
             .collect::<Vec<_>>()
             .into()
     }

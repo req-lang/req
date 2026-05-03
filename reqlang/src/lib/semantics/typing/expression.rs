@@ -92,29 +92,23 @@ fn collect_in_order<N, E, M>(
                 if let Some(typs) = &types[*tgt]
                     && typs[Idx::root()].is_none() =>
             {
-                let sel = entity.clone().set(*tgt);
-                collect_types(sel, expression.arena(), types);
+                collect_types(entity.set(*tgt), expression.arena(), types);
             }
             Some(Target::Expression(domain))
                 if types[entity.idx()].as_ref().unwrap()[*domain].is_none() =>
             {
-                let arena = expression.arena();
-                let descendants = arena.descendants(*domain);
-                let arena = arena.subrange(descendants).map(|n, _| *n);
-                collect_types(entity, &arena, types);
+                collect_in_order(entity, expression.set(*domain), types);
             }
             _ => {}
         },
         variant => {
             for child in variant.children_iter() {
-                collect_in_order(entity, expression.clone().set(*child), types);
+                collect_in_order(entity, expression.set(*child), types);
             }
         }
     }
 
-    if types[entity.idx()].as_ref().unwrap()[expression.idx()].is_none() {
-        let sel = node::entity::Selector::new(types, entity.idx());
-        let result = Some(evaluate_node(sel, expression));
-        types[entity.idx()].as_mut().unwrap()[expression.idx()] = result;
-    }
+    let sel = node::entity::Selector::new(types, entity.idx());
+    let result = Some(evaluate_node(sel, expression));
+    types[entity.idx()].as_mut().unwrap()[expression.idx()] = result;
 }
