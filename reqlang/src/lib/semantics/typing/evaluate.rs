@@ -18,9 +18,10 @@ pub(super) fn evaluate_node<P>(
 ) -> TypeResult {
     use Issue::*;
     use node::expression::Variant::*;
-    let typs = types.clone().get();
-    let local = typs.as_ref().unwrap();
-    match &expression.get().variant {
+    let (expressions, expression) = expression.into();
+    let (types, entity) = types.into();
+    let local = types[entity].as_ref().unwrap();
+    match &expressions[expression].variant {
         Branch(branch) => {
             let els = match &branch.otherwise {
                 Some(expr) => Some(type_or_poison(&local, *expr)?),
@@ -172,8 +173,8 @@ pub(super) fn evaluate_node<P>(
         }
 
         Identifier(ident) => match &ident.target.target().ok_or(Poison)? {
-            Target::Entity(tgt) => match &types.set(*tgt).get() {
-                Some(typs) => match type_or_poison(&typs, 0.into())? {
+            Target::Entity(tgt) => match &types[*tgt] {
+                Some(types) => match type_or_poison(&types, 0.into())? {
                     TypeKind::Set(inner) => Ok(inner.as_ref().clone()),
                     typ => Err(NotASet(typ.clone())),
                 },

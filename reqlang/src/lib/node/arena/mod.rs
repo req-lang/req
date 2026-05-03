@@ -60,21 +60,25 @@ impl<T, M> Arena<T, M> {
         U: Clone,
         T: ChildrenIter<Idx<M>>,
     {
+        let len = self.inner.len();
         let mut slots: Vec<Option<T>> = self.inner.into_iter().map(Some).collect();
         let mut stack: Vec<(Idx<M>, U)> = vec![(Idx::root(), ctx)];
-        let mut ret: Vec<V> = Vec::with_capacity(slots.len());
-        let mut children_buf: Vec<Idx<M>> = Vec::new();
+        let mut ret: Vec<Option<V>> = (0..len).map(|_| None).collect();
+        let mut buf: Vec<Idx<M>> = Vec::new();
 
         while let Some((idx, ctx)) = stack.pop() {
             let node = slots[usize::from(idx)].take().unwrap();
-            children_buf.clear();
-            children_buf.extend(node.children_iter());
+            buf.clear();
+            buf.extend(node.children_iter());
             let (ctx, value) = f(node, ctx, idx);
-            ret.push(value);
-            stack.extend(children_buf.iter().copied().map(|c| (c, ctx.clone())).rev());
+            ret[usize::from(idx)] = Some(value);
+            stack.extend(buf.iter().copied().map(|c| (c, ctx.clone())).rev());
         }
 
-        ret.into()
+        ret.into_iter()
+            .map(|v| v.unwrap())
+            .collect::<Vec<_>>()
+            .into()
     }
 
     pub fn cycles<I, F>(&self, mut f: F) -> Vec<Vec<Idx<M>>>

@@ -1,4 +1,5 @@
 use std::{
+    fmt::{Debug, Display},
     hash::Hash,
     marker::PhantomData,
     ops::{Index, IndexMut},
@@ -6,7 +7,6 @@ use std::{
 
 use crate::node::arena::Arena;
 
-#[derive(Debug)]
 pub struct Idx<M> {
     inner: usize,
     phantom: PhantomData<M>,
@@ -74,6 +74,18 @@ impl<M> From<usize> for Idx<M> {
             inner: value,
             phantom: PhantomData,
         }
+    }
+}
+
+impl<M> Debug for Idx<M> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Idx({})", self.inner)
+    }
+}
+
+impl<M> Display for Idx<M> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.inner)
     }
 }
 

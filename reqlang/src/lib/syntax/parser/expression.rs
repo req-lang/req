@@ -1,5 +1,6 @@
 use std::{cell::RefCell, rc::Rc, sync::OnceLock};
 
+use itertools::Itertools;
 use pest::{
     Parser,
     iterators::Pair,
@@ -9,6 +10,7 @@ use pest::{
 use crate::{
     node::{self, expression::*},
     syntax::location::{Position, Span},
+    utils::children::ChildrenIter,
 };
 
 use pest_derive;
@@ -24,14 +26,15 @@ pub fn parse(input: &str, offset: &Position) -> Result<Arena<Node>, Span> {
         Ok(mut pair) => {
             Builder::new(offset).build(pair.next().unwrap(), &mut arena);
             let len = arena.len();
-            arena.reverse();
-            let arena: Vec<_> = arena
+            let mut arena: Vec<_> = arena
                 .into_iter()
                 .map(|node| {
                     let variant = node.variant.mape(|idx| (len - 1 - usize::from(idx)).into());
                     Node::new(node.payload, variant)
                 })
                 .collect();
+
+            arena.reverse();
             Ok(arena.into())
         }
         Err(err) => Err(Span::from((err.line_col, err.location)) + *offset),
