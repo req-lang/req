@@ -1,6 +1,5 @@
 use std::{cell::RefCell, rc::Rc, sync::OnceLock};
 
-use itertools::Itertools;
 use pest::{
     Parser,
     iterators::Pair,
@@ -26,15 +25,32 @@ pub fn parse(input: &str, offset: &Position) -> Result<Arena<Node>, Span> {
         Ok(mut pair) => {
             Builder::new(offset).build(pair.next().unwrap(), &mut arena);
             let len = arena.len();
-            let mut arena: Vec<_> = arena
-                .into_iter()
-                .map(|node| {
-                    let variant = node.variant.mape(|idx| (len - 1 - usize::from(idx)).into());
-                    Node::new(node.payload, variant)
-                })
-                .collect();
 
-            arena.reverse();
+            // Pratt parser builds bottom-up: root is at len-1, children always at lower indices.
+            // DFS from root assigns each node its pre-order index in one pass.
+            let mut old_to_new = vec![0usize; len];
+            let mut stack = vec![len - 1];
+            let mut new_pos = 0usize;
+            while let Some(idx) = stack.pop() {
+                old_to_new[idx] = new_pos;
+                new_pos += 1;
+                let children: Vec<_> = arena[idx].children_iter().collect();
+                for child in children.into_iter().rev() {
+                    stack.push(usize::from(child));
+                }
+            }
+
+            let mut new_arena: Vec<Option<Node>> = (0..len).map(|_| None).collect();
+            for (old_idx, node) in arena.into_iter().enumerate() {
+                let new_idx = old_to_new[old_idx];
+                let remapped = Node::new(
+                    node.payload,
+                    node.variant.mape(|idx| old_to_new[usize::from(idx)].into()),
+                );
+                new_arena[new_idx] = Some(remapped);
+            }
+
+            let arena: Vec<Node> = new_arena.into_iter().map(|n| n.unwrap()).collect();
             Ok(arena.into())
         }
         Err(err) => Err(Span::from((err.line_col, err.location)) + *offset),

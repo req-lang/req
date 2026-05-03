@@ -60,7 +60,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Command::Check { input } => {
             let start = std::time::Instant::now();
-            let source = fs::read_to_string(&input)?;
+            let source = std::fs::read_to_string(&input)?;
             let arena = parser::parse(&source)?;
             let spans: Arena<_> = (&arena).into_iter().map(|n| n.payload.clone()).collect();
 
@@ -89,10 +89,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             let elapsed = start.elapsed();
             let mut count = 0;
-            arena.into_iter().zip(issues).for_each(|(node, issues)| {
+
+            for (node, issues) in arena.into_iter().zip(issues) {
                 count += issues.len();
                 if issues.is_empty() {
-                    return;
+                    continue;
                 }
 
                 let path = node.payload.location.path;
@@ -103,7 +104,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 for issue in issues {
                     eprintln!("    {}", issue.colored_message());
                 }
-            });
+            }
 
             match count {
                 0 => println!("no issues ({:.2?})", elapsed),
