@@ -1,5 +1,3 @@
-use std::cell::{Ref, RefCell};
-
 use crate::{
     node::{
         self,
@@ -15,13 +13,13 @@ use crate::{
 };
 
 pub(super) fn evaluate_node<P>(
-    types: node::entity::Selector<Option<RefCell<Arena<Option<TypeResult>>>>>,
+    types: node::entity::Selector<Option<Arena<Option<TypeResult>>>>,
     expression: Selector<&Node<P>>,
 ) -> TypeResult {
     use Issue::*;
     use node::expression::Variant::*;
     let typs = types.clone().get();
-    let local = typs.as_ref().unwrap().borrow();
+    let local = typs.as_ref().unwrap();
     match &expression.get().variant {
         Branch(branch) => {
             let els = match &branch.otherwise {
@@ -175,7 +173,7 @@ pub(super) fn evaluate_node<P>(
 
         Identifier(ident) => match &ident.target.target().ok_or(Poison)? {
             Target::Entity(tgt) => match &types.set(*tgt).get() {
-                Some(typs) => match type_or_poison(&typs.borrow(), 0.into())? {
+                Some(typs) => match type_or_poison(&typs, 0.into())? {
                     TypeKind::Set(inner) => Ok(inner.as_ref().clone()),
                     typ => Err(NotASet(typ.clone())),
                 },
@@ -197,7 +195,7 @@ pub(super) fn evaluate_node<P>(
 }
 
 fn evaluate_case(
-    types: &Ref<'_, Arena<Option<TypeResult>>>,
+    types: &Arena<Option<TypeResult>>,
     case: &Case<Idx>,
     expected: Option<TypeKind>,
 ) -> TypeResult {
@@ -217,10 +215,7 @@ fn evaluate_case(
     }
 }
 
-fn evaluate_set_element(
-    types: &Ref<'_, Arena<Option<TypeResult>>>,
-    set: &SetElement<Idx>,
-) -> TypeResult {
+fn evaluate_set_element(types: &Arena<Option<TypeResult>>, set: &SetElement<Idx>) -> TypeResult {
     use Issue::*;
     use TypeKind::*;
 
@@ -239,7 +234,7 @@ fn evaluate_set_element(
     Ok(*typ.clone())
 }
 
-fn type_or_poison(types: &Ref<'_, Arena<Option<TypeResult>>>, idx: Idx) -> TypeResult {
+fn type_or_poison(types: &Arena<Option<TypeResult>>, idx: Idx) -> TypeResult {
     types[idx]
         .clone()
         .unwrap()

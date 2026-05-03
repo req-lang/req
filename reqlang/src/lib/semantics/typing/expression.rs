@@ -1,4 +1,4 @@
-use std::{cell::RefCell, fmt::Display};
+use std::fmt::Display;
 
 use crate::{
     issue::Severity,
@@ -66,7 +66,7 @@ impl From<&Issue> for Severity {
 pub(super) fn collect_types<N, E, M>(
     entity: node::entity::Selector<&entity::Node<N, E, M>>,
     arena: &Arena<&Node<E>>,
-    types: &node::entity::Arena<Option<RefCell<Arena<Option<TypeResult>>>>>,
+    types: &mut node::entity::Arena<Option<Arena<Option<TypeResult>>>>,
 ) {
     arena.for_each(|_, idx| {
         collect_in_order(entity, Selector::new(arena, idx), types);
@@ -76,26 +76,28 @@ pub(super) fn collect_types<N, E, M>(
 fn collect_in_order<N, E, M>(
     entity: node::entity::Selector<&entity::Node<N, E, M>>,
     expression: Selector<&Node<E>>,
-    types: &node::entity::Arena<Option<RefCell<Arena<Option<TypeResult>>>>>,
+    types: &mut node::entity::Arena<Option<Arena<Option<TypeResult>>>>,
 ) {
     use node::expression::Variant::*;
 
-    let typs = match &types[entity.idx()] {
+    match &types[entity.idx()] {
         None => return,
-        Some(typs) if typs.borrow()[expression.idx()].is_some() => return,
-        Some(typs) => typs,
+        Some(typs) if typs[expression.idx()].is_some() => return,
+        Some(_) => {}
     };
 
     match &expression.get().variant {
         Identifier(ident) => match &ident.target.target() {
             Some(Target::Entity(tgt))
                 if let Some(typs) = &types[*tgt]
-                    && typs.borrow()[Idx::root()].is_none() =>
+                    && typs[Idx::root()].is_none() =>
             {
                 let sel = entity.clone().set(*tgt);
                 collect_types(sel, expression.arena(), types);
             }
-            Some(Target::Expression(domain)) if typs.borrow()[*domain].is_none() => {
+            Some(Target::Expression(domain))
+                if types[entity.idx()].as_ref().unwrap()[*domain].is_none() =>
+            {
                 let arena = expression.arena();
                 let descendants = arena.descendants(*domain);
                 let arena = arena.subrange(descendants).map(|n, _| *n);
@@ -110,9 +112,9 @@ fn collect_in_order<N, E, M>(
         }
     }
 
-    if typs.borrow()[expression.idx()].is_none() {
+    if types[entity.idx()].as_ref().unwrap()[expression.idx()].is_none() {
         let sel = node::entity::Selector::new(types, entity.idx());
         let result = Some(evaluate_node(sel, expression));
-        typs.borrow_mut()[expression.idx()] = result;
+        types[entity.idx()].as_mut().unwrap()[expression.idx()] = result;
     }
 }

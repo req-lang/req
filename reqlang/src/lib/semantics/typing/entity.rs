@@ -1,5 +1,3 @@
-use std::cell::RefCell;
-
 use crate::{
     node::entity::{Arena, Selector},
     semantics::{
@@ -12,13 +10,11 @@ use crate::{
 };
 
 pub(super) fn evaluate<N, E, M>(arena: Arena<Node<N, E, M>>) -> Arena<Node<N, TypeResult, M>> {
-    let types = arena.as_ref().map_(|node| {
-        let init = node
-            .variant
+    let mut types = arena.as_ref().map_(|node| {
+        node.variant
             .expressions()
             .next()
-            .map(|expr| expr.empty::<Option<TypeResult>>());
-        init.map(RefCell::new)
+            .map(|expr| expr.empty::<Option<TypeResult>>())
     });
 
     // TODO: Refactor this mess
@@ -26,13 +22,13 @@ pub(super) fn evaluate<N, E, M>(arena: Arena<Node<N, E, M>>) -> Arena<Node<N, Ty
         if let Some(expr) = node.variant.expressions().next() {
             let ents = arena.as_ref();
             let entity = Selector::new(&ents, idx);
-            expression::collect_types(entity, &expr.as_ref(), &types);
+            expression::collect_types(entity, &expr.as_ref(), &mut types);
         }
     });
 
     arena.zip_map(types, |node, t| {
         let variant = node.variant.mape(|n| {
-            n.zip(t.unwrap().into_inner().map(|t, _| t.unwrap()))
+            n.zip(t.unwrap().map(|t, _| t.unwrap()))
                 .map_(|(node, typ)| node.map(|_| typ))
         });
         Node::new(node.payload, node.meta, variant)
