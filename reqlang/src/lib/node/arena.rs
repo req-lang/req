@@ -3,7 +3,7 @@ use std::{
     ops::{Index, IndexMut},
 };
 
-use crate::utils::children::ChildrenIter;
+use crate::utils::{children::ChildrenIter, upsert::Upsert};
 
 #[derive(Default, Debug, Clone, Eq, PartialEq)]
 pub struct Arena<T, M> {

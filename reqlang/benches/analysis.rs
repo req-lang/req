@@ -66,6 +66,31 @@ pub mod simple {
     }
 }
 
+pub mod expression {
+    use reqlang::mock::generator::{ExponentialSizeIterator, ExpressionTyping};
+
+    use super::*;
+
+    pub fn cycles(c: &mut Criterion) {
+        let mut group = c.benchmark_group("analysis::expression_typing::cycles");
+        group.plot_config(PlotConfiguration::default().summary_scale(AxisScale::Logarithmic));
+        for size in ExponentialSizeIterator::new().take(7) {
+            let generator = ExpressionTyping::new(size);
+
+            let id = BenchmarkId::from_parameter(size);
+            group.throughput(Throughput::Elements(generator.size()));
+            group.bench_function(id, |b| {
+                b.iter_batched(
+                    || generator.generate(),
+                    complete_pipeline,
+                    BatchSize::SmallInput,
+                );
+            });
+        }
+        group.finish();
+    }
+}
+
 pub mod reference {
     use reqlang::mock::generator::{ExponentialSizeIterator, ReferenceResolution};
 
@@ -95,6 +120,7 @@ criterion_group!(
     benches,
     simple::package,
     simple::depth,
+    expression::cycles,
     reference::requirements
 );
 criterion_main!(benches);

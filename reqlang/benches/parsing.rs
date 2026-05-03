@@ -61,9 +61,65 @@ pub mod simple {
     }
 }
 
+pub mod reference {
+    use reqlang::{
+        mock::generator::{ExponentialSizeIterator, ReferenceResolution},
+        renderer, syntax,
+    };
+
+    use super::*;
+
+    pub fn requirements(c: &mut Criterion) {
+        let mut group = c.benchmark_group("parsing::reference_resolution::requirements");
+        group.plot_config(PlotConfiguration::default().summary_scale(AxisScale::Logarithmic));
+        for size in ExponentialSizeIterator::new().take(7) {
+            let generator = ReferenceResolution::new(size);
+            let root = generator.generate();
+            let input = renderer::formatter::format_string(&root, 0);
+
+            let id = BenchmarkId::from_parameter(size);
+            group.throughput(Throughput::Elements(generator.size()));
+            group.bench_with_input(id, &input, |b, input| {
+                b.iter(|| syntax::parser::parse(std::hint::black_box(input)))
+            });
+        }
+        group.finish();
+    }
+}
+
+pub mod typing {
+    use reqlang::{
+        mock::generator::{ExponentialSizeIterator, ExpressionTyping},
+        renderer, syntax,
+    };
+
+    use super::*;
+
+    pub fn cycles(c: &mut Criterion) {
+        let mut group = c.benchmark_group("parsing::expression_typing::cycles");
+        group.plot_config(PlotConfiguration::default().summary_scale(AxisScale::Logarithmic));
+        for size in ExponentialSizeIterator::new().take(7) {
+            let generator = ExpressionTyping::new(size);
+            let root = generator.generate();
+            let input = renderer::formatter::format_string(&root, 0);
+
+            let id = BenchmarkId::from_parameter(size);
+            group.throughput(Throughput::Elements(generator.size()));
+            group.bench_with_input(id, &input, |b, input| {
+                b.iter(|| syntax::parser::parse(std::hint::black_box(input)))
+            });
+        }
+        group.finish();
+    }
+}
+
 criterion_group!(
     name = benches;
     config = Criterion::default();
-    targets = simple::package, simple::depth, simple::words
+    targets = simple::package,
+              simple::depth,
+              simple::words,
+              reference::requirements,
+              typing::cycles
 );
 criterion_main!(benches);

@@ -181,6 +181,136 @@ pub mod generator {
             3 + self.requirements
         }
     }
+
+    /// Flat tree: root package containing one part "attrs" (with attr_a: real, attr_b: real,
+    /// attr_bool: boolean) and N*3 formal requirements cycling through:
+    ///   - addition:  attr_a + attr_b
+    ///   - forall:    forall x in real, x > 0
+    ///   - when:      when attr_bool then attr_a + 1
+    pub struct ExpressionTyping {
+        pub cycles: u64,
+    }
+
+    impl ExpressionTyping {
+        pub fn new(cycles: u64) -> Self {
+            Self { cycles }
+        }
+    }
+
+    impl Generate for ExpressionTyping {
+        fn generate(&self) -> Arena<Node> {
+            let mut arena: Vec<Rc<RefCell<Node>>> = {
+                let root = Rc::new(RefCell::new(package("root")));
+                let attrs = Rc::new(RefCell::new(part("attrs")));
+                let mut arena = vec![
+                    root.clone(),                                                      // 0
+                    attrs.clone(),                                                     // 1
+                    Rc::new(RefCell::new(super::entity::attribute("attr_a", "real"))), // 2
+                    Rc::new(RefCell::new(super::entity::attribute("attr_b", "real"))), // 3
+                    Rc::new(RefCell::new(super::entity::attribute(
+                        "attr_bool",
+                        "boolean",
+                    ))), // 4
+                ];
+                push_child(&root, 1);
+                push_child(&attrs, 2);
+                push_child(&attrs, 3);
+                push_child(&attrs, 4);
+
+                for i in 0..self.cycles {
+                    arena.push(Rc::new(RefCell::new(make_addition(i))));
+                    push_child(&root, arena.len() - 1);
+                    arena.push(Rc::new(RefCell::new(make_forall(i))));
+                    push_child(&root, arena.len() - 1);
+                    arena.push(Rc::new(RefCell::new(make_when(i))));
+                    push_child(&root, arena.len() - 1);
+                }
+                arena
+            };
+
+            arena
+                .into_iter()
+                .map(|n| RefCell::into_inner(Rc::try_unwrap(n).unwrap()))
+                .collect::<Vec<_>>()
+                .into()
+        }
+
+        fn size(&self) -> u64 {
+            5 + self.cycles * 3 // root + part + 3 attrs + N*3 reqs
+        }
+    }
+
+    fn make_addition(i: u64) -> Node {
+        use crate::node::expression::{BinOp, BinaryOperator, Variant};
+        use crate::syntax::expression::Node as ExprNode;
+        // 0: attr_a + attr_b
+        // 1: identifier("root::attrs::attr_a")
+        // 2: identifier("root::attrs::attr_b")
+        let exprs = vec![
+            ExprNode::empty(Variant::BinOp(BinOp::new(
+                BinaryOperator::Plus,
+                1.into(),
+                2.into(),
+            ))),
+            super::expression::identifier("root::attrs::attr_a"),
+            super::expression::identifier("root::attrs::attr_b"),
+        ];
+        super::entity::formal(&format!("addition_{i}"), exprs)
+    }
+
+    fn make_forall(i: u64) -> Node {
+        use crate::node::expression::{BinOp, BinaryOperator, Forall, SetElement, Variant};
+        use crate::syntax::expression::Node as ExprNode;
+        // 0: forall x in real, x > 0
+        // 1: identifier("real")
+        // 2: x > 0
+        // 3: identifier("x")
+        // 4: number(0)
+        let set = SetElement::new("x".to_string(), 1.into());
+        let forall_node = Forall::new(set, 2.into());
+        let exprs = vec![
+            ExprNode::empty(Variant::Forall(forall_node)),
+            super::expression::identifier("real"),
+            ExprNode::empty(Variant::BinOp(BinOp::new(
+                BinaryOperator::GreaterThan,
+                3.into(),
+                4.into(),
+            ))),
+            super::expression::identifier("x"),
+            super::expression::number(0),
+        ];
+        super::entity::formal(&format!("forall_{i}"), exprs)
+    }
+
+    fn make_when(i: u64) -> Node {
+        use crate::node::expression::{BinOp, BinaryOperator, Case, Variant, When};
+        use crate::syntax::expression::Node as ExprNode;
+        // 0: when attr_bool then attr_a + 1
+        // 1: identifier("root::attrs::attr_bool")
+        // 2: attr_a + 1
+        // 3: identifier("root::attrs::attr_a")
+        // 4: number(1)
+        let case = Case {
+            condition: 1.into(),
+            consequence: 2.into(),
+        };
+        let when_node = When {
+            cases: vec![case],
+            otherwise: None,
+        };
+        let exprs = vec![
+            ExprNode::empty(Variant::When(when_node)),
+            super::expression::identifier("root::attrs::attr_bool"),
+            ExprNode::empty(Variant::BinOp(BinOp::new(
+                BinaryOperator::Plus,
+                3.into(),
+                4.into(),
+            ))),
+            super::expression::identifier("root::attrs::attr_a"),
+            super::expression::number(1),
+        ];
+        super::entity::formal(&format!("when_{i}"), exprs)
+    }
 }
 
 pub mod entity {
