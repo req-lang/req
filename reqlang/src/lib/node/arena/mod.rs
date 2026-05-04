@@ -1,8 +1,9 @@
-use std::{collections::HashSet, marker::PhantomData};
+use std::{collections::HashSet, iter::FusedIterator, marker::PhantomData};
 
 use crate::{node::arena::idx::Idx, utils::children::ChildrenIter};
 
 pub mod idx;
+pub mod mutation;
 pub mod selector;
 
 /// Arena containing elements that can reference to each other
@@ -23,6 +24,13 @@ impl<T, M> Arena<T, M> {
             .into()
     }
 
+    pub fn descendants<'a>(&'a self, idx: Idx<M>) -> DescendantIter<'a, T, M> {
+        DescendantIter {
+            arena: self,
+            stack: vec![idx],
+        }
+    }
+
     pub fn walk<'a, U>(
         &'a self,
         ctx: U,
@@ -33,6 +41,7 @@ impl<T, M> Arena<T, M> {
         T: ChildrenIter<Idx<M>>,
     {
         WalkIter {
+            remaining: self.inner.len(),
             arena: self,
             stack: vec![(Idx::root(), ctx)],
             f,
@@ -49,6 +58,7 @@ impl<T, M> Arena<T, M> {
         T: ChildrenIter<Idx<M>>,
     {
         WalkIterMut {
+            remaining: self.inner.len(),
             arena: self,
             stack: vec![(Idx::root(), ctx)],
             f,
@@ -132,7 +142,25 @@ impl<T, M> Arena<T, M> {
     }
 }
 
+pub struct DescendantIter<'a, T, M> {
+    arena: &'a Arena<T, M>,
+    stack: Vec<Idx<M>>,
+}
+
+impl<'a, T: ChildrenIter<Idx<M>>, M> Iterator for DescendantIter<'a, T, M> {
+    type Item = Idx<M>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let idx = self.stack.pop()?;
+        let node = &self.arena[idx];
+        let children = node.children_iter().rev();
+        self.stack.extend(children);
+        Some(idx)
+    }
+}
+
 pub struct WalkIter<'a, T, U, F, M> {
+    remaining: usize,
     arena: &'a Arena<T, M>,
     stack: Vec<(Idx<M>, U)>,
     f: F,
@@ -148,6 +176,7 @@ where
 
     fn next(&mut self) -> Option<Self::Item> {
         let (idx, ctx) = self.stack.pop()?;
+        self.remaining -= 1;
         let node = &self.arena[idx];
         let ctx = (self.f)(node, ctx, idx);
         let children = node.children_iter().map(|c| (c, ctx.clone())).rev();
@@ -156,7 +185,27 @@ where
     }
 }
 
+impl<'a, T, U, F, M> ExactSizeIterator for WalkIter<'a, T, U, F, M>
+where
+    F: FnMut(&T, U, Idx<M>) -> U,
+    T: ChildrenIter<Idx<M>>,
+    U: Clone,
+{
+    fn len(&self) -> usize {
+        self.remaining
+    }
+}
+
+impl<'a, T, U, F, M> FusedIterator for WalkIter<'a, T, U, F, M>
+where
+    F: FnMut(&T, U, Idx<M>) -> U,
+    T: ChildrenIter<Idx<M>>,
+    U: Clone,
+{
+}
+
 pub struct WalkIterMut<'a, T, U, F, M> {
+    remaining: usize,
     arena: &'a mut Arena<T, M>,
     stack: Vec<(Idx<M>, U)>,
     f: F,
@@ -172,6 +221,7 @@ where
 
     fn next(&mut self) -> Option<Self::Item> {
         let (idx, ctx) = self.stack.pop()?;
+        self.remaining -= 1;
         let node = &mut self.arena[idx];
         let ret = std::ptr::from_mut(node);
         let ctx = (self.f)(node, ctx, idx);
@@ -180,6 +230,25 @@ where
         self.stack.extend(children);
         Some((node, ctx, idx))
     }
+}
+
+impl<'a, T, U, F, M> ExactSizeIterator for WalkIterMut<'a, T, U, F, M>
+where
+    F: FnMut(&mut T, U, Idx<M>) -> U,
+    T: ChildrenIter<Idx<M>>,
+    U: Clone,
+{
+    fn len(&self) -> usize {
+        self.remaining
+    }
+}
+
+impl<'a, T, U, F, M> FusedIterator for WalkIterMut<'a, T, U, F, M>
+where
+    F: FnMut(&mut T, U, Idx<M>) -> U,
+    T: ChildrenIter<Idx<M>>,
+    U: Clone,
+{
 }
 
 impl<T, M> IntoIterator for Arena<T, M> {

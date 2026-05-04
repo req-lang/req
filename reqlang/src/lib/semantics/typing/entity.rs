@@ -1,3 +1,5 @@
+use itertools::Itertools;
+
 use crate::{
     node::{self, arena::ArenaEnumerate, entity::Arena},
     semantics::{
@@ -28,12 +30,12 @@ pub(super) fn evaluate<N, E, M>(arena: Arena<Node<N, E, M>>) -> Arena<Node<N, Ty
 
     arena
         .into_iter()
-        .zip(types)
+        .zip_eq(types)
         .map(|(node, t)| {
             let variant = node.variant.mape(|n| {
                 let types: Arena<_> = t.unwrap().into_iter().map(|t| t.unwrap()).collect();
                 n.into_iter()
-                    .zip(types)
+                    .zip_eq(types)
                     .map(|(node, typ)| node.map(|_| typ))
                     .collect::<node::expression::Arena<_>>()
             });

@@ -3,6 +3,8 @@ use std::{
     ops::{Index, IndexMut},
 };
 
+use itertools::Itertools;
+
 use crate::{
     node::{
         arena::ArenaEnumerate,
@@ -182,7 +184,7 @@ pub(super) fn connect<N, E, M>(
         .collect();
     let mut arena = arena
         .into_iter()
-        .zip(neighbors)
+        .zip_eq(neighbors)
         .map(|(node, neighbors)| node.map(|_| neighbors))
         .collect::<Arena<_>>();
 

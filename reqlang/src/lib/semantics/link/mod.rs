@@ -51,6 +51,13 @@ impl<I> Link<I> {
             Err(_) => None,
         }
     }
+
+    pub fn target_mut(&mut self) -> Option<&mut I> {
+        match &mut self.resolved {
+            Ok(i) => Some(i),
+            Err(_) => None,
+        }
+    }
 }
 
 impl<I> From<Link<I>> for Path {

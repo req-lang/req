@@ -46,6 +46,28 @@ pub enum Target<I = node::entity::Idx, J = Idx> {
     Builtin(BuiltinKind),
 }
 
+impl<I, J> Target<I, J> {
+    pub fn entity(&self) -> Option<I>
+    where
+        I: Copy,
+    {
+        match self {
+            Target::Entity(rf) => Some(*rf),
+            _ => None,
+        }
+    }
+
+    pub fn entity_mut(&mut self) -> Option<&mut I>
+    where
+        I: Copy,
+    {
+        match self {
+            Target::Entity(rf) => Some(rf),
+            _ => None,
+        }
+    }
+}
+
 pub type Link<I = node::entity::Idx, J = Idx> = super::Link<Target<I, J>>;
 pub type Node<P> = node::expression::Node<P, Link>;
 
