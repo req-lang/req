@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use crate::{
     node::arena::{Arena, idx::Idx},
     utils::children::{Children, ChildrenIter, ChildrenMut},
@@ -57,34 +59,28 @@ impl<T: Replace<M> + ChildrenIter<Idx<M>> + ChildrenMut<Idx<M>> + Children<Idx<M
     }
 
     fn remove(&mut self, idx: Idx<M>) -> T {
-        if self
-            .inner
-            .iter()
-            .find_map(|node| {
-                node.idx_iter()
-                    .find_map(|rf| self.descendants(idx).find(|d| *d == rf))
-            })
-            .is_some()
-        {
+        let descendants: HashSet<_> = self.descendants(idx).collect();
+        if self.inner.iter().enumerate().any(|(i, node)| {
+            !descendants.contains(&Idx::from(i))
+                && node.idx_iter().any(|rf| descendants.contains(&rf))
+        }) {
             panic!("element or its children still referenced");
         }
 
         let (parent, pos) = self
             .into_iter()
-            .filter_map(|n| n.children())
             .enumerate()
-            .find_map(|(i, c)| {
-                c.iter()
+            .filter_map(|(idx, n)| n.children().map(|children| (idx, children)))
+            .find_map(|(parent, children)| {
+                children
+                    .iter()
                     .position(|child| *child == idx)
-                    .map(|pos| (i.into(), pos))
+                    .map(|pos| (parent.into(), pos))
             })
             .expect("parent element not found");
 
-        if let Some(children) = self[idx].children() {
-            let children = children.iter().copied().collect::<Vec<_>>();
-            for child in children {
-                self.remove(child);
-            }
+        while let Some(&child) = self[idx].children().and_then(|c| c.first()) {
+            self.remove(child);
         }
 
         for node in self.into_iter() {
