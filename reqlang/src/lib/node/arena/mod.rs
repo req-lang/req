@@ -24,10 +24,13 @@ impl<T, M> Arena<T, M> {
             .into()
     }
 
-    pub fn descendants<'a>(&'a self, idx: Idx<M>) -> DescendantIter<'a, T, M> {
+    pub fn descendants<'a>(&'a self, idx: Idx<M>) -> DescendantIter<'a, T, M>
+    where
+        T: ChildrenIter<Idx<M>>,
+    {
         DescendantIter {
             arena: self,
-            stack: vec![idx],
+            stack: self[idx].children_iter().collect(),
         }
     }
 
@@ -152,9 +155,7 @@ impl<'a, T: ChildrenIter<Idx<M>>, M> Iterator for DescendantIter<'a, T, M> {
 
     fn next(&mut self) -> Option<Self::Item> {
         let idx = self.stack.pop()?;
-        let node = &self.arena[idx];
-        let children = node.children_iter().rev();
-        self.stack.extend(children);
+        self.stack.extend(self.arena[idx].children_iter().rev());
         Some(idx)
     }
 }

@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::fmt::Debug;
 
 use crate::{
     node::arena::{Arena, idx::Idx},
@@ -8,7 +9,9 @@ use crate::{
 pub trait Replace<M> {
     fn idx_iter(&self) -> impl Iterator<Item = Idx<M>>;
 
-    fn replace_idx(&mut self, f: impl FnMut(&mut Idx<M>));
+    fn idx_iter_mut<'a>(&'a mut self) -> impl Iterator<Item = &'a mut Idx<M>>
+    where
+        M: 'a;
 }
 
 pub trait Mutation<T, M> {
@@ -28,7 +31,7 @@ pub trait Mutation<T, M> {
     }
 }
 
-impl<T: Replace<M> + ChildrenIter<Idx<M>> + ChildrenMut<Idx<M>> + Children<Idx<M>>, M>
+impl<T: Debug + Replace<M> + ChildrenIter<Idx<M>> + ChildrenMut<Idx<M>> + Children<Idx<M>>, M>
     Mutation<T, M> for Arena<T, M>
 {
     fn insert(&mut self, elem: T, parent: Idx<M>, after: Option<Idx<M>>) {
@@ -37,32 +40,36 @@ impl<T: Replace<M> + ChildrenIter<Idx<M>> + ChildrenMut<Idx<M>> + Children<Idx<M
             Some(after) => {
                 let pos = children.into_iter().position(|child| *child == after);
                 let pos = pos.expect("before not found in parent") + 1;
-                let idx = usize::from(after) + 1;
+                let desc = self.descendants(after).max().unwrap_or(0.into());
+                let idx = usize::from(after) + usize::from(desc) + 1;
                 (idx.into(), pos)
             }
             None => {
                 let pos = children.len();
-                let idx = usize::from(parent) + pos + 1;
+                let desc = self.descendants(parent).max().unwrap_or(0.into());
+                let idx = usize::from(parent) + usize::from(desc) + 1;
                 (idx.into(), pos)
             }
         };
 
         for node in self.inner.iter_mut() {
-            node.replace_idx(|rf| {
+            for rf in node.idx_iter_mut() {
                 if *rf >= idx {
                     *rf = (usize::from(*rf) + 1).into();
                 }
-            });
+            }
         }
         self[parent].children_mut().unwrap().insert(pos, idx);
         self.inner.insert(idx.into(), elem);
     }
 
     fn remove(&mut self, idx: Idx<M>) -> T {
-        let descendants: HashSet<_> = self.descendants(idx).collect();
+        let mut subtree: HashSet<_> = self.descendants(idx).collect();
+        subtree.insert(idx);
         if self.inner.iter().enumerate().any(|(i, node)| {
-            !descendants.contains(&Idx::from(i))
-                && node.idx_iter().any(|rf| descendants.contains(&rf))
+            !node.children_iter().any(|i| i == idx)
+                && !(subtree.contains(&i.into()))
+                && node.idx_iter().any(|rf| subtree.contains(&rf))
         }) {
             panic!("element or its children still referenced");
         }
@@ -84,11 +91,11 @@ impl<T: Replace<M> + ChildrenIter<Idx<M>> + ChildrenMut<Idx<M>> + Children<Idx<M
         }
 
         for node in self.into_iter() {
-            node.replace_idx(|rf| {
+            for rf in node.idx_iter_mut() {
                 if *rf > idx {
                     *rf = (usize::from(*rf) - 1).into();
                 }
-            });
+            }
         }
 
         self[parent].children_mut().unwrap().remove(pos);
