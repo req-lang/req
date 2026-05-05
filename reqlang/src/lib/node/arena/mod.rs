@@ -3,13 +3,13 @@ use std::{collections::HashSet, iter::FusedIterator, marker::PhantomData};
 use crate::{node::arena::idx::Idx, utils::children::ChildrenIter};
 
 pub mod idx;
-pub mod mutation;
 pub mod selector;
 
 /// Arena containing elements that can reference to each other
 /// - Might have children that implements [ChildrenIter] with [Idx]
 /// - Can have other references as [Idx]
 /// - Must be constructed from DFS ordered tree
+/// - Cannot be mutated directly, only elements can be mutated
 #[derive(Default, Debug, Clone, Eq, PartialEq)]
 pub struct Arena<T, M> {
     inner: Vec<T>,
