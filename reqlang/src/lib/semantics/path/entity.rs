@@ -19,7 +19,7 @@ pub fn discover<N, R, T, E, M>(
         .map(|(idx, node)| {
             let (path, is_duplicate) = paths.remove(&idx).unwrap();
             node.map(|_| match is_duplicate {
-                true => Location::valid(path),
+                false => Location::valid(path),
                 _ => Location::invalid(path, Issue::Duplicated),
             })
         })

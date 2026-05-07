@@ -42,13 +42,12 @@ impl<'a> Iterator for TokenIterator<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         use Token::*;
 
-        while let Some((idx, c)) = self.chars.next() {
-            if self.has_newline {
-                self.has_newline = false;
-                self.start = idx;
-                return Some(Newline);
-            }
+        if self.has_newline {
+            self.has_newline = false;
+            return Some(Newline);
+        }
 
+        while let Some((idx, c)) = self.chars.next() {
             if c == '\n' {
                 if self.in_reference {
                     continue;
@@ -56,7 +55,7 @@ impl<'a> Iterator for TokenIterator<'a> {
 
                 let ret = Text(&self.input[self.start..idx]);
                 self.has_newline = true;
-                self.start = idx;
+                self.start = idx + 1;
                 return Some(ret);
             }
 
@@ -120,6 +119,16 @@ mod tests {
         assert_eq!(
             &tokens[..],
             [Text("some text "), Reference("a reference"), Text("")]
+        );
+    }
+
+    #[test]
+    fn tokenizes_reference_at_start_of_line() {
+        let input = "some text\n{a reference}";
+        let tokens: Vec<_> = input.char_indices().tokens().collect();
+        assert_eq!(
+            &tokens[..],
+            [Text("some text"), Newline, Text(""), Reference("a reference"), Text("")]
         );
     }
 }
