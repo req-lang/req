@@ -94,16 +94,19 @@ fn collect_in_order<N, E, M>(
         && let Some(target) = &ident.target.target()
     {
         match target {
-            Target::Entity(tgt)
+            Target::Entity(tgt) => {
                 if let Some(typs) = &types[*tgt]
-                    && typs[Idx::root()].is_none() =>
-            {
-                if let Some(expr) = entities[*tgt].variant.expressions().next() {
+                    && typs[Idx::root()].is_none()
+                    && let Some(expr) = entities[*tgt].variant.expressions().next()
+                {
                     collect_types((entities, *tgt).into(), expr, types);
                 }
             }
-            Target::Expression(domain) if types[i].as_ref().unwrap()[*domain].is_none() => {
-                collect_in_order((entities, i).into(), (expressions, *domain).into(), types);
+            Target::Expression(idx) => {
+                let domain = expressions[*idx].variant.set_element().unwrap().domain;
+                if types[i].as_ref().unwrap()[domain].is_none() {
+                    collect_in_order((entities, i).into(), (expressions, domain).into(), types);
+                }
             }
             _ => {}
         }

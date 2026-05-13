@@ -128,7 +128,23 @@ mod tests {
         let tokens: Vec<_> = input.char_indices().tokens().collect();
         assert_eq!(
             &tokens[..],
-            [Text("some text"), Newline, Text(""), Reference("a reference"), Text("")]
+            [
+                Text("some text"),
+                Newline,
+                Text(""),
+                Reference("a reference"),
+                Text("")
+            ]
+        );
+    }
+
+    #[test]
+    fn tokenizes_new_lines() {
+        let input = "some text\nother text";
+        let tokens: Vec<_> = input.char_indices().tokens().collect();
+        assert_eq!(
+            &tokens[..],
+            [Text("some text"), Newline, Text("other text")]
         );
     }
 }

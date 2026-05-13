@@ -180,10 +180,13 @@ pub(super) fn evaluate_node<P>(
                 },
                 None => Err(NotEvaluable),
             },
-            Target::Expression(tgt) => match type_or_poison(&local, *tgt)? {
-                TypeKind::Set(inner) => Ok(inner.as_ref().clone()),
-                typ => Err(NotASet(typ.clone())),
-            },
+            Target::Expression(tgt) => {
+                let domain = expressions[*tgt].variant.set_element().unwrap().domain;
+                match type_or_poison(&local, domain)? {
+                    TypeKind::Set(inner) => Ok(inner.as_ref().clone()),
+                    typ => Err(NotASet(typ.clone())),
+                }
+            }
             Target::Builtin(kind) => Ok(TypeKind::from(*kind)),
         },
 

@@ -285,7 +285,7 @@ mod tests {
         let expr_arena = resolved[a_idx].variant.expressions().next().unwrap();
 
         let (body_idx, domain_idx) = match &expr_arena[0.into()].variant {
-            node::expression::Variant::Forall(f) => (f.expression, f.set.domain),
+            node::expression::Variant::Forall(f) => (f.expression, node::expression::Idx::from(0)),
             _ => panic!("expected forall"),
         };
 

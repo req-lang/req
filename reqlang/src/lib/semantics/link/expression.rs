@@ -39,6 +39,7 @@ impl BuiltinKind {
     }
 }
 
+// INVARIANT: When an expression is referenced, J is always a valid set_element
 #[derive(Debug, Clone)]
 pub enum Target<I = node::entity::Idx, J = Idx> {
     Entity(I),
@@ -75,10 +76,10 @@ pub(super) fn link<P, R: Into<Path>>(
     ctx: &entity::FindCtx,
     arena: Arena<node::expression::Node<P, R>>,
 ) -> Arena<Node<P>> {
-    arena.from_walk(HashMap::new(), |node, mut current, _| {
+    arena.from_walk(HashMap::new(), |node, mut current, idx| {
         let node = node.mapr(|rf| find(ctx, &current, rf.into()));
         if let Some(set) = node.variant.set_element() {
-            current.insert(set.variable.clone(), set.domain);
+            current.insert(set.variable.clone(), idx);
         }
         (current, node)
     })
@@ -91,8 +92,8 @@ fn find(ctx: &entity::FindCtx, local: &HashMap<String, Idx>, rf: Path) -> Link {
         return super::Link::valid(rf, Builtin(builtin));
     }
 
-    if let Some(expr) = local.get(rf.as_str()) {
-        return super::Link::valid(rf, Expression(*expr));
+    if let Some(set) = local.get(rf.as_str()) {
+        return super::Link::valid(rf, Expression(*set));
     }
 
     let entity = entity::find(ctx, rf);
