@@ -116,7 +116,7 @@ impl<N, R, T, E, M, I, J> Node<N, R, T, E, M, I, J> {
     }
 }
 
-impl<N, R, T, E, M, I: Copy, J> ChildrenIter<I> for Node<N, R, T, E, M, I, J> {
+impl<N, R, T, E, M, I: Clone, J> ChildrenIter<I> for Node<N, R, T, E, M, I, J> {
     fn children_iter(&self) -> impl DoubleEndedIterator<Item = I> {
         self.variant.children_iter()
     }
@@ -172,11 +172,11 @@ impl<N, R, E, M> IntoChildren<N> for Variant<N, R, E, M> {
     }
 }
 
-impl<I: Copy, R, E, M> ChildrenIter<I> for Variant<I, R, E, M> {
+impl<I: Clone, R, E, M> ChildrenIter<I> for Variant<I, R, E, M> {
     fn children_iter(&self) -> impl DoubleEndedIterator<Item = I> {
         self.children()
             .into_iter()
-            .map(|c| c.iter().map(|i| *i))
+            .map(|c| c.iter().map(|i| i.clone()))
             .flatten()
     }
 }

@@ -48,7 +48,7 @@ impl<P, R, I> Node<P, R, I> {
     }
 }
 
-impl<N, R, I: Copy> ChildrenIter<I> for Node<N, R, I> {
+impl<N, R, I: Clone> ChildrenIter<I> for Node<N, R, I> {
     fn children_iter(&self) -> impl DoubleEndedIterator<Item = I> {
         self.variant.children_iter()
     }
@@ -79,7 +79,7 @@ pub trait IntoVariable<N, R> {
     fn into_variant(self) -> Variant<N, R>;
 }
 
-impl<I: Copy, R> ChildrenIter<I> for Variant<I, R> {
+impl<I: Clone, R> ChildrenIter<I> for Variant<I, R> {
     fn children_iter(&self) -> impl DoubleEndedIterator<Item = I> {
         use Variant::*;
 
@@ -155,7 +155,7 @@ impl<I: Copy, R> ChildrenIter<I> for Variant<I, R> {
             Undefined => {}
         };
 
-        children.into_iter().map(|i| *i)
+        children.into_iter().cloned()
     }
 }
 
