@@ -307,23 +307,21 @@ fn collect_traceability_target_variant_issues<E, M>(
 fn collect_refinement_issues<E, M>(arena: &RcArena<E, M>, restr: &Idx, conn: &mut Connection<Idx>) {
     use IssueKind::RefinementMismatch;
 
-    let upgraded = arena[conn.target].borrow();
-    let target_restr = &upgraded.payload.outbound.restriction;
+    let target = arena[conn.target].borrow();
+    let target_restr = &target.payload.outbound.restriction;
 
-    let mut candidate = arena[*restr].borrow();
-    while let Ok(r) = target_restr
-        && r.target != *restr
-    {
-        if let None = candidate.payload.parent {
-            conn.issue.push(RefinementMismatch);
-            break;
+    let mut candidate = Some(*restr);
+    if let Ok(target_restr) = target_restr {
+        while let Some(cnd) = candidate {
+            if cnd == target_restr.target {
+                return;
+            }
+
+            let cnd = arena[cnd].borrow();
+            candidate = cnd.payload.parent.as_ref().map(|c| c.target);
         }
 
-        let parent = {
-            let p = &candidate.payload.parent;
-            p.as_ref().unwrap().target.clone()
-        };
-        candidate = arena[parent].borrow();
+        conn.issue.push(RefinementMismatch);
     }
 }
 
