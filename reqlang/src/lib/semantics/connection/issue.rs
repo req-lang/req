@@ -341,12 +341,9 @@ fn collect_derivation_issues<E, M>(
         _ => {}
     }
 
-    let target_restr = &target.payload.outbound.restriction;
-    if let Ok(target_restr) = target_restr {
-        let out_restr_usage = usages.iter().find(|u| **u == target_restr.target);
-        if out_restr_usage.is_none() {
-            conn.issue.push(UnrelatedDerivation);
-        }
+    let out_restr_usage = usages.iter().find(|u| **u == *restr);
+    if out_restr_usage.is_none() {
+        conn.issue.push(UnrelatedDerivation);
     }
 }
 
