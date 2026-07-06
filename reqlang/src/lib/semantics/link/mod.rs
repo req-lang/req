@@ -58,6 +58,13 @@ impl<I> Link<I> {
             Err(_) => None,
         }
     }
+
+    pub fn map<J>(self, f: impl FnOnce(I) -> J) -> Link<J> {
+        Link {
+            original: self.original,
+            resolved: self.resolved.map(f),
+        }
+    }
 }
 
 impl<I> From<Link<I>> for Path {
