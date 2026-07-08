@@ -1,6 +1,6 @@
 use crate::{
     node::{
-        entity::{Idx, Node},
+        entity::{self, Idx, Node},
         expression::Variant,
     },
     semantics::{
@@ -85,7 +85,10 @@ pub fn connection_errors<N: Connected, E, M>(node: &link::entity::Node<N, E, M>)
 
     match ob.restriction.as_ref() {
         Ok(restr) => issues.extend(restr.issue.iter().map(Issue::from)),
-        Err(issue) => issues.push(issue.into()),
+        Err(issue) if let entity::Variant::Requirement(_) = node.variant => {
+            issues.push(issue.into())
+        }
+        _ => {}
     }
 
     let tr = &ob.traceability;
