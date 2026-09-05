@@ -121,7 +121,7 @@ pub(super) fn evaluate_node<P>(
                 Plus | Minus | Multiply | Divide | Modulus | Power => (Number, Number),
                 And | Or | Xor | Implies | Iff | Since => (Boolean, Boolean),
                 GreaterThan | LessThan | GreaterOrEqual | LessOrEqual => (Number, Boolean),
-                NotEqual | Equal => (lhs.clone(), Boolean),
+                NotEqual | Equal | Fix | Initially => (lhs.clone(), Boolean),
                 Union | Intersection | Difference | Complement => (lhs.clone(), lhs.clone()),
                 In => match &rhs {
                     TypeKind::Set(rhs) => (*rhs.clone(), Boolean),

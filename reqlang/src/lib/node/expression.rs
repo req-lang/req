@@ -603,6 +603,8 @@ pub enum BinaryOperator {
     LessOrEqual,
     NotEqual,
     Equal,
+    Fix,
+    Initially,
 
     Union,
     Intersection,
@@ -624,7 +626,10 @@ impl BinaryOperator {
             BinaryOperator::Intersection => 71,
             BinaryOperator::Complement => 72,
             BinaryOperator::In | BinaryOperator::Includes => 80,
-            BinaryOperator::Equal | BinaryOperator::NotEqual => 90,
+            BinaryOperator::Fix
+            | BinaryOperator::Initially
+            | BinaryOperator::Equal
+            | BinaryOperator::NotEqual => 90,
             BinaryOperator::LessThan
             | BinaryOperator::GreaterThan
             | BinaryOperator::LessOrEqual

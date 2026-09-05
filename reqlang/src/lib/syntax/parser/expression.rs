@@ -293,7 +293,10 @@ fn pratt_parser() -> &'static PrattParser<Rule> {
             .op(Op::infix(inter, Left))
             .op(Op::infix(comp, Left))
             .op(Op::infix(ins, Left) | Op::infix(incl, Left))
-            .op(Op::infix(eq, Left) | Op::infix(neq, Left))
+            .op(Op::infix(ini, Left)
+                | Op::infix(fix, Left)
+                | Op::infix(eq, Left)
+                | Op::infix(neq, Left))
             .op(Op::infix(lt, Left)
                 | Op::infix(gt, Left)
                 | Op::infix(le, Left)
@@ -347,6 +350,8 @@ impl From<Rule> for BinaryOperator {
             Rule::le => BinaryOperator::LessOrEqual,
             Rule::neq => BinaryOperator::NotEqual,
             Rule::eq => BinaryOperator::Equal,
+            Rule::fix => BinaryOperator::Fix,
+            Rule::ini => BinaryOperator::Initially,
 
             Rule::uni => BinaryOperator::Union,
             Rule::inter => BinaryOperator::Intersection,
