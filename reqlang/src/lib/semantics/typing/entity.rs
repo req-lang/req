@@ -1,12 +1,16 @@
 use itertools::Itertools;
 
 use crate::{
-    node::{self, arena::ArenaEnumerate, entity::Arena},
+    node::{
+        self,
+        arena::ArenaEnumerate,
+        entity::{Arena, Variant},
+    },
     semantics::{
         link::entity::Node,
         typing::{
             TypeResult,
-            expression::{self},
+            expression::{self, TypeKind},
         },
     },
 };
@@ -14,11 +18,16 @@ use crate::{
 pub(super) fn evaluate<N, E, M>(arena: Arena<Node<N, E, M>>) -> Arena<Node<N, TypeResult, M>> {
     let mut types = (&arena)
         .into_iter()
-        .map(|node| {
-            node.variant
+        .indices()
+        .map(|(idx, node)| match node.variant {
+            Variant::Type(_) => {
+                Some(vec![Some(Ok(TypeKind::Set(Box::new(TypeKind::Custom(idx)))))].into())
+            }
+            _ => node
+                .variant
                 .expressions()
                 .next()
-                .map(|expr| expr.with_capacity::<Option<TypeResult>>())
+                .map(|expr| expr.with_capacity::<Option<TypeResult>>()),
         })
         .collect::<Arena<_>>();
 

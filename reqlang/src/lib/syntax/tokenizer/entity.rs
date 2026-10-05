@@ -17,11 +17,13 @@ pub enum Keyword {
     Derives,
     Is,
     In,
+    Has,
     Let,
     On,
     Via,
     Top,
     Bottom,
+    Type,
 }
 
 impl<'a> TryFrom<Lexeme<'a>> for Keyword {
@@ -41,11 +43,13 @@ impl<'a> TryFrom<Lexeme<'a>> for Keyword {
                 "derives" => Ok(Derives),
                 "in" => Ok(In),
                 "is" => Ok(Is),
+                "has" => Ok(Has),
                 "let" => Ok(Let),
                 "on" => Ok(On),
                 "via" => Ok(Via),
                 "top" => Ok(Top),
                 "bottom" => Ok(Bottom),
+                "type" => Ok(Type),
                 w => Err(w),
             }
         } else {
@@ -66,11 +70,13 @@ impl Keyword {
             Derives => "derives",
             In => "in",
             Is => "is",
+            Has => "has",
             Let => "let",
             On => "on",
             Via => "via",
             Top => "top",
             Bottom => "bottom",
+            Type => "type",
         }
     }
 }
@@ -79,6 +85,7 @@ impl Keyword {
 pub enum TokenVariant<'a> {
     Identifier(&'a str),
     Expression(&'a str),
+    Type(&'a str),
     Markup(&'a str),
     Unit(&'a str),
     Reserved(Keyword),
@@ -100,6 +107,7 @@ impl<'a> Token<'a> {
         match &self.variant {
             TokenVariant::Identifier(id) => id,
             TokenVariant::Expression(expr) => expr,
+            TokenVariant::Type(typ) => typ,
             TokenVariant::Markup(informal) => informal,
             TokenVariant::Unit(unit) => unit,
             TokenVariant::Reserved(k) => k.as_str(),
@@ -127,6 +135,7 @@ pub fn is_reserved(c: char) -> bool {
 enum Mode {
     Other,
     Expression(Span),
+    Type(Span),
     Unit(Span),
     Informal(Span),
     TagId(Span),
@@ -341,6 +350,21 @@ impl<'a> Iterator for TokenIterator<'a> {
                                     }
                                 }
 
+                                Has => {
+                                    if let Some((start, l)) = self.lexemes.next() {
+                                        if let Ok(Keyword::Type) = Keyword::try_from(l) {
+                                            let variant = TokenVariant::Reserved(Keyword::Type);
+                                            self.last = Some(Token::new(start, variant));
+
+                                            let variant = TokenVariant::Reserved(Has);
+                                            return Some(Token::new(span, variant));
+                                        }
+                                        let mut span = start;
+                                        span.end = span.start;
+                                        self.mode = Type(span)
+                                    }
+                                }
+
                                 _ => {}
                             }
 
@@ -407,6 +431,24 @@ impl<'a> Iterator for TokenIterator<'a> {
 
                     current.end = span.end;
                     self.mode = Expression(current);
+                }
+
+                Type(mut current) => {
+                    if let Ok(first) = Keyword::try_from(l) {
+                        match first {
+                            Keyword::Type => {
+                                let variant = TokenVariant::Type(&self.input[current.range()]);
+                                let ret = Token::new(current, variant);
+                                self.last = Some(Token::new(span, TokenVariant::Reserved(first)));
+                                self.mode = Other;
+                                return Some(ret);
+                            }
+                            _ => {}
+                        }
+                    }
+
+                    current.end = span.end;
+                    self.mode = Type(current);
                 }
 
                 Unit(mut current) => {
@@ -650,6 +692,37 @@ mod tests {
                 TokenVariant::Reserved(Part)
             ]
         );
+    }
+
+    #[test]
+    fn tokenizes_type() {
+        let input = "type t has a | b | c type";
+        let tokens = input.char_indices().positioned().lexemes().tokens();
+        assert_eq!(
+            tokens.into_iter().map(|x| x.variant).collect::<Vec<_>>(),
+            [
+                TokenVariant::Reserved(Type),
+                TokenVariant::Identifier("t"),
+                TokenVariant::Reserved(Has),
+                TokenVariant::Type("a | b | c"),
+                TokenVariant::Reserved(Type)
+            ]
+        )
+    }
+
+    #[test]
+    fn tokenizes_empty_type() {
+        let input = "type t has type";
+        let tokens = input.char_indices().positioned().lexemes().tokens();
+        assert_eq!(
+            tokens.into_iter().map(|x| x.variant).collect::<Vec<_>>(),
+            [
+                TokenVariant::Reserved(Type),
+                TokenVariant::Identifier("t"),
+                TokenVariant::Reserved(Has),
+                TokenVariant::Reserved(Type)
+            ]
+        )
     }
 
     #[test]

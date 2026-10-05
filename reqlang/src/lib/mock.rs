@@ -317,7 +317,7 @@ pub mod entity {
     use crate::{
         mock::expression,
         node::entity::{
-            Arena, Attribute, Meta, Package, Part, Requirement, RequirementVariant, Variant,
+            Arena, Attribute, Meta, Package, Part, Requirement, RequirementVariant, Type, Variant,
         },
         syntax::{self, entity::Node},
     };
@@ -348,6 +348,16 @@ pub mod entity {
         let mut req = requirement(label);
         req.variant.requirement_mut().unwrap().variant = RequirementVariant::Formal(expr.into());
         req
+    }
+
+    pub fn typ<S: ToString>(label: S, members: &[S]) -> Node {
+        let variant = Variant::Type(Type::from(
+            members
+                .into_iter()
+                .map(|m| m.to_string())
+                .collect::<Vec<_>>(),
+        ));
+        Node::empty(Meta::from(label.to_string()), variant)
     }
 
     pub fn simple_tree() -> Arena<Node> {

@@ -98,6 +98,32 @@ pub fn parse(tokens: &mut MultiPeek<TokenIterator>, arena: &mut Vec<Node>) -> Re
                 return Ok(idx.into());
             }
 
+            Reserved(Keyword::Type) => {
+                use TokenVariant::*;
+                let mut typ = node::entity::Type::default();
+                meta.label = parse_label(tokens)?;
+                match tokens.next() {
+                    None => return Err(Span::default()),
+                    Some(tok) if let Reserved(Has) = tok.variant => {}
+                    Some(tok) => return Err(tok.span),
+                }
+
+                typ.members = match tokens.next() {
+                    None => return Err(Span::default()),
+                    Some(tok) if let Type(expr) = tok.variant => parse_type(expr)?,
+                    Some(tok) => return Err(tok.span),
+                };
+
+                match tokens.next() {
+                    Some(tok) if let Reserved(Keyword::Type) = tok.variant => {}
+                    _ => return Err(tok.span),
+                }
+
+                let idx = arena.len();
+                arena.push(Node::new(tok.span, meta, Variant::Type(typ)));
+                return Ok(idx.into());
+            }
+
             Reserved(Requirement) => {
                 use TokenVariant::*;
                 let mut req = node::entity::Requirement::default();
@@ -179,6 +205,10 @@ fn is_closing(tokens: &mut MultiPeek<TokenIterator>, stop: &Keyword) -> bool {
 
     tokens.reset_peek();
     ret
+}
+
+fn parse_type(expr: &str) -> Result<Vec<String>, Span> {
+    Ok(expr.split('|').map(|m| m.trim().to_string()).collect())
 }
 
 fn parse_children(

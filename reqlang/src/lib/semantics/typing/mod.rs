@@ -1,5 +1,5 @@
 use crate::{
-    node::entity::Arena,
+    node::{self, entity::Arena},
     semantics::{
         link::{self, entity::Node},
         typing::expression::{Issue, TypeKind},
@@ -10,7 +10,7 @@ pub mod entity;
 pub mod evaluate;
 pub mod expression;
 
-pub type TypeResult = std::result::Result<TypeKind, Issue>;
+pub type TypeResult<I = node::entity::Idx> = std::result::Result<TypeKind<I>, Issue>;
 
 pub trait Evaluate<N, M> {
     fn evaluate(self) -> Arena<Node<N, TypeResult, M>>;
@@ -99,6 +99,26 @@ mod tests {
     }
 
     #[test]
+    fn attribute_with_enum_boolean_has_custom_type() {
+        let mut p = package("p");
+        let t = typ("t", &["a", "b", "c"]);
+        let x = attribute("x", "t");
+        p.variant
+            .children_mut()
+            .unwrap()
+            .extend(&[1.into(), 2.into()]);
+
+        let typed = resolve_and_evaluate(vec![p, t, x].into());
+        let x = get_child(&typed, 0.into(), "x");
+
+        let attr = x.variant.attribute().unwrap();
+        assert_eq!(
+            attr.domain[0.into()].payload,
+            Ok(TypeKind::Custom(1.into()))
+        );
+    }
+
+    #[test]
     fn attribute_referencing_attribute_has_element_type() {
         // x: real => Set(Number); y: x => y's domain type is Number (element of x's set)
         // SHOULD FAIL
@@ -113,6 +133,24 @@ mod tests {
 
         let attr = y.variant.attribute().unwrap();
         assert_eq!(attr.domain[0.into()].payload, Ok(TypeKind::Number));
+    }
+
+    #[test]
+    fn formal_requirement_with_enum_has_enum_type() {
+        let mut p = package("p");
+        let t = typ("t", &["a", "b", "c"]);
+
+        let req = formal("r", vec![identifier("t::a")]);
+        p.variant
+            .children_mut()
+            .unwrap()
+            .extend(&[1.into(), 2.into()]);
+
+        let typed = resolve_and_evaluate(vec![p, t, req].into());
+        let r = get_child(&typed, 0.into(), "r");
+
+        let expr = r.variant.expressions().next().unwrap().clone();
+        assert_eq!(expr[0.into()].payload, Ok(TypeKind::Custom(1.into())));
     }
 
     #[test]

@@ -34,6 +34,7 @@ pub(crate) fn collect<'n, P, R, T, E, M>(
         .walk(Path::default(), |node, parent, idx| {
             let current = parent.join(&node.meta.label);
             out.upsert(current.clone(), idx);
+
             current
         })
         .for_each(drop);

@@ -98,8 +98,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 let path = node.payload.location.path;
                 let span = node.payload.span;
-                let span = format!("{}", span.start).bold();
-                eprintln!("{:12} {}", span, path);
+                let sp = format!("{}", span.start).bold();
+                let code = format!("{}", &source[span.start.index..span.end.index]).bold();
+                eprintln!("{:12} {} ---> {}", sp, path, code);
 
                 for issue in issues {
                     eprintln!("    {}", issue.colored_message());

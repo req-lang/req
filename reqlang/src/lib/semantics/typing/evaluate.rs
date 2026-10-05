@@ -4,7 +4,11 @@ use crate::{
         expression::{Arena, Case, Idx, Selector, SetElement},
     },
     semantics::{
-        link::expression::{BuiltinKind, Node, Target},
+        link::{
+            BuiltinKind,
+            Target::*,
+            expression::{Node, Target::*},
+        },
         typing::{
             TypeResult,
             expression::{Issue, TypeKind},
@@ -173,21 +177,23 @@ pub(super) fn evaluate_node<P>(
         }
 
         Identifier(ident) => match &ident.target.target().ok_or(Poison)? {
-            Target::Entity(tgt) => match &types[*tgt] {
+            Outer(Entity(tgt)) | Outer(Enum(tgt, _)) => match &types[*tgt] {
                 Some(types) => match type_or_poison(&types, 0.into())? {
                     TypeKind::Set(inner) => Ok(inner.as_ref().clone()),
+                    TypeKind::Custom(idx) => Ok(TypeKind::Custom(idx)),
                     typ => Err(NotASet(typ.clone())),
                 },
                 None => Err(NotEvaluable),
             },
-            Target::Expression(tgt) => {
+            Inner(tgt) => {
                 let domain = expressions[*tgt].variant.set_element().unwrap().domain;
                 match type_or_poison(&local, domain)? {
                     TypeKind::Set(inner) => Ok(inner.as_ref().clone()),
+                    TypeKind::Custom(idx) => Ok(TypeKind::Custom(idx)),
                     typ => Err(NotASet(typ.clone())),
                 }
             }
-            Target::Builtin(kind) => Ok(TypeKind::from(*kind)),
+            Outer(Builtin(kind)) => Ok(TypeKind::from(*kind)),
         },
 
         Number(_) => Ok(TypeKind::Number),
@@ -248,9 +254,11 @@ fn type_or_poison(types: &Arena<Option<TypeResult>>, idx: Idx) -> TypeResult {
 
 impl From<BuiltinKind> for TypeKind {
     fn from(value: BuiltinKind) -> Self {
+        use BuiltinKind::*;
+
         match value {
-            BuiltinKind::Real | BuiltinKind::Integer => TypeKind::Set(Box::new(TypeKind::Number)),
-            BuiltinKind::Boolean => TypeKind::Set(Box::new(TypeKind::Boolean)),
+            Real | Integer => TypeKind::Set(Box::new(TypeKind::Number)),
+            Boolean => TypeKind::Set(Box::new(TypeKind::Boolean)),
         }
     }
 }

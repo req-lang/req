@@ -86,6 +86,19 @@ pub fn format<W: std::io::Write, N, R: Display, T: Display, E, M>(
 
             writeln!(out, "\n{}requirement", pd)
         }
+
+        Type(typ) => {
+            writeln!(out, "{}type {} has", pd, node.meta.label)?;
+            let pd1 = pad(indent + 1);
+            for (idx, member) in typ.members.iter().enumerate() {
+                write!(out, "{}{}", pd1, member)?;
+                if idx < typ.members.len() - 1 {
+                    write!(out, " |")?;
+                }
+                writeln!(out, "")?;
+            }
+            writeln!(out, "{}type", pd)
+        }
     }
 }
 

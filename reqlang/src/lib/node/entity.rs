@@ -1,5 +1,5 @@
 use crate::{
-    node::{arena, expression, markup},
+    node::{arena, entity::RequirementVariant::Informal, expression, markup},
     utils::children::{Children, ChildrenIter, ChildrenMut, IntoChildren},
 };
 
@@ -128,6 +128,7 @@ pub enum Variant<I, R, E, M> {
     Attribute(Attribute<E>),
     Package(Package<I, R>),
     Requirement(Requirement<R, E, M>),
+    Type(Type),
 }
 
 pub trait Label {
@@ -203,6 +204,7 @@ impl<N, R, E, M> Variant<N, R, E, M> {
                 children: package.children.into_iter().map(&mut f).collect(),
             }),
             Variant::Requirement(requirement) => Variant::Requirement(requirement),
+            Variant::Type(typ) => Variant::Type(typ),
         }
     }
 
@@ -234,6 +236,7 @@ impl<N, R, E, M> Variant<N, R, E, M> {
                 inhibitor: requirement.inhibitor,
                 variant: requirement.variant,
             }),
+            Variant::Type(typ) => Variant::Type(typ),
         }
     }
 
@@ -258,6 +261,7 @@ impl<N, R, E, M> Variant<N, R, E, M> {
                     RequirementVariant::Informal(markup) => RequirementVariant::Informal(markup),
                 },
             }),
+            Variant::Type(typ) => Variant::Type(typ),
         }
     }
 
@@ -288,6 +292,7 @@ impl<N, R, E, M> Variant<N, R, E, M> {
                     RequirementVariant::Informal(markup) => RequirementVariant::Informal(f(markup)),
                 },
             }),
+            Variant::Type(typ) => Variant::Type(typ),
         }
     }
 
@@ -595,6 +600,23 @@ impl<E, M: Default> Default for RequirementVariant<E, M> {
     }
 }
 
+impl<E, M> RequirementVariant<E, M> {
+    pub fn formal(&self) -> Option<&E> {
+        use RequirementVariant::*;
+
+        match self {
+            Formal(expr) => Some(expr),
+            _ => None,
+        }
+    }
+    pub fn informal(&self) -> Option<&M> {
+        match self {
+            Informal(expr) => Some(expr),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub struct TraceabilityInhibitor {
     pub top: bool,
@@ -624,6 +646,17 @@ impl<R> TraceabilityLink<R> {
             kind: self.kind,
             target: f(self.target),
         }
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Type {
+    pub members: Vec<String>,
+}
+
+impl From<Vec<String>> for Type {
+    fn from(members: Vec<String>) -> Self {
+        Type { members }
     }
 }
 

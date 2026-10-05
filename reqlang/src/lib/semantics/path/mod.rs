@@ -17,7 +17,7 @@ pub trait Located {
 
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum Issue {
-    #[error("To entities have the same name at the same location")]
+    #[error("Two entities have the same name at the same location")]
     Duplicated,
 }
 
@@ -85,6 +85,14 @@ impl Path {
         let v = self.as_str();
         let idx = v.rfind(REFERENCE_SEPARATOR)?;
         Some(Self::new(&v[..idx]))
+    }
+
+    pub fn label(&self) -> &str {
+        let v = self.as_str();
+        match v.rfind(REFERENCE_SEPARATOR) {
+            None => v,
+            Some(idx) => &v[idx + REFERENCE_SEPARATOR.len()..],
+        }
     }
 
     pub fn join<P: ToString>(&self, rhs: &P) -> Self {
@@ -158,5 +166,12 @@ mod tests {
         let s: Path = "this::is::a::path".into();
         let expected: Path = "this::is::a".into();
         assert_eq!(expected, s.parent().unwrap());
+    }
+
+    #[test]
+    fn gets_label() {
+        let s: Path = "this::is::a::path".into();
+        let expected = "path";
+        assert_eq!(expected, s.label());
     }
 }

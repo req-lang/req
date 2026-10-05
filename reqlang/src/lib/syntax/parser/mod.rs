@@ -130,6 +130,22 @@ mod tests {
     }
 
     #[test]
+    fn parses_enum_type() {
+        let input = "package x type T has a | b | c type package";
+        let result = parse(input);
+        assert!(result.is_ok());
+
+        let nodes = result.ok().unwrap();
+        let ast: Arena<_> = nodes.into_iter().map(syntax::entity::Node::from).collect();
+
+        let mut x = mock::entity::package("x");
+        x.variant.children_mut().unwrap().push(1.into());
+        let t = mock::entity::typ("T", &["a", "b", "c"]);
+
+        assert_eq!(ast, vec![x, t].into());
+    }
+
+    #[test]
     fn parses_simple_generated_input() {
         let mut generator = mock::generator::Simple::new();
         generator.packages = 2;

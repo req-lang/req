@@ -1,4 +1,5 @@
 use crate::{
+    issue::Issue::Reference,
     node::{
         entity::{self, Idx, Node},
         expression::Variant,
@@ -20,8 +21,8 @@ pub enum Severity {
 
 #[derive(Debug, thiserror::Error)]
 pub enum Issue {
-    #[error("reference error: {0}")]
-    Reference(link::Issue),
+    #[error("reference not found")]
+    Reference,
     #[error("type error: {0}")]
     Type(typing::expression::Issue),
     #[error("connection error: {0}")]
@@ -33,7 +34,7 @@ pub enum Issue {
 impl From<&Issue> for Severity {
     fn from(value: &Issue) -> Self {
         match value {
-            Issue::Reference(_) => Severity::Critical,
+            Issue::Reference => Severity::Critical,
             Issue::Type(issue) => issue.into(),
             Issue::Connection(issue_kind) => issue_kind.into(),
             Issue::Path(_) => Severity::Critical,
@@ -105,22 +106,22 @@ pub fn reference_errors<N, E, M>(node: &link::entity::Node<N, E, M>) -> IssueIte
     let variant = &node.variant;
     let rf_errors = variant
         .references()
-        .filter_map(|r| r.resolved.as_ref().err());
-    issues.extend(rf_errors.map(|err| err.into()));
+        .filter(|r| r.resolved.as_ref().is_none());
+    issues.extend(rf_errors.map(|_| Reference));
     for mk in variant.markups() {
         let rf_errors = mk
             .container
             .references()
-            .filter_map(|r| r.resolved.as_ref().err());
-        issues.extend(rf_errors.map(|err| err.into()));
+            .filter(|r| r.resolved.as_ref().is_none());
+        issues.extend(rf_errors.map(|_| Reference));
     }
 
     for ex in node.variant.expressions() {
         ex.into_iter().for_each(|x| {
             if let Variant::Identifier(ident) = &x.variant
-                && let Err(rf) = &ident.target.resolved
+                && let None = &ident.target.resolved
             {
-                issues.push(rf.into());
+                issues.push(Reference);
             }
         });
     }
@@ -143,11 +144,6 @@ impl Iterator for IssueIterator {
     }
 }
 
-impl From<&link::Issue> for Issue {
-    fn from(value: &link::Issue) -> Self {
-        Issue::Reference(value.clone())
-    }
-}
 impl From<&typing::expression::Issue> for Issue {
     fn from(value: &typing::expression::Issue) -> Self {
         Issue::Type(value.clone())

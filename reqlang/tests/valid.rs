@@ -78,6 +78,11 @@ mod valid {
     }
 
     #[test]
+    fn r#enum() {
+        assert_valid_parsing_and_analysis("enum.req");
+    }
+
+    #[test]
     fn forall() {
         assert_valid_parsing_and_analysis("forall.req");
     }

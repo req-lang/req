@@ -59,11 +59,12 @@ mod expression {
         parent: node::entity::Idx,
     ) {
         use node::expression::Variant::*;
-        use semantics::link::expression::Target::*;
+        use semantics::link::Target::*;
 
         arena.into_iter().for_each(|node| {
             if let Identifier(ident) = &node.variant
-                && let Some(Entity(src)) = ident.target.target()
+                && let Some(tgt) = ident.target.target()
+                && let Some(Entity(src)) = tgt.outer()
             {
                 neighbors[*src].inbound.usages.push(parent);
                 neighbors[parent].outbound.usages.push(*src);

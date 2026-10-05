@@ -8,10 +8,7 @@ use crate::{
         expression::{Arena, Idx, Selector},
     },
     semantics::{
-        link::{
-            entity,
-            expression::{Node, Target},
-        },
+        link::{entity, expression::Node},
         typing::{TypeResult, evaluate::evaluate_node},
     },
     utils::children::ChildrenIter,
@@ -19,11 +16,12 @@ use crate::{
 
 // TODO: Avoid boxed set, limit the number of nested sets
 #[derive(PartialEq, Eq, Debug, Clone)]
-pub enum TypeKind {
+pub enum TypeKind<I = node::entity::Idx> {
     Number,
     Boolean,
     Undefined,
-    Set(Box<TypeKind>),
+    Custom(I),
+    Set(Box<TypeKind<I>>),
 }
 
 impl Display for TypeKind {
@@ -79,6 +77,8 @@ fn collect_in_order<N, E, M>(
     expression: Selector<Node<E>>,
     types: &mut node::entity::Arena<Option<Arena<Option<TypeResult>>>>,
 ) {
+    use crate::semantics::link::Target::*;
+    use crate::semantics::link::expression::Target::*;
     use node::expression::Variant::*;
 
     let (entities, i) = entity.into();
@@ -94,7 +94,7 @@ fn collect_in_order<N, E, M>(
         && let Some(target) = &ident.target.target()
     {
         match target {
-            Target::Entity(tgt) => {
+            Outer(Entity(tgt)) => {
                 if let Some(typs) = &types[*tgt]
                     && typs[Idx::root()].is_none()
                     && let Some(expr) = entities[*tgt].variant.expressions().next()
@@ -102,7 +102,7 @@ fn collect_in_order<N, E, M>(
                     collect_types((entities, *tgt).into(), expr, types);
                 }
             }
-            Target::Expression(idx) => {
+            Inner(idx) => {
                 let domain = expressions[*idx].variant.set_element().unwrap().domain;
                 if types[i].as_ref().unwrap()[domain].is_none() {
                     collect_in_order((entities, i).into(), (expressions, domain).into(), types);

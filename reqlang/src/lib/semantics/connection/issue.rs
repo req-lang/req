@@ -113,6 +113,7 @@ pub(super) fn collect_issues<E, M>(arena: &RcArena<E, M>, idx: Idx) {
         Package(_) => {
             collect_pkg_parent_issues(arena, &mut nd.payload.parent);
         }
+        Type(_) => {}
         Requirement(req) => {
             // TODO: Flag inbound restrictions and allocations
 
