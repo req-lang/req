@@ -6,11 +6,11 @@ package A
     @@
     Continuous signal
     @@
-    let x in real [ W ]
+    let x in real \ W \
     @@
     Discrete signal
     @@
-    let y in integer [ W ]
+    let y in integer \ W \
   part
   requirement R1 
     on B

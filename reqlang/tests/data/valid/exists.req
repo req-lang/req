@@ -6,11 +6,11 @@ package A
     @@
     Upper bound
     @@
-    let x in real [ W ]
+    let x in real \ W \
     @@
     Lower bound
     @@
-    let y in integer [ W ]
+    let y in integer \ W \
   part
   requirement R1 
     on B

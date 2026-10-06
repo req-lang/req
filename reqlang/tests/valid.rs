@@ -78,6 +78,11 @@ mod valid {
     }
 
     #[test]
+    fn interval() {
+        assert_valid_parsing_and_analysis("interval.req");
+    }
+
+    #[test]
     fn r#enum() {
         assert_valid_parsing_and_analysis("enum.req");
     }

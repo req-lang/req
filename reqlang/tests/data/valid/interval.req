@@ -1,0 +1,16 @@
+package S
+  part P
+    let x in [ 0, 1 ]
+    let y in [[ 0, 10 ]]
+  part
+  requirement R1 
+    on P::x
+  is
+    P::x = 10 and P::y = 5
+  requirement
+  requirement R2 
+    on P::x
+  is
+    P::x in 0.5 tol 0.5
+  requirement
+package

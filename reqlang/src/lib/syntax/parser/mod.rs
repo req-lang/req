@@ -106,7 +106,7 @@ mod tests {
 
     #[test]
     fn parses_input_with_part_and_attribute() {
-        let input = "package x part p let u in real [m] let v in integer part package";
+        let input = "package x part p let u in real \\m\\ let v in integer part package";
         let result = parse(input);
         assert!(result.is_ok());
 

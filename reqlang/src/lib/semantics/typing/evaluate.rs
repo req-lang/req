@@ -127,6 +127,7 @@ pub(super) fn evaluate_node<P>(
                 GreaterThan | LessThan | GreaterOrEqual | LessOrEqual => (Number, Boolean),
                 NotEqual | Equal | Fix | Initially => (lhs.clone(), Boolean),
                 Union | Intersection | Difference | Complement => (lhs.clone(), lhs.clone()),
+                Tolerance => (Number, Set(Box::new(Number))),
                 In => match &rhs {
                     TypeKind::Set(rhs) => (*rhs.clone(), Boolean),
                     _ => return Err(NotASet(rhs.clone())),
@@ -169,6 +170,30 @@ pub(super) fn evaluate_node<P>(
             }
 
             Ok(TypeKind::Set(Box::new(first.clone())))
+        }
+
+        Interval(interval) => {
+            let left = type_or_poison(&local, interval.left.expression)?;
+            let right = type_or_poison(&local, interval.right.expression)?;
+            match (left, right) {
+                (TypeKind::Number, TypeKind::Number) => {
+                    Ok(TypeKind::Set(Box::new(TypeKind::Number)))
+                }
+                (TypeKind::Number, other) => Err(UnexpectedType(TypeKind::Number, other)),
+                (other, _) => Err(UnexpectedType(TypeKind::Number, other)),
+            }
+        }
+
+        Range(range) => {
+            let left = type_or_poison(&local, range.left)?;
+            let right = type_or_poison(&local, range.right)?;
+            match (left, right) {
+                (TypeKind::Number, TypeKind::Number) => {
+                    Ok(TypeKind::Set(Box::new(TypeKind::Number)))
+                }
+                (TypeKind::Number, other) => Err(UnexpectedType(TypeKind::Number, other)),
+                (other, _) => Err(UnexpectedType(TypeKind::Number, other)),
+            }
         }
 
         Function(_) => {

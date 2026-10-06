@@ -6,11 +6,11 @@ package A
     @@
     Power draw
     @@
-    let x in real [ W ]
+    let x in real
     @@
     Sample count
     @@
-    let y in integer [ W ]
+    let y in integer
   part
   requirement R1 
     on B

@@ -219,6 +219,39 @@ impl<'s> Builder<'s> {
                         Node::new(span, variant)
                     }
 
+                    Rule::rng => {
+                        let mut inner = primary.into_inner();
+
+                        let lvalue = self.build(inner.next().unwrap(), *arena);
+                        let rvalue = self.build(inner.next().unwrap(), *arena);
+                        let interval = Range::new(lvalue, rvalue);
+                        let variant = Variant::Range(interval);
+                        Node::new(span, variant)
+                    }
+
+                    Rule::intv => {
+                        let mut inner = primary.into_inner();
+                        let lbrack = inner.next().unwrap();
+                        let lvalue = self.build(inner.next().unwrap(), *arena);
+                        let lbound = match lbrack.as_rule() {
+                            Rule::lbrkt => IntervalBound::closed(lvalue),
+                            Rule::rbrkt => IntervalBound::open(lvalue),
+                            _ => unreachable!(),
+                        };
+
+                        let rvalue = self.build(inner.next().unwrap(), *arena);
+                        let rbrack = inner.next().unwrap();
+                        let rbound = match rbrack.as_rule() {
+                            Rule::lbrkt => IntervalBound::open(rvalue),
+                            Rule::rbrkt => IntervalBound::closed(rvalue),
+                            _ => unreachable!(),
+                        };
+
+                        let interval = Interval::new(lbound, rbound);
+                        let variant = Variant::Interval(interval);
+                        Node::new(span, variant)
+                    }
+
                     Rule::expr => {
                         self.build(primary, *arena);
                         arena.pop().unwrap()
@@ -293,6 +326,7 @@ fn pratt_parser() -> &'static PrattParser<Rule> {
             .op(Op::infix(inter, Left))
             .op(Op::infix(comp, Left))
             .op(Op::infix(ins, Left) | Op::infix(incl, Left))
+            .op(Op::infix(tol, Left))
             .op(Op::infix(ini, Left)
                 | Op::infix(fix, Left)
                 | Op::infix(eq, Left)
@@ -340,9 +374,11 @@ impl From<Rule> for BinaryOperator {
             Rule::and => BinaryOperator::And,
             Rule::or => BinaryOperator::Or,
             Rule::xor => BinaryOperator::Xor,
-            Rule::ins => BinaryOperator::In,
             Rule::implies => BinaryOperator::Implies,
             Rule::iff => BinaryOperator::Iff,
+
+            Rule::ins => BinaryOperator::In,
+            Rule::tol => BinaryOperator::Tolerance,
 
             Rule::gt => BinaryOperator::GreaterThan,
             Rule::lt => BinaryOperator::LessThan,

@@ -44,9 +44,7 @@ pub fn format<W: std::io::Write, N, R: Display, T: Display, E, M>(
             write!(out, "{}let {} in ", pd, node.meta.label)?;
             expression::format(&atr.domain, 0.into(), 0.into(), out)?;
             if let Some(unit) = &atr.unit {
-                write!(out, " [ ")?;
-                write!(out, "{}", unit)?;
-                write!(out, " ]")?;
+                write!(out, " \\ {} \\", unit)?;
             }
             writeln!(out)
         }

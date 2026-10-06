@@ -1,6 +1,6 @@
 expr = { prefix* ~ primary ~ postfix* ~ (infix ~ prefix* ~ primary ~ postfix*)* }
 
-infix = _{ add | sub | mul | pow | rem | and | or | xor | ge | le | gt | lt | neq | ini | fix | eq | div | uni | inter | incl | implies | since | iff | ins | diff | comp }
+infix = _{ add | sub | mul | pow | rem | and | or | xor | ge | le | gt | lt | neq | ini | fix | eq | div | uni | inter | incl | implies | since | iff | ins | diff | comp | tol }
 add   =  { "+" }
 sub   =  { "-" }
 mul   =  { "*" }
@@ -11,9 +11,11 @@ pow   =  { "^" }
 and     = { "and" }
 or      = { "or" }
 xor     = { "xor" }
-ins     = { "in" }
 implies = { "implies" }
 iff     = { "iff" }
+
+ins = { "in" }
+tol = { "tol" }
 
 gt  = { ">" }
 lt  = { "<" }
@@ -49,7 +51,7 @@ fac     =  { "!" }
 call    =  { "(" ~ expr? ~ ("," ~ expr)* ~ ")" }
 
 primary = _{
-    (num | bool | undefined | set | branch | when | forall | exists | select | aggregation | ident | "(" ~ expr ~ ")")
+    (num | bool | undefined | set | rng | intv | branch | when | forall | exists | select | aggregation | ident | "(" ~ expr ~ ")")
 }
 
 branch =  { if ~ expr ~ then ~ expr ~ (else ~ expr)? ~ end }
@@ -87,6 +89,11 @@ that = _{ "that" }
 in   = _{ "in" }
 
 set        =  { "{" ~ (expr ~ ",")* ~ expr ~ "}" }
+intv       =  { bracket ~ expr ~ "," ~ expr ~ bracket }
+bracket    = _{ lbrkt | rbrkt }
+rng        =  { "[[" ~ expr ~ "," ~ expr ~ "]]" }
+lbrkt      =  { "[" }
+rbrkt      =  { "]" }
 bool       =  { tru | fals }
 tru        =  { "true" }
 fals       =  { "false" }

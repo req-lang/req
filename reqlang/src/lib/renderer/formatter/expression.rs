@@ -187,6 +187,40 @@ pub fn format<W: std::io::Write, E, T: Display>(
             write!(out, " }}")?;
         }
 
+        Interval(interval) => {
+            let lsymbol = match interval.left.is_open {
+                true => "]",
+                false => "[",
+            };
+            write!(out, "{} ", lsymbol)?;
+            let sub = ctx.with_parens(false).inline();
+            format(arena, interval.left.expression, sub, out)?;
+
+            write!(out, ", ")?;
+
+            let sub = ctx.with_parens(false).inline();
+            format(arena, interval.right.expression, sub, out)?;
+            let rsymbol = match interval.right.is_open {
+                true => "[",
+                false => "]",
+            };
+            write!(out, " {}", rsymbol)?;
+        }
+
+        Range(range) => {
+            write!(out, "[[ ")?;
+
+            let sub = ctx.with_parens(false).inline();
+            format(arena, range.left, sub, out)?;
+
+            write!(out, ", ")?;
+
+            let sub = ctx.with_parens(false).inline();
+            format(arena, range.right, sub, out)?;
+
+            write!(out, " ]]")?;
+        }
+
         Identifier(r) => write!(out, "{}", r.target)?,
 
         Number(x) => write!(out, "{}", x.value)?,
@@ -296,6 +330,7 @@ fn binary_symbol(binary: &BinaryOperator) -> &'static str {
         Modulus => "%",
         Power => "^",
         In => "in",
+        Tolerance => "tol",
         GreaterOrEqual => ">=",
         LessOrEqual => "<=",
         Union => "union",

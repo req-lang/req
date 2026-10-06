@@ -118,14 +118,12 @@ impl<'a> Token<'a> {
 
 pub const INFORMAL_DELIMITER: Lexeme = Lexeme::Word("@@");
 pub const TAG_DELIMITER: Lexeme<'_> = Lexeme::Punctation('#');
-pub const START_UNIT: Lexeme<'_> = Lexeme::Punctation('[');
-pub const END_UNIT: Lexeme<'_> = Lexeme::Punctation(']');
+pub const UNIT_DELIMITER: Lexeme<'_> = Lexeme::Punctation('\\');
 
 #[inline]
 pub fn is_reserved(c: char) -> bool {
     match c {
-        '[' => true,
-        ']' => true,
+        '\\' => true,
         '#' => true,
         _ => false,
     }
@@ -374,7 +372,7 @@ impl<'a> Iterator for TokenIterator<'a> {
                 }
 
                 Expression(mut current) => {
-                    if l == START_UNIT {
+                    if l == UNIT_DELIMITER {
                         let variant = TokenVariant::Expression(&self.input[current.range()]);
                         let ret = Token::new(current, variant);
                         if let Some((span, _)) = self.lexemes.next() {
@@ -452,7 +450,7 @@ impl<'a> Iterator for TokenIterator<'a> {
                 }
 
                 Unit(mut current) => {
-                    if l == END_UNIT {
+                    if l == UNIT_DELIMITER {
                         let variant = TokenVariant::Unit(&self.input[current.range()]);
                         let ret = Token::new(current, variant);
                         self.mode = Other;
@@ -727,7 +725,7 @@ mod tests {
 
     #[test]
     fn tokenizes_expression_with_unit() {
-        let input = "part x let y is real [m] part";
+        let input = "part x let y is real \\m\\ part";
         let tokens = input.char_indices().positioned().lexemes().tokens();
         assert_eq!(
             tokens.into_iter().map(|x| x.variant).collect::<Vec<_>>(),
@@ -797,7 +795,7 @@ mod tests {
 
     #[test]
     fn tokenizes_expressions_with_unit() {
-        let input = "part x let y is real [m] let z is real [m] part";
+        let input = "part x let y is real \\m\\ let z is real \\m\\ part";
         let tokens = input.char_indices().positioned().lexemes().tokens();
         assert_eq!(
             tokens.into_iter().map(|x| x.variant).collect::<Vec<_>>(),

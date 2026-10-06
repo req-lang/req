@@ -1,12 +1,12 @@
 package S
-  type T has 
-    A | B | C
-  type 
-
+  type T has
+    A |
+    B |
+    C
+  type
   part P
-    let x in S::T 
+    let x in S::T
   part
-
   requirement R1 
     on P::x
   is

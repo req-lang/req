@@ -61,6 +61,16 @@ mod formatter {
     }
 
     #[test]
+    fn interval() {
+        assert_isomorphic_formatter("interval.req");
+    }
+
+    #[test]
+    fn r#enum() {
+        assert_isomorphic_formatter("enum.req");
+    }
+
+    #[test]
     fn forall() {
         assert_isomorphic_formatter("forall.req");
     }

@@ -6,7 +6,7 @@ package A
     @@
     Power draw
     @@
-    let x in real [ W ]
+    let x in real \ W \
   part
   @@
   Comment {A::B::x}

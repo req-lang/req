@@ -73,6 +73,8 @@ pub enum Variant<I, R> {
     Undefined,
 
     Set(Set<I>),
+    Interval(Interval<I>),
+    Range(Range<I>),
 }
 
 pub trait IntoVariable<N, R> {
@@ -149,6 +151,15 @@ impl<I: Clone, R> ChildrenIter<I> for Variant<I, R> {
                 children.extend(se.iter());
             }
 
+            Interval(interval) => {
+                children.push(&interval.left.expression);
+                children.push(&interval.right.expression);
+            }
+
+            Range(range) => {
+                children.push(&range.left);
+                children.push(&range.right);
+            }
             Identifier(_) => {}
             Number(_) => {}
             Boolean(_) => {}
@@ -187,6 +198,8 @@ impl<N, R> Variant<N, R> {
             Variant::Boolean(boolean) => Variant::Boolean(boolean),
             Variant::Undefined => Variant::Undefined,
             Variant::Set(set) => Variant::Set(set),
+            Variant::Interval(interval) => Variant::Interval(interval),
+            Variant::Range(range) => Variant::Range(range),
         }
     }
 
@@ -257,6 +270,15 @@ impl<N, R> Variant<N, R> {
 
             Variant::Set(set) => Variant::Set(Set {
                 elements: set.elements.into_iter().map(&mut f).collect(),
+            }),
+
+            Variant::Interval(interval) => Variant::Interval(Interval {
+                left: interval.left.mape(&mut f),
+                right: interval.right.mape(&mut f),
+            }),
+            Variant::Range(range) => Variant::Range(Range {
+                left: f(range.left),
+                right: f(range.right),
             }),
 
             Variant::Identifier(identifier) => Variant::Identifier(Identifier {
@@ -593,9 +615,11 @@ pub enum BinaryOperator {
     And,
     Or,
     Xor,
-    In,
     Implies,
     Iff,
+
+    In,
+    Tolerance,
 
     GreaterThan,
     LessThan,
@@ -626,6 +650,7 @@ impl BinaryOperator {
             BinaryOperator::Intersection => 71,
             BinaryOperator::Complement => 72,
             BinaryOperator::In | BinaryOperator::Includes => 80,
+            BinaryOperator::Tolerance => 85,
             BinaryOperator::Fix
             | BinaryOperator::Initially
             | BinaryOperator::Equal
@@ -673,6 +698,59 @@ impl<N> Default for Set<N> {
         Self {
             elements: Default::default(),
         }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Interval<N> {
+    pub left: IntervalBound<N>,
+    pub right: IntervalBound<N>,
+}
+
+impl<N> Interval<N> {
+    pub fn new(left: IntervalBound<N>, right: IntervalBound<N>) -> Self {
+        Self { left, right }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct IntervalBound<N> {
+    pub expression: N,
+    pub is_open: bool,
+}
+
+impl<N> IntervalBound<N> {
+    pub fn open(expression: N) -> Self {
+        Self {
+            expression,
+            is_open: true,
+        }
+    }
+
+    pub fn closed(expression: N) -> Self {
+        Self {
+            expression,
+            is_open: false,
+        }
+    }
+
+    pub fn mape<E>(self, f: impl FnOnce(N) -> E) -> IntervalBound<E> {
+        IntervalBound {
+            expression: f(self.expression),
+            is_open: self.is_open,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Range<N> {
+    pub left: N,
+    pub right: N,
+}
+
+impl<N> Range<N> {
+    pub fn new(left: N, right: N) -> Self {
+        Self { left, right }
     }
 }
 
