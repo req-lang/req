@@ -520,6 +520,14 @@ impl<N> Aggregation<N> {
 pub enum Aggregator {
     All,
     Any,
+    One,
+    Maximum,
+    Minimum,
+    Sum,
+    Product,
+    Union,
+    Intersection,
+    Choose,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

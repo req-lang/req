@@ -78,9 +78,15 @@ maxi      =  { "maximize" }
 such_that = _{ such ~ that ~ expr }
 
 aggregation =  { aggregator ~ (expr ~ ",")* ~ expr ~ end }
-aggregator  = _{ (all | any) }
+aggregator  = _{ (all | any | max | min | sum | prod | uni | inter | one | choose) }
 all         =  { "all" }
 any         =  { "any" }
+one         =  { "one" }
+max         =  { "max" }
+min         =  { "min" }
+sum         =  { "sum" }
+prod        =  { "prod" }
+choose      =  { "choose" }
 
 then = _{ "then" }
 end  = _{ "end" }

@@ -289,6 +289,14 @@ fn aggregator_symbol(agg: &Aggregator) -> &'static str {
     match agg {
         Any => "any",
         All => "all",
+        One => "one",
+        Maximum => "max",
+        Minimum => "min",
+        Sum => "sum",
+        Product => "prod",
+        Intersection => "intersection",
+        Union => "union",
+        Choose => "choose",
     }
 }
 

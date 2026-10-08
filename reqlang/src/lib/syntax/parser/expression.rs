@@ -416,6 +416,14 @@ impl From<Rule> for Aggregator {
         match rule {
             Rule::all => Aggregator::All,
             Rule::any => Aggregator::Any,
+            Rule::one => Aggregator::One,
+            Rule::max => Aggregator::Maximum,
+            Rule::min => Aggregator::Minimum,
+            Rule::sum => Aggregator::Sum,
+            Rule::prod => Aggregator::Product,
+            Rule::choose => Aggregator::Choose,
+            Rule::inter => Aggregator::Intersection,
+            Rule::uni => Aggregator::Union,
             _ => unreachable!(),
         }
     }

@@ -29,4 +29,22 @@ package A
       B::x = 520
     end
   requirement
+  requirement R3 
+    on B
+  is
+    sum
+      10,
+      20,
+      30
+    end
+  requirement
+  requirement R4 
+    on B
+  is
+    intersection
+      { 10 },
+      { 20 },
+      { 30 }
+    end
+  requirement
 package

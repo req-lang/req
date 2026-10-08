@@ -1,7 +1,7 @@
 use crate::{
     node::{
         self,
-        expression::{Arena, Case, Idx, Selector, SetElement},
+        expression::{Aggregator, Arena, Case, Idx, Selector, SetElement},
     },
     semantics::{
         link::{
@@ -84,16 +84,34 @@ pub(super) fn evaluate_node<P>(
         }
 
         Aggregation(aggregation) => {
+            use Aggregator::*;
             use TypeKind::*;
+
+            let first = aggregation.expressions.iter().next().ok_or(NotEvaluable);
+            let (expected, result) = match aggregation.aggregator {
+                All | Any | One => (Boolean, Boolean),
+                Maximum | Minimum | Sum | Product => (Number, Number),
+                Union | Intersection => {
+                    let first = type_or_poison(&local, *first?)?;
+                    match first {
+                        Set(x) => (Set(x.clone()), Set(x)),
+                        t => return Err(NotASet(t)),
+                    }
+                }
+                Choose => {
+                    let typ = type_or_poison(&local, *first?)?;
+                    (typ.clone(), typ)
+                }
+            };
 
             for expression in &aggregation.expressions {
                 let expr = type_or_poison(&local, *expression)?;
-                if expr != Boolean {
-                    return Err(UnexpectedType(Boolean, expr.clone()));
+                if expr != expected {
+                    return Err(UnexpectedType(expected, expr.clone()));
                 }
             }
 
-            Ok(Boolean)
+            Ok(result)
         }
 
         UnaryOp(una) => {
