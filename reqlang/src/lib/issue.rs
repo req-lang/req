@@ -12,11 +12,12 @@ use crate::{
     },
 };
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Severity {
-    Critical,
-    Severe,
-    Moderate,
     Light,
+    Moderate,
+    Severe,
+    Critical,
 }
 
 #[derive(Debug, thiserror::Error)]
