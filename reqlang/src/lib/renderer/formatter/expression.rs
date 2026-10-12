@@ -2,7 +2,7 @@ use std::{fmt::Display, ops::Add};
 
 use crate::{
     node::expression::{
-        Aggregator, Arena, BinaryOperator, Case, Idx, Node, OptimizerKind, SetElement,
+        Aggregator, Arena, BinaryOperator, Case, Idx, Node, Operand, SetElement,
         UnaryOperator,
     },
     renderer::formatter::padding::pad,
@@ -113,24 +113,32 @@ pub fn format<W: std::io::Write, E, T: Display>(
             format_set_elem(arena, &exists.set, out)?;
         }
 
-        Select(select) => {
-            write!(out, "select ")?;
-            format_set_elem(arena, &select.set, out)?;
-            if let Some(ref optimizer) = select.optimizer {
-                let symbol = optimizer_symbol(&optimizer.kind);
-                write!(out, "{}{}{}{}", sep, pd, symbol, sep)?;
-                format(arena, optimizer.expression, ctx + 1, out)?;
+        Aggregation(aggregation) => {
+            write!(out, "{}{}", aggregator_symbol(&aggregation.aggregator), sep)?;
+            match &aggregation.operand {
+                Operand::List(expressions) => {
+                    for (idx, val) in expressions.iter().enumerate() {
+                        format(arena, *val, ctx + 1, out)?;
+                        if idx < expressions.len() - 1 {
+                            write!(out, ",{}", sep)?;
+                        }
+                    }
+                }
+
+                Operand::Comprehension(comprehension) => {
+                    format(arena, comprehension.expression, ctx + 1, out)?;
+                    write!(out, "{}{}for ", sep, pad((ctx + 1).indent))?;
+                    format_set_elem(arena, &comprehension.set, out)?;
+                }
             }
         }
 
-        Aggregation(aggregation) => {
-            write!(out, "{}{}", aggregator_symbol(&aggregation.aggregator), sep)?;
-            for (idx, val) in aggregation.expressions.iter().enumerate() {
-                format(arena, *val, ctx + 1, out)?;
-                if idx < aggregation.expressions.len() - 1 {
-                    write!(out, ",{}", sep)?;
-                }
-            }
+        Comprehension(comprehension) => {
+            write!(out, "{{ ")?;
+            format(arena, comprehension.expression, Ctx::default(), out)?;
+            write!(out, " for ")?;
+            format_set_elem(arena, &comprehension.set, out)?;
+            write!(out, " }}")?;
         }
 
         UnaryOp(unary) => {
@@ -271,15 +279,6 @@ fn boolean_keyword(b: bool) -> &'static str {
     match b {
         true => "true",
         false => "false",
-    }
-}
-
-fn optimizer_symbol(opt: &OptimizerKind) -> &'static str {
-    use crate::node::expression::OptimizerKind::*;
-
-    match opt {
-        Maximize => "maximize",
-        Minimize => "minimize",
     }
 }
 

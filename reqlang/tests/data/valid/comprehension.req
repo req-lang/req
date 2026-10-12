@@ -1,0 +1,56 @@
+package A
+  @@
+  System block
+  @@
+  part B
+    @@
+    Upper bound
+    @@
+    let x in real
+    @@
+    Offset
+    @@
+    let y in integer
+  part
+  requirement R1 
+    on B
+  is
+    B::x in { s + 2 for s in [ 0, 1 ] }
+  requirement
+  requirement R2 
+    on B
+  is
+    { s * 2 for s in integer such that s > 0 and s < B::y } includes { B::y }
+  requirement
+  requirement R3 
+    on B
+  is
+    sum s * s for s in [[ 1, 10 ]] end > B::x
+  requirement
+  requirement R4 
+    on B
+  is
+    all
+      s < B::x
+      for s in { 1, 2, 3 } such that s > B::y
+    end
+  requirement
+  requirement R5 
+    on B
+  is
+    any
+      s = B::x
+      for s in real
+    end
+  requirement
+  requirement R6 
+    on B
+  is
+    B::y in union { s, s + 1 } for s in [[ 0, 3 ]] end
+  requirement
+  requirement R7 
+    on B
+  is
+    { t for t in { s ^ 2 for s in integer } such that t < 100 } includes { 1, 4 }
+  requirement
+package

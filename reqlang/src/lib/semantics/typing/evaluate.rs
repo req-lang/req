@@ -1,7 +1,7 @@
 use crate::{
     node::{
         self,
-        expression::{Aggregator, Arena, Case, Idx, Selector, SetElement},
+        expression::{Aggregator, Arena, Case, Idx, Operand, Selector, SetElement},
     },
     semantics::{
         link::{
@@ -70,24 +70,19 @@ pub(super) fn evaluate_node<P>(
             Ok(Boolean)
         }
 
-        Select(select) => {
-            use TypeKind::*;
-
-            let domain = evaluate_set_element(&local, &select.set)?;
-            match &select.optimizer {
-                None => Ok(domain),
-                Some(opt) => match type_or_poison(&local, opt.expression)? {
-                    Number => Ok(Number),
-                    t => Err(UnexpectedType(Number, t.clone())),
-                },
-            }
-        }
-
         Aggregation(aggregation) => {
             use Aggregator::*;
             use TypeKind::*;
 
-            let first = aggregation.expressions.iter().next().ok_or(NotEvaluable);
+            let operands = match &aggregation.operand {
+                Operand::List(expressions) => expressions.clone(),
+                Operand::Comprehension(comprehension) => {
+                    evaluate_set_element(&local, &comprehension.set)?;
+                    vec![comprehension.expression]
+                }
+            };
+
+            let first = operands.iter().next().ok_or(NotEvaluable);
             let (expected, result) = match aggregation.aggregator {
                 All | Any | One => (Boolean, Boolean),
                 Maximum | Minimum | Sum | Product => (Number, Number),
@@ -104,7 +99,7 @@ pub(super) fn evaluate_node<P>(
                 }
             };
 
-            for expression in &aggregation.expressions {
+            for expression in &operands {
                 let expr = type_or_poison(&local, *expression)?;
                 if expr != expected {
                     return Err(UnexpectedType(expected, expr.clone()));
@@ -112,6 +107,12 @@ pub(super) fn evaluate_node<P>(
             }
 
             Ok(result)
+        }
+
+        Comprehension(comprehension) => {
+            evaluate_set_element(&local, &comprehension.set)?;
+            let expression = type_or_poison(&local, comprehension.expression)?;
+            Ok(TypeKind::Set(Box::new(expression)))
         }
 
         UnaryOp(una) => {

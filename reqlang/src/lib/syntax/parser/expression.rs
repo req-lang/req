@@ -167,55 +167,62 @@ impl<'s> Builder<'s> {
                         Node::new(span, variant)
                     }
 
-                    Rule::select => {
-                        let mut inner = primary.into_inner();
-
-                        let variable = inner.next().unwrap().as_str().to_string();
-                        let domain = self.build(inner.next().unwrap(), *arena);
-                        let mut select = Select::new(SetElement::new(variable, domain));
-                        for p in inner {
-                            match p.as_rule() {
-                                Rule::optimizer => {
-                                    let mut inner = p.into_inner();
-                                    let kind = inner.next().unwrap().as_rule().into();
-                                    let expression = self.build(inner.next().unwrap(), *arena);
-                                    select.optimizer = Some(Optimizer::new(kind, expression))
-                                }
-
-                                Rule::expr => {
-                                    select.set.filter = Some(self.build(p, *arena));
-                                }
-
-                                _ => {}
-                            }
-                        }
-
-                        let variant = Variant::Select(select);
-                        Node::new(span, variant)
-                    }
-
                     Rule::aggregation => {
                         let mut inner = primary.into_inner();
                         let aggregator = inner.next().unwrap().as_rule().into();
-                        let mut aggregation = Aggregation::new(aggregator);
+                        let first = self.build(inner.next().unwrap(), *arena);
 
-                        for p in inner {
-                            aggregation.expressions.push(self.build(p, *arena));
-                        }
+                        let operand = match inner.next() {
+                            Some(p) if p.as_rule() == Rule::binding => {
+                                let mut inner = p.into_inner();
+                                let variable = inner.next().unwrap().as_str().to_string();
+                                let domain = self.build(inner.next().unwrap(), &mut arena);
+                                let mut set = SetElement::new(variable, domain);
+                                if let Some(p) = inner.next() {
+                                    set.filter = Some(self.build(p, &mut arena));
+                                }
 
-                        let variant = Variant::Aggregation(aggregation);
+                                Operand::Comprehension(Comprehension::new(set, first))
+                            }
+                            next => {
+                                let mut expressions = vec![first];
+                                for p in next.into_iter().chain(inner) {
+                                    expressions.push(self.build(p, *arena));
+                                }
+                                Operand::List(expressions)
+                            }
+                        };
+
+                        let variant = Variant::Aggregation(Aggregation::new(aggregator, operand));
                         Node::new(span, variant)
                     }
 
                     Rule::set => {
-                        let mut set = Set::default();
-                        let inner = primary.into_inner();
+                        let mut inner = primary.into_inner();
+                        let first = self.build(inner.next().unwrap(), *arena);
 
-                        for p in inner {
-                            set.elements.push(self.build(p, *arena));
-                        }
+                        let variant = match inner.next() {
+                            Some(p) if p.as_rule() == Rule::binding => {
+                                let mut inner = p.into_inner();
+                                let variable = inner.next().unwrap().as_str().to_string();
+                                let domain = self.build(inner.next().unwrap(), &mut arena);
+                                let mut set = SetElement::new(variable, domain);
+                                if let Some(p) = inner.next() {
+                                    set.filter = Some(self.build(p, &mut arena));
+                                }
 
-                        let variant = Variant::Set(set);
+                                Variant::Comprehension(Comprehension::new(set, first))
+                            }
+                            next => {
+                                let mut set = Set::default();
+                                set.elements.push(first);
+                                for p in next.into_iter().chain(inner) {
+                                    set.elements.push(self.build(p, *arena));
+                                }
+                                Variant::Set(set)
+                            }
+                        };
+
                         Node::new(span, variant)
                     }
 
@@ -396,16 +403,6 @@ impl From<Rule> for BinaryOperator {
             Rule::incl => BinaryOperator::Includes,
 
             Rule::since => BinaryOperator::Since,
-            _ => unreachable!(),
-        }
-    }
-}
-
-impl From<Rule> for OptimizerKind {
-    fn from(rule: Rule) -> Self {
-        match rule {
-            Rule::mini => OptimizerKind::Minimize,
-            Rule::maxi => OptimizerKind::Maximize,
             _ => unreachable!(),
         }
     }

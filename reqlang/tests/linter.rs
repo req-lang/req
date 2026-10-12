@@ -76,13 +76,13 @@ mod formatter {
     }
 
     #[test]
-    fn exists() {
-        assert_isomorphic_formatter("exists.req");
+    fn comprehension() {
+        assert_isomorphic_formatter("comprehension.req");
     }
 
     #[test]
-    fn select() {
-        assert_isomorphic_formatter("select.req");
+    fn exists() {
+        assert_isomorphic_formatter("exists.req");
     }
 
     #[test]

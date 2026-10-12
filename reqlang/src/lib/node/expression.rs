@@ -60,8 +60,8 @@ pub enum Variant<I, R> {
     When(When<I>),
     Forall(Forall<I>),
     Exists(Exists<I>),
-    Select(Select<I>),
     Aggregation(Aggregation<I>),
+    Comprehension(Comprehension<I>),
 
     UnaryOp(UnaryOp<I>),
     BinOp(BinOp<I>),
@@ -118,17 +118,21 @@ impl<I: Clone, R> ChildrenIter<I> for Variant<I, R> {
                 children.extend(es.filter.iter());
             }
 
-            Select(select) => {
-                let ss = &select.set;
-                let so = &select.optimizer;
-                children.push(&ss.domain);
-                children.extend(ss.filter.iter());
-                children.extend(so.iter().map(|n| &n.expression));
-            }
+            Aggregation(aggregation) => match &aggregation.operand {
+                Operand::List(expressions) => children.extend(expressions.iter()),
+                Operand::Comprehension(comprehension) => {
+                    let fs = &comprehension.set;
+                    children.push(&fs.domain);
+                    children.extend(fs.filter.iter());
+                    children.push(&comprehension.expression);
+                }
+            },
 
-            Aggregation(aggregation) => {
-                let ae = &aggregation.expressions;
-                children.extend(ae.iter());
+            Comprehension(comprehension) => {
+                let fs = &comprehension.set;
+                children.push(&fs.domain);
+                children.extend(fs.filter.iter());
+                children.push(&comprehension.expression);
             }
 
             UnaryOp(unary) => {
@@ -186,8 +190,8 @@ impl<N, R> Variant<N, R> {
             Variant::When(when) => Variant::When(when),
             Variant::Forall(forall) => Variant::Forall(forall),
             Variant::Exists(exists) => Variant::Exists(exists),
-            Variant::Select(select) => Variant::Select(select),
             Variant::Aggregation(aggregation) => Variant::Aggregation(aggregation),
+            Variant::Comprehension(comprehension) => Variant::Comprehension(comprehension),
             Variant::UnaryOp(unary_op) => Variant::UnaryOp(unary_op),
             Variant::BinOp(bin_op) => Variant::BinOp(bin_op),
             Variant::Function(function) => Variant::Function(function),
@@ -235,22 +239,21 @@ impl<N, R> Variant<N, R> {
                 },
             }),
 
-            Variant::Select(select) => Variant::Select(Select {
-                set: SetElement {
-                    variable: select.set.variable,
-                    domain: f(select.set.domain),
-                    filter: select.set.filter.map(&mut f),
-                },
-                optimizer: select.optimizer.map(|o| Optimizer {
-                    kind: o.kind,
-                    expression: f(o.expression),
-                }),
-            }),
-
             Variant::Aggregation(aggregation) => Variant::Aggregation(Aggregation {
                 aggregator: aggregation.aggregator,
-                expressions: aggregation.expressions.into_iter().map(&mut f).collect(),
+                operand: match aggregation.operand {
+                    Operand::List(expressions) => {
+                        Operand::List(expressions.into_iter().map(&mut f).collect())
+                    }
+                    Operand::Comprehension(comprehension) => {
+                        Operand::Comprehension(comprehension.mape(&mut f))
+                    }
+                },
             }),
+
+            Variant::Comprehension(comprehension) => {
+                Variant::Comprehension(comprehension.mape(&mut f))
+            }
 
             Variant::UnaryOp(unary) => Variant::UnaryOp(UnaryOp {
                 operator: unary.operator,
@@ -310,7 +313,11 @@ impl<N, R> Variant<N, R> {
         match self {
             Forall(forall) => Some(&forall.set),
             Exists(exists) => Some(&exists.set),
-            Select(select) => Some(&select.set),
+            Comprehension(comprehension) => Some(&comprehension.set),
+            Aggregation(aggregation) => match &aggregation.operand {
+                Operand::Comprehension(comprehension) => Some(&comprehension.set),
+                Operand::List(_) => None,
+            },
             _ => None,
         }
     }
@@ -319,7 +326,7 @@ impl<N, R> Variant<N, R> {
         use Variant::*;
 
         match self {
-            Branch(_) | Forall(_) | When(_) | Exists(_) | Select(_) | Aggregation(_) => true,
+            Branch(_) | Forall(_) | When(_) | Exists(_) | Aggregation(_) => true,
             _ => false,
         }
     }
@@ -441,39 +448,6 @@ impl<N> Exists<N> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Select<N> {
-    pub set: SetElement<N>,
-    pub optimizer: Option<Optimizer<N>>,
-}
-
-impl<N> Select<N> {
-    pub fn new(set: SetElement<N>) -> Self {
-        Select {
-            set,
-            optimizer: None,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Optimizer<N> {
-    pub kind: OptimizerKind,
-    pub expression: N,
-}
-
-impl<N> Optimizer<N> {
-    pub fn new(kind: OptimizerKind, expression: N) -> Self {
-        Optimizer { kind, expression }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum OptimizerKind {
-    Minimize,
-    Maximize,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct SetElement<N> {
     pub variable: String,
     pub domain: N,
@@ -504,14 +478,45 @@ impl<N> SetElement<N> {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Aggregation<N> {
     pub aggregator: Aggregator,
-    pub expressions: Vec<N>,
+    pub operand: Operand<N>,
 }
 
 impl<N> Aggregation<N> {
-    pub fn new(aggregator: Aggregator) -> Self {
+    pub fn new(aggregator: Aggregator, operand: Operand<N>) -> Self {
         Aggregation {
             aggregator,
-            expressions: Vec::new(),
+            operand,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Operand<N> {
+    /// `sum a, b, c end`
+    List(Vec<N>),
+    /// `sum e for x in S such that C end`, an aggregation over `{ e for x in S such that C }`
+    Comprehension(Comprehension<N>),
+}
+
+/// `{ expression for variable in domain such that filter }`
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Comprehension<N> {
+    pub set: SetElement<N>,
+    pub expression: N,
+}
+
+impl<N> Comprehension<N> {
+    pub fn new(set: SetElement<N>, expression: N) -> Self {
+        Comprehension { set, expression }
+    }
+
+    pub fn mape<F, M>(self, mut f: F) -> Comprehension<M>
+    where
+        F: FnMut(N) -> M,
+    {
+        Comprehension {
+            set: self.set.mape(&mut f),
+            expression: f(self.expression),
         }
     }
 }

@@ -118,13 +118,13 @@ mod valid {
     }
 
     #[test]
-    fn exists() {
-        assert_valid_parsing_and_analysis("exists.req");
+    fn comprehension() {
+        assert_valid_parsing_and_analysis("comprehension.req");
     }
 
     #[test]
-    fn select() {
-        assert_valid_parsing_and_analysis("select.req");
+    fn exists() {
+        assert_valid_parsing_and_analysis("exists.req");
     }
 
     #[test]

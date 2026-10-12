@@ -51,7 +51,7 @@ fac     =  { "!" }
 call    =  { "(" ~ expr? ~ ("," ~ expr)* ~ ")" }
 
 primary = _{
-    (num | bool | undefined | set | rng | intv | branch | when | forall | exists | select | aggregation | ident | "(" ~ expr ~ ")")
+    (num | bool | undefined | set | rng | intv | branch | when | forall | exists | aggregation | ident | "(" ~ expr ~ ")")
 }
 
 branch =  { if ~ expr ~ then ~ expr ~ (else ~ expr)? ~ end }
@@ -69,15 +69,9 @@ fora   = _{ "forall" }
 exists =  { exi ~ label ~ in ~ expr ~ such_that? ~ end }
 exi    = _{ "exists" }
 
-select    =  { sel ~ label ~ in ~ expr ~ such_that? ~ optimizer? ~ end }
-sel       = _{ "select" }
-optimizer =  { (maxi | mini) ~ expr }
-mini      =  { "minimize" }
-maxi      =  { "maximize" }
-
 such_that = _{ such ~ that ~ expr }
 
-aggregation =  { aggregator ~ (expr ~ ",")* ~ expr ~ end }
+aggregation =  { aggregator ~ expr ~ (binding | ("," ~ expr)*) ~ end }
 aggregator  = _{ (all | any | max | min | sum | prod | uni | inter | one | choose) }
 all         =  { "all" }
 any         =  { "any" }
@@ -94,7 +88,9 @@ such = _{ "such" }
 that = _{ "that" }
 in   = _{ "in" }
 
-set        =  { "{" ~ (expr ~ ",")* ~ expr ~ "}" }
+set        =  { "{" ~ expr ~ (binding | ("," ~ expr)*) ~ "}" }
+binding    =  { for ~ label ~ in ~ expr ~ such_that? }
+for        = _{ "for" }
 intv       =  { bracket ~ expr ~ "," ~ expr ~ bracket }
 bracket    = _{ lbrkt | rbrkt }
 rng        =  { "[[" ~ expr ~ "," ~ expr ~ "]]" }
