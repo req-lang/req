@@ -178,7 +178,7 @@ pub(super) fn evaluate_node<P>(
 
         Set(set) => {
             let mut se = set.elements.iter();
-            let first = se.next().unwrap();
+            let first = se.next().ok_or(NotEvaluable)?;
             let first = type_or_poison(&local, *first)?;
             for elem in se {
                 let elem = type_or_poison(&local, *elem)?;
