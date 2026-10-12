@@ -21,7 +21,7 @@ pub(in crate::syntax) type Node = node::expression::Node<Span, String>;
 
 pub fn parse(input: &str, offset: &Position) -> Result<Arena<Node>, Span> {
     let mut arena = Vec::new();
-    match PairParser::parse(Rule::expr, input) {
+    match PairParser::parse(Rule::root, input) {
         Ok(mut pair) => {
             Builder::new(offset).build(pair.next().unwrap(), &mut arena);
             let len = arena.len();
@@ -449,5 +449,30 @@ impl From<Rule> for Boolean {
             Rule::fals => Self { value: false },
             _ => unreachable!(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn parses(input: &str) -> bool {
+        parse(input, &Position::default()).is_ok()
+    }
+
+    #[test]
+    fn accepts_whole_expression() {
+        assert!(parses("a and b"));
+        assert!(parses("  a <> 1  "));
+        assert!(parses("sum s for s in [[ 1, 3 ]] end"));
+    }
+
+    #[test]
+    fn rejects_trailing_input() {
+        assert!(!parses("a b"));
+        assert!(!parses("a and"));
+        assert!(!parses("a ) b"));
+        assert!(!parses("sum s for s in [[ 1, 3 ]] end end"));
+        assert!(!parses("a +"));
     }
 }
