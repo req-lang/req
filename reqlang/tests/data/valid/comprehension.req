@@ -53,4 +53,19 @@ package A
   is
     { t for t in { s ^ 2 for s in integer } such that t < 100 } includes { 1, 4 }
   requirement
+  requirement R8 
+    on B
+  is
+    sup s for s in ] 0, 1 [ end = 1 and inf s for s in [ 0, 1 ] end = 0
+  requirement
+  requirement R9 
+    on B
+  is
+    count s for s in integer such that s > 0 and s < B::y end > 2
+  requirement
+  requirement R10 
+    on B
+  is
+    count s for s in { true, false } end = 2
+  requirement
 package

@@ -72,7 +72,7 @@ exi    = _{ "exists" }
 such_that = _{ such ~ that ~ expr }
 
 aggregation =  { aggregator ~ expr ~ (binding | ("," ~ expr)*) ~ end }
-aggregator  = _{ (all | any | max | min | sum | prod | uni | inter | one | choose) }
+aggregator  = _{ (all | any | max | min | sup | inf | sum | prod | count | uni | inter | one | choose) }
 all         =  { "all" }
 any         =  { "any" }
 one         =  { "one" }
@@ -80,6 +80,9 @@ max         =  { "max" }
 min         =  { "min" }
 sum         =  { "sum" }
 prod        =  { "prod" }
+sup         =  { "sup" }
+inf         =  { "inf" }
+count       =  { "count" }
 choose      =  { "choose" }
 
 then = _{ "then" }

@@ -85,7 +85,7 @@ pub(super) fn evaluate_node<P>(
             let first = operands.iter().next().ok_or(NotEvaluable);
             let (expected, result) = match aggregation.aggregator {
                 All | Any | One => (Boolean, Boolean),
-                Maximum | Minimum | Sum | Product => (Number, Number),
+                Maximum | Minimum | Supremum | Infimum | Sum | Product => (Number, Number),
                 Union | Intersection => {
                     let first = type_or_poison(&local, *first?)?;
                     match first {
@@ -96,6 +96,10 @@ pub(super) fn evaluate_node<P>(
                 Choose => {
                     let typ = type_or_poison(&local, *first?)?;
                     (typ.clone(), typ)
+                }
+                Count => {
+                    let typ = type_or_poison(&local, *first?)?;
+                    (typ, Number)
                 }
             };
 

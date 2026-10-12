@@ -47,4 +47,14 @@ package A
       { 30 }
     end
   requirement
+  requirement R5 
+    on B
+  is
+    sup B::x, 10, 20 end > inf B::y, 30 end
+  requirement
+  requirement R6 
+    on B
+  is
+    count B::x, B::y, 30 end = 3
+  requirement
 package

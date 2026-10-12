@@ -533,6 +533,9 @@ pub enum Aggregator {
     Union,
     Intersection,
     Choose,
+    Supremum,
+    Infimum,
+    Count,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
