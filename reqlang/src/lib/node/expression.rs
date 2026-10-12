@@ -533,6 +533,8 @@ pub enum Aggregator {
     Union,
     Intersection,
     Choose,
+    ArgMaximum,
+    ArgMinimum,
     Supremum,
     Infimum,
     Count,

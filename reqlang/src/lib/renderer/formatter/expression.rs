@@ -296,6 +296,8 @@ fn aggregator_symbol(agg: &Aggregator) -> &'static str {
         Intersection => "intersection",
         Union => "union",
         Choose => "choose",
+        ArgMaximum => "argmax",
+        ArgMinimum => "argmin",
         Supremum => "sup",
         Infimum => "inf",
         Count => "count",

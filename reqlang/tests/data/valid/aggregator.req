@@ -57,4 +57,14 @@ package A
   is
     count B::x, B::y, 30 end = 3
   requirement
+  requirement R7 
+    on B
+  is
+    argmax B::x, 10, B::y end includes { 1, 2 }
+  requirement
+  requirement R8 
+    on B
+  is
+    argmin B::x, 10 end = { 2 }
+  requirement
 package

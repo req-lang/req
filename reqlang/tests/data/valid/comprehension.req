@@ -68,4 +68,19 @@ package A
   is
     count s for s in { true, false } end = 2
   requirement
+  requirement R11 
+    on B
+  is
+    argmax 0 - s ^ 2 for s in real end = { 0 }
+  requirement
+  requirement R12 
+    on B
+  is
+    argmin (s - 3) ^ 2 for s in [[ 0, 10 ]] such that s > 5 end includes { 6 }
+  requirement
+  requirement R13 
+    on B
+  is
+    choose t for t in argmax 0 - s ^ 2 for s in real end end = 0
+  requirement
 package

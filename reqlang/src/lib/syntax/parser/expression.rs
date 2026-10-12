@@ -419,6 +419,8 @@ impl From<Rule> for Aggregator {
             Rule::sum => Aggregator::Sum,
             Rule::prod => Aggregator::Product,
             Rule::choose => Aggregator::Choose,
+            Rule::argmax => Aggregator::ArgMaximum,
+            Rule::argmin => Aggregator::ArgMinimum,
             Rule::sup => Aggregator::Supremum,
             Rule::inf => Aggregator::Infimum,
             Rule::count => Aggregator::Count,

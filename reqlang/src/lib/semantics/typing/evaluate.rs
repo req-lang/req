@@ -74,11 +74,11 @@ pub(super) fn evaluate_node<P>(
             use Aggregator::*;
             use TypeKind::*;
 
-            let operands = match &aggregation.operand {
-                Operand::List(expressions) => expressions.clone(),
+            let (operands, binder) = match &aggregation.operand {
+                Operand::List(expressions) => (expressions.clone(), None),
                 Operand::Comprehension(comprehension) => {
-                    evaluate_set_element(&local, &comprehension.set)?;
-                    vec![comprehension.expression]
+                    let binder = evaluate_set_element(&local, &comprehension.set)?;
+                    (vec![comprehension.expression], Some(binder))
                 }
             };
 
@@ -86,6 +86,11 @@ pub(super) fn evaluate_node<P>(
             let (expected, result) = match aggregation.aggregator {
                 All | Any | One => (Boolean, Boolean),
                 Maximum | Minimum | Supremum | Infimum | Sum | Product => (Number, Number),
+                // The set of maximizers: binder values for `for`, 1-based indices for a list
+                ArgMaximum | ArgMinimum => {
+                    let element = binder.unwrap_or(Number);
+                    (Number, Set(Box::new(element)))
+                }
                 Union | Intersection => {
                     let first = type_or_poison(&local, *first?)?;
                     match first {
