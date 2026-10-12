@@ -17,4 +17,9 @@ package A
   is
     not B::x and B::y or false xor B::x iff true implies B::y
   requirement
+  requirement R2 
+    on B
+  is
+    B::x <> B::y and B::y <> true
+  requirement
 package

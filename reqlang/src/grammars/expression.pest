@@ -1,6 +1,6 @@
 expr = { prefix* ~ primary ~ postfix* ~ (infix ~ prefix* ~ primary ~ postfix*)* }
 
-infix = _{ add | sub | mul | pow | rem | and | or | xor | ge | le | gt | lt | neq | ini | fix | eq | div | uni | inter | incl | implies | since | iff | ins | diff | comp | tol }
+infix = _{ add | sub | mul | pow | rem | and | or | xor | ge | le | neq | gt | lt | ini | fix | eq | div | uni | inter | incl | implies | since | iff | ins | diff | comp | tol }
 add   =  { "+" }
 sub   =  { "-" }
 mul   =  { "*" }
