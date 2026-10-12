@@ -10,14 +10,14 @@ div   =  { "/" }
 rem   =  { "%" }
 pow   =  { "^" }
 
-and     = { "and" }
-or      = { "or" }
-xor     = { "xor" }
-implies = { "implies" }
-iff     = { "iff" }
+and     = @{ "and" ~ !WORD_CHAR }
+or      = @{ "or" ~ !WORD_CHAR }
+xor     = @{ "xor" ~ !WORD_CHAR }
+implies = @{ "implies" ~ !WORD_CHAR }
+iff     = @{ "iff" ~ !WORD_CHAR }
 
-ins = { "in" }
-tol = { "tol" }
+ins = @{ "in" ~ !WORD_CHAR }
+tol = @{ "tol" ~ !WORD_CHAR }
 
 gt  = { ">" }
 lt  = { "<" }
@@ -28,25 +28,25 @@ eq  = { "=" }
 fix = { ":=" }
 ini = { "°=" }
 
-uni   = { "union" }
-inter = { "intersection" }
-diff  = { "difference" }
-comp  = { "complement" }
-incl  = { "includes" }
+uni   = @{ "union" ~ !WORD_CHAR }
+inter = @{ "intersection" ~ !WORD_CHAR }
+diff  = @{ "difference" ~ !WORD_CHAR }
+comp  = @{ "complement" ~ !WORD_CHAR }
+incl  = @{ "includes" ~ !WORD_CHAR }
 
-since = { "since" }
+since = @{ "since" ~ !WORD_CHAR }
 
 prefix = _{ neg | plus | not | rise | fall | event | always | previous }
 neg    =  { "-" }
 plus   =  { "+" }
 
-not = { "not" }
+not = @{ "not" ~ !WORD_CHAR }
 
-previous = { "previously" }
-rise     = { "rising" }
-fall     = { "falling" }
-event    = { "eventually" }
-always   = { "always" }
+previous = @{ "previously" ~ !WORD_CHAR }
+rise     = @{ "rising" ~ !WORD_CHAR }
+fall     = @{ "falling" ~ !WORD_CHAR }
+event    = @{ "eventually" ~ !WORD_CHAR }
+always   = @{ "always" ~ !WORD_CHAR }
 
 postfix = _{ fac | call }
 fac     =  { "!" }
@@ -57,62 +57,71 @@ primary = _{
 }
 
 branch =  { if ~ expr ~ then ~ expr ~ (else ~ expr)? ~ end }
-if     = _{ "if" }
-else   = _{ "else" }
+if     = @{ "if" ~ !WORD_CHAR }
+else   = @{ "else" ~ !WORD_CHAR }
 
 when      =  { whe ~ ((case ~ ("," ~ case)? ~ "," ~ otherwise) | (case ~ ",")* ~ case) ~ end }
-whe       = _{ "when" }
+whe       = @{ "when" ~ !WORD_CHAR }
 case      =  { expr ~ then ~ expr }
 otherwise =  { other ~ expr }
 
 forall =  { fora ~ label ~ in ~ expr ~ such_that? ~ expr ~ end }
-fora   = _{ "forall" }
+fora   = @{ "forall" ~ !WORD_CHAR }
 
 exists =  { exi ~ label ~ in ~ expr ~ such_that? ~ end }
-exi    = _{ "exists" }
+exi    = @{ "exists" ~ !WORD_CHAR }
 
 such_that = _{ such ~ that ~ expr }
 
 aggregation =  { aggregator ~ expr ~ (binding | ("," ~ expr)*) ~ end }
 aggregator  = _{ (all | any | max | min | argmax | argmin | sup | inf | sum | prod | count | uni | inter | one | choose) }
-all         =  { "all" }
-any         =  { "any" }
-one         =  { "one" }
-max         =  { "max" }
-min         =  { "min" }
-sum         =  { "sum" }
-prod        =  { "prod" }
-argmax      =  { "argmax" }
-argmin      =  { "argmin" }
-sup         =  { "sup" }
-inf         =  { "inf" }
-count       =  { "count" }
-choose      =  { "choose" }
+all         = @{ "all" ~ !WORD_CHAR }
+any         = @{ "any" ~ !WORD_CHAR }
+one         = @{ "one" ~ !WORD_CHAR }
+max         = @{ "max" ~ !WORD_CHAR }
+min         = @{ "min" ~ !WORD_CHAR }
+sum         = @{ "sum" ~ !WORD_CHAR }
+prod        = @{ "prod" ~ !WORD_CHAR }
+argmax      = @{ "argmax" ~ !WORD_CHAR }
+argmin      = @{ "argmin" ~ !WORD_CHAR }
+sup         = @{ "sup" ~ !WORD_CHAR }
+inf         = @{ "inf" ~ !WORD_CHAR }
+count       = @{ "count" ~ !WORD_CHAR }
+choose      = @{ "choose" ~ !WORD_CHAR }
 
-then = _{ "then" }
-end  = _{ "end" }
-such = _{ "such" }
-that = _{ "that" }
-in   = _{ "in" }
+then = @{ "then" ~ !WORD_CHAR }
+end  = @{ "end" ~ !WORD_CHAR }
+such = @{ "such" ~ !WORD_CHAR }
+that = @{ "that" ~ !WORD_CHAR }
+in   = @{ "in" ~ !WORD_CHAR }
 
 set        =  { "{" ~ expr ~ (binding | ("," ~ expr)*) ~ "}" }
 binding    =  { for ~ label ~ in ~ expr ~ such_that? }
-for        = _{ "for" }
+for        = @{ "for" ~ !WORD_CHAR }
 intv       =  { bracket ~ expr ~ "," ~ expr ~ bracket }
 bracket    = _{ lbrkt | rbrkt }
 rng        =  { "[[" ~ expr ~ "," ~ expr ~ "]]" }
 lbrkt      =  { "[" }
 rbrkt      =  { "]" }
 bool       =  { tru | fals }
-tru        =  { "true" }
-fals       =  { "false" }
-undefined  =  { "undefined" }
-other      = _{ "otherwise" }
+tru        = @{ "true" ~ !WORD_CHAR }
+fals       = @{ "false" ~ !WORD_CHAR }
+undefined  = @{ "undefined" ~ !WORD_CHAR }
+other      = @{ "otherwise" ~ !WORD_CHAR }
 num        =  { real | infinity | int }
 real       = @{ int ~ ("." ~ ASCII_DIGIT*)? ~ (^"e" ~ int)? }
 int        =  { ASCII_DIGIT+ }
-infinity   =  { "infinity" }
+infinity   = @{ "infinity" ~ !WORD_CHAR }
 ident      = @{ (label ~ "::")* ~ label }
-label      = @{ word+ }
+label      = @{ !keyword ~ word }
 word       = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHA | ASCII_DIGIT | "_")* }
 WHITESPACE = _{ " " | "\t" | NEWLINE }
+
+// Keywords are atomic tokens, a keyword never matches the start of a longer word:
+// `notable` is one identifier, not `not` followed by `able`. They appear in the
+// parse tree, the parser skips them.
+WORD_CHAR = _{ ASCII_ALPHANUMERIC | "_" }
+
+// Keywords are reserved and cannot be used as a label, except for aggregators:
+// they only appear at the start of an expression and need an `end`.
+keyword = _{ and | or | xor | implies | iff | ins | tol | uni | inter | diff | comp | incl | since | not | previous | rise | fall | event | always | if | else | whe | fora | exi | then | end | such | that | in | for | tru | fals | undefined | other | infinity }

@@ -102,7 +102,7 @@ impl<'s> Builder<'s> {
                     }
 
                     Rule::branch => {
-                        let mut inner = primary.into_inner();
+                        let mut inner = operands(primary);
                         let condition = self.build(inner.next().unwrap(), *arena);
                         let consequence = self.build(inner.next().unwrap(), *arena);
                         let case = Case::new(condition, consequence);
@@ -115,19 +115,19 @@ impl<'s> Builder<'s> {
                     }
 
                     Rule::when => {
-                        let inner = primary.into_inner();
+                        let inner = operands(primary);
                         let mut when = When::new(Vec::new());
                         for p in inner {
                             match p.as_rule() {
                                 Rule::case => {
-                                    let mut inner = p.into_inner();
+                                    let mut inner = operands(p);
                                     let condition = self.build(inner.next().unwrap(), *arena);
                                     let consequence = self.build(inner.next().unwrap(), *arena);
                                     when.cases.push(Case::new(condition, consequence));
                                 }
 
                                 Rule::otherwise => {
-                                    let node = self.build(p.into_inner().next().unwrap(), *arena);
+                                    let node = self.build(operands(p).next().unwrap(), *arena);
                                     when.otherwise = Some(node);
                                 }
 
@@ -140,7 +140,7 @@ impl<'s> Builder<'s> {
                     }
 
                     Rule::forall => {
-                        let mut inner = primary.into_inner();
+                        let mut inner = operands(primary);
                         let expression = self.build(inner.next_back().unwrap(), *arena);
                         let variable = inner.next().unwrap().as_str().to_string();
                         let domain = self.build(inner.next().unwrap(), *arena);
@@ -154,7 +154,7 @@ impl<'s> Builder<'s> {
                     }
 
                     Rule::exists => {
-                        let mut inner = primary.into_inner();
+                        let mut inner = operands(primary);
 
                         let variable = inner.next().unwrap().as_str().to_string();
                         let domain = self.build(inner.next().unwrap(), *arena);
@@ -168,13 +168,13 @@ impl<'s> Builder<'s> {
                     }
 
                     Rule::aggregation => {
-                        let mut inner = primary.into_inner();
+                        let mut inner = operands(primary);
                         let aggregator = inner.next().unwrap().as_rule().into();
                         let first = self.build(inner.next().unwrap(), *arena);
 
                         let operand = match inner.next() {
                             Some(p) if p.as_rule() == Rule::binding => {
-                                let mut inner = p.into_inner();
+                                let mut inner = operands(p);
                                 let variable = inner.next().unwrap().as_str().to_string();
                                 let domain = self.build(inner.next().unwrap(), &mut arena);
                                 let mut set = SetElement::new(variable, domain);
@@ -198,12 +198,12 @@ impl<'s> Builder<'s> {
                     }
 
                     Rule::set => {
-                        let mut inner = primary.into_inner();
+                        let mut inner = operands(primary);
                         let first = self.build(inner.next().unwrap(), *arena);
 
                         let variant = match inner.next() {
                             Some(p) if p.as_rule() == Rule::binding => {
-                                let mut inner = p.into_inner();
+                                let mut inner = operands(p);
                                 let variable = inner.next().unwrap().as_str().to_string();
                                 let domain = self.build(inner.next().unwrap(), &mut arena);
                                 let mut set = SetElement::new(variable, domain);
@@ -310,6 +310,31 @@ impl<'s> Builder<'s> {
         ar.borrow_mut().push(node);
         n.into()
     }
+}
+
+/// Inner pairs of a rule without its keyword tokens (`if`, `then`, `end`, `for`...)
+fn operands(pair: Pair<Rule>) -> impl DoubleEndedIterator<Item = Pair<Rule>> {
+    pair.into_inner().filter(|p| !is_keyword(p.as_rule()))
+}
+
+/// Keywords that only delimit a construct. Operators, aggregators and literals are
+/// keywords too, but they carry meaning and are read by the parser.
+fn is_keyword(rule: Rule) -> bool {
+    matches!(
+        rule,
+        Rule::r#if
+            | Rule::r#else
+            | Rule::whe
+            | Rule::fora
+            | Rule::exi
+            | Rule::then
+            | Rule::end
+            | Rule::such
+            | Rule::that
+            | Rule::r#in
+            | Rule::r#for
+            | Rule::other
+    )
 }
 
 fn pratt_parser() -> &'static PrattParser<Rule> {
@@ -474,5 +499,64 @@ mod tests {
         assert!(!parses("a ) b"));
         assert!(!parses("sum s for s in [[ 1, 3 ]] end end"));
         assert!(!parses("a +"));
+    }
+
+    fn root_variant(input: &str) -> Option<Variant<Idx, String>> {
+        let arena = parse(input, &Position::default()).ok()?;
+        Some(arena[Idx::root()].variant.clone())
+    }
+
+    #[test]
+    fn keyword_prefix_is_one_identifier() {
+        for word in [
+            "notable",
+            "ifsfklsdf",
+            "trueValue",
+            "falsehood",
+            "infinityLoop",
+            "undefinedX",
+            "eventuallyDone",
+            "alwaysOn",
+            "forall_",
+            "ending",
+            "thenx",
+            "index",
+        ] {
+            match root_variant(word) {
+                Some(Variant::Identifier(id)) => assert_eq!(id.target, word),
+                other => panic!("{word}: expected an identifier, got {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn keyword_must_not_continue_a_word() {
+        assert!(!parses("a andb"));
+        assert!(!parses("a inb"));
+        assert!(!parses("a unionb"));
+        assert!(!parses("if a thenb c end"));
+    }
+
+    #[test]
+    fn punctuation_ends_a_keyword() {
+        assert!(parses("not(a)"));
+        assert!(parses("(a)and(b)"));
+        assert!(parses("{ s for s in [[ 1, 3 ]] }"));
+        assert!(parses("(sum 1, 2 end)"));
+    }
+
+    #[test]
+    fn keywords_are_reserved() {
+        assert!(!parses("forall end in real end end"));
+        assert!(!parses("exists then in real such that true end"));
+        assert!(!parses("{ s for for in { 1 } }"));
+        assert!(!parses("and"));
+        assert!(!parses("a + in"));
+    }
+
+    #[test]
+    fn aggregator_names_are_not_reserved() {
+        assert!(parses("max + sum"));
+        assert!(parses("forall max in real max > 0 end"));
     }
 }

@@ -81,6 +81,11 @@ mod formatter {
     }
 
     #[test]
+    fn keywords() {
+        assert_isomorphic_formatter("keywords.req");
+    }
+
+    #[test]
     fn exists() {
         assert_isomorphic_formatter("exists.req");
     }

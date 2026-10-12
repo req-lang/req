@@ -1,0 +1,39 @@
+package A
+  @@
+  System block
+  @@
+  part B
+    @@
+    Counter
+    @@
+    let ending in integer
+  part
+  requirement R1 
+    on B
+  is
+    forall notable in real such that notable > 0
+      notable < B::ending
+    end
+  requirement
+  requirement R2 
+    on B
+  is
+    forall infinityLoop in integer such that infinityLoop > 0
+      exists trueValue in integer such that trueValue > infinityLoop
+      end
+    end
+  requirement
+  requirement R3 
+    on B
+  is
+    exists eventuallyDone in integer such that eventuallyDone > B::ending
+    end
+  requirement
+  requirement R4 
+    on B
+  is
+    forall always_ in boolean
+      always_ or not always_
+    end
+  requirement
+package
