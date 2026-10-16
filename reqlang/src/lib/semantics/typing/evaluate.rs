@@ -26,15 +26,6 @@ pub(super) fn evaluate_node<P>(
     let (types, entity) = types.into();
     let local = types[entity].as_ref().unwrap();
     match &expressions[expression].variant {
-        Branch(branch) => {
-            let els = match &branch.otherwise {
-                Some(expr) => Some(type_or_poison(&local, *expr)?),
-                None => None,
-            };
-
-            evaluate_case(&local, &branch.case, els)
-        }
-
         When(when) => {
             let mut cases = when.cases.iter();
             let expected = match &when.otherwise {

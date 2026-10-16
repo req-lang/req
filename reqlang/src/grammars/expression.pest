@@ -53,12 +53,8 @@ fac     =  { "!" }
 call    =  { "(" ~ expr? ~ ("," ~ expr)* ~ ")" }
 
 primary = _{
-    (num | bool | undefined | set | rng | intv | branch | when | aggregation | ident | "(" ~ expr ~ ")")
+    (num | bool | undefined | set | rng | intv | when | aggregation | ident | "(" ~ expr ~ ")")
 }
-
-branch =  { if ~ expr ~ then ~ expr ~ (else ~ expr)? ~ end }
-if     = @{ "if" ~ !WORD_CHAR }
-else   = @{ "else" ~ !WORD_CHAR }
 
 when      =  { whe ~ ((case ~ ("," ~ case)? ~ "," ~ otherwise) | (case ~ ",")* ~ case) ~ end }
 whe       = @{ "when" ~ !WORD_CHAR }
@@ -118,4 +114,4 @@ WORD_CHAR = _{ ASCII_ALPHANUMERIC | "_" }
 
 // Keywords are reserved and cannot be used as a label, except for aggregators:
 // they only appear at the start of an expression and need an `end`.
-keyword = _{ and | or | xor | implies | iff | ins | tol | uni | inter | diff | comp | incl | since | not | previous | rise | fall | event | always | if | else | whe | then | end | such | that | in | for | tru | fals | undefined | other | infinity }
+keyword = _{ and | or | xor | implies | iff | ins | tol | uni | inter | diff | comp | incl | since | not | previous | rise | fall | event | always | whe | then | end | such | that | in | for | tru | fals | undefined | other | infinity }

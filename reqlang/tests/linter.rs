@@ -86,11 +86,6 @@ mod formatter {
     }
 
     #[test]
-    fn branch() {
-        assert_isomorphic_formatter("branch.req");
-    }
-
-    #[test]
     fn aggregator() {
         assert_isomorphic_formatter("aggregator.req");
     }

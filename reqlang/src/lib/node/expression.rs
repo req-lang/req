@@ -56,7 +56,6 @@ impl<N, R, I: Clone> ChildrenIter<I> for Node<N, R, I> {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Variant<I, R> {
-    Branch(Branch<I>),
     When(When<I>),
     Aggregation(Aggregation<I>),
     Comprehension(Comprehension<I>),
@@ -85,13 +84,6 @@ impl<I: Clone, R> ChildrenIter<I> for Variant<I, R> {
 
         let mut children = Vec::new();
         match self {
-            Branch(branch) => {
-                let bo = &branch.otherwise;
-                children.push(&branch.case.condition);
-                children.push(&branch.case.consequence);
-                children.extend(bo.iter());
-            }
-
             When(when) => {
                 let cases = when
                     .cases
@@ -166,7 +158,6 @@ impl<N, R> Variant<N, R> {
         F: FnMut(R) -> S,
     {
         match self {
-            Variant::Branch(branch) => Variant::Branch(branch),
             Variant::When(when) => Variant::When(when),
             Variant::Aggregation(aggregation) => Variant::Aggregation(aggregation),
             Variant::Comprehension(comprehension) => Variant::Comprehension(comprehension),
@@ -190,11 +181,6 @@ impl<N, R> Variant<N, R> {
         F: FnMut(N) -> O,
     {
         match self {
-            Variant::Branch(branch) => Variant::Branch(Branch {
-                case: branch.case.map(&mut f),
-                otherwise: branch.otherwise.map(&mut f),
-            }),
-
             Variant::When(when) => Variant::When(When {
                 cases: when.cases.into_iter().map(|c| c.map(&mut f)).collect(),
                 otherwise: when.otherwise.map(&mut f),
@@ -274,7 +260,7 @@ impl<N, R> Variant<N, R> {
         use Variant::*;
 
         match self {
-            Branch(_) | When(_) | Aggregation(_) => true,
+            When(_) | Aggregation(_) => true,
             // `{ e for x in S }` is closed by its brace, `sum e for x in S end` by `end`
             Comprehension(comprehension) => comprehension.aggregator.is_some(),
             _ => false,
@@ -315,21 +301,6 @@ impl<N, R> Variant<N, R> {
         match self {
             Variant::BinOp(bin_op) => Some(bin_op.operator.associativity()),
             _ => None,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Branch<N> {
-    pub case: Case<N>,
-    pub otherwise: Option<N>,
-}
-
-impl<N> Branch<N> {
-    pub fn new(case: Case<N>) -> Self {
-        Branch {
-            case,
-            otherwise: None,
         }
     }
 }

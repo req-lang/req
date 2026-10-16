@@ -101,19 +101,6 @@ impl<'s> Builder<'s> {
                         Node::new(span, variant)
                     }
 
-                    Rule::branch => {
-                        let mut inner = operands(primary);
-                        let condition = self.build(inner.next().unwrap(), *arena);
-                        let consequence = self.build(inner.next().unwrap(), *arena);
-                        let case = Case::new(condition, consequence);
-                        let mut branch = Branch::new(case);
-                        if let Some(p) = inner.next() {
-                            branch.otherwise = Some(self.build(p, *arena));
-                        }
-                        let variant = Variant::Branch(branch);
-                        Node::new(span, variant)
-                    }
-
                     Rule::when => {
                         let inner = operands(primary);
                         let mut when = When::new(Vec::new());
@@ -277,9 +264,7 @@ fn operands(pair: Pair<Rule>) -> impl DoubleEndedIterator<Item = Pair<Rule>> {
 fn is_keyword(rule: Rule) -> bool {
     matches!(
         rule,
-        Rule::r#if
-            | Rule::r#else
-            | Rule::whe
+        Rule::whe
             | Rule::then
             | Rule::end
             | Rule::such
@@ -487,7 +472,7 @@ mod tests {
         assert!(!parses("a andb"));
         assert!(!parses("a inb"));
         assert!(!parses("a unionb"));
-        assert!(!parses("if a thenb c end"));
+        assert!(!parses("when a thenb c end"));
     }
 
     #[test]
@@ -511,5 +496,15 @@ mod tests {
     fn aggregator_names_are_not_reserved() {
         assert!(parses("max + sum"));
         assert!(parses("all max > 0 for max in real end"));
+    }
+
+    #[test]
+    fn if_else_is_replaced_by_when() {
+        assert!(!parses("if a then b end"));
+        assert!(!parses("if a then b else c end"));
+        assert!(parses("when a then b end"));
+        assert!(parses("when a then b, otherwise c end"));
+        // `if` and `else` are not keywords anymore
+        assert!(parses("if and else"));
     }
 }

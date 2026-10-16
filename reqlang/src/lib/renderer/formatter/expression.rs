@@ -71,16 +71,6 @@ pub fn format<W: std::io::Write, E, T: Display>(
     }
 
     match &node.variant {
-        Branch(branch) => {
-            write!(out, "if ")?;
-            format_case(arena, &branch.case, out)?;
-
-            if let Some(otherwise) = &branch.otherwise {
-                write!(out, "{}{}else ", sep, pd)?;
-                format(arena, *otherwise, Ctx::default(), out)?;
-            }
-        }
-
         When(when) => {
             write!(out, "when{}", sep)?;
             let pd1 = pad(ctx.indent + 1);

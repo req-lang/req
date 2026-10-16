@@ -128,11 +128,6 @@ mod valid {
     }
 
     #[test]
-    fn branch() {
-        assert_valid_parsing_and_analysis("branch.req");
-    }
-
-    #[test]
     fn aggregator() {
         assert_valid_parsing_and_analysis("aggregator.req");
     }
