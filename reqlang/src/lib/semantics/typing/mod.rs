@@ -220,17 +220,17 @@ mod tests {
     }
 
     #[test]
-    fn forall_over_builtin_domain_has_boolean_type() {
-        // forall x in real, true  — domain is builtin Set(Number), body is Boolean
+    fn all_over_builtin_domain_has_boolean_type() {
+        // all true for x in real end — domain is builtin Set(Number), body is Boolean
         let mut p = package("p");
 
         let domain = identifier("real");
         let body = boolean(true);
         let set = node::expression::SetElement::new("x".to_string(), 1.into());
-        let forall = node::expression::Forall::new(set, 2.into());
-        let forall_expr = syntax::expression::Node::new((), Forall(forall));
+        let all = node::expression::Comprehension::new(Some(node::expression::Aggregator::All), set, 2.into());
+        let all_expr = syntax::expression::Node::new((), Comprehension(all));
 
-        let req = formal("r", vec![forall_expr, domain, body]);
+        let req = formal("r", vec![all_expr, domain, body]);
         p.variant.children_mut().unwrap().push(1.into());
 
         let typed = resolve_and_evaluate(vec![p, req].into());
@@ -241,20 +241,28 @@ mod tests {
     }
 
     #[test]
-    fn nested_forall_variables_have_number_type() {
-        // forall x in real, forall y in {x}, y > 1 end end
+    fn nested_all_variables_have_number_type() {
+        // all (all y > 1 for y in {x} end) for x in real end
         let mut p = package("p");
 
         let outer_set = node::expression::SetElement::new("x".to_string(), 1.into());
-        let outer_forall = syntax::expression::Node::new(
+        let outer_all = syntax::expression::Node::new(
             (),
-            Forall(node::expression::Forall::new(outer_set, 2.into())),
+            Comprehension(node::expression::Comprehension::new(
+                Some(node::expression::Aggregator::All),
+                outer_set,
+                2.into(),
+            )),
         );
 
         let inner_set = node::expression::SetElement::new("y".to_string(), 3.into());
-        let inner_forall = syntax::expression::Node::new(
+        let inner_all = syntax::expression::Node::new(
             (),
-            Forall(node::expression::Forall::new(inner_set, 5.into())),
+            Comprehension(node::expression::Comprehension::new(
+                Some(node::expression::Aggregator::All),
+                inner_set,
+                5.into(),
+            )),
         );
 
         let set_x = syntax::expression::Node::new(
@@ -267,9 +275,9 @@ mod tests {
         let req = formal(
             "r",
             vec![
-                outer_forall,              // 0: outer forall
+                outer_all,                 // 0: outer all
                 identifier("real"),        // 1: domain of x
-                inner_forall,              // 2: inner forall (body of outer)
+                inner_all,                 // 2: inner all (body of outer)
                 set_x,                     // 3: {x} (domain of y)
                 identifier("x"),           // 4: x (element of {x})
                 binary(GreaterThan, 6, 7), // 5: y > 1 (body of inner)
@@ -289,18 +297,18 @@ mod tests {
     }
 
     #[test]
-    fn forall_with_non_boolean_body_is_type_error() {
-        // forall x in real, 1  — body is Number, not Boolean
+    fn all_with_non_boolean_body_is_type_error() {
+        // all 1 for x in real end — body is Number, not Boolean
 
         let mut p = package("p");
 
         let domain = identifier("real");
         let body = number(1);
         let set = node::expression::SetElement::new("x".to_string(), 1.into());
-        let forall = node::expression::Forall::new(set, 2.into());
-        let forall_expr = syntax::expression::Node::new((), Forall(forall));
+        let all = node::expression::Comprehension::new(Some(node::expression::Aggregator::All), set, 2.into());
+        let all_expr = syntax::expression::Node::new((), Comprehension(all));
 
-        let req = formal("r", vec![forall_expr, domain, body]);
+        let req = formal("r", vec![all_expr, domain, body]);
         p.variant.children_mut().unwrap().push(1.into());
 
         let typed = resolve_and_evaluate(vec![p, req].into());

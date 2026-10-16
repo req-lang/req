@@ -425,15 +425,16 @@ mod tests {
     }
 
     #[test]
-    fn resolves_forall_body_to_local_variable() {
-        // Expression arena (pre-order): [forall(domain=Idx(1), body=Idx(2)), S, x]
+    fn resolves_comprehension_body_to_local_variable() {
+        // Expression arena (pre-order): [all body for x in domain, S, x]
         let set = node::expression::SetElement::new("x".to_string(), 1.into());
-        let forall = node::expression::Forall::new(set, 2.into());
-        let forall_node =
-            syntax::expression::Node::empty(node::expression::Variant::Forall(forall));
+        let comprehension = node::expression::Comprehension::new(Some(node::expression::Aggregator::All), set, 2.into());
+        let comprehension_node = syntax::expression::Node::empty(
+            node::expression::Variant::Comprehension(comprehension),
+        );
         let domain_s = mock::expression::identifier("S");
         let body_x = mock::expression::identifier("x");
-        let expr_arena = vec![forall_node, domain_s, body_x].into();
+        let expr_arena = vec![comprehension_node, domain_s, body_x].into();
 
         let a = syntax::entity::Node::empty(
             node::entity::Meta::from("a".to_string()),
@@ -449,8 +450,10 @@ mod tests {
         let expr_arena = resolved[a_idx].variant.expressions().next().unwrap();
 
         let (body_idx, domain_idx) = match &expr_arena[0.into()].variant {
-            node::expression::Variant::Forall(f) => (f.expression, node::expression::Idx::from(0)),
-            _ => panic!("expected forall"),
+            node::expression::Variant::Comprehension(c) => {
+                (c.expression, node::expression::Idx::from(0))
+            }
+            _ => panic!("expected comprehension"),
         };
 
         let target = match &expr_arena[body_idx].variant {

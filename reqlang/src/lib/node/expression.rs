@@ -58,8 +58,6 @@ impl<N, R, I: Clone> ChildrenIter<I> for Node<N, R, I> {
 pub enum Variant<I, R> {
     Branch(Branch<I>),
     When(When<I>),
-    Forall(Forall<I>),
-    Exists(Exists<I>),
     Aggregation(Aggregation<I>),
     Comprehension(Comprehension<I>),
 
@@ -105,28 +103,10 @@ impl<I: Clone, R> ChildrenIter<I> for Variant<I, R> {
                 children.extend(when.otherwise.iter());
             }
 
-            Forall(forall) => {
-                let fs = &forall.set;
-                children.push(&fs.domain);
-                children.extend(fs.filter.iter());
-                children.push(&forall.expression);
+            Aggregation(aggregation) => {
+                let ae = &aggregation.expressions;
+                children.extend(ae.iter());
             }
-
-            Exists(exists) => {
-                let es = &exists.set;
-                children.push(&es.domain);
-                children.extend(es.filter.iter());
-            }
-
-            Aggregation(aggregation) => match &aggregation.operand {
-                Operand::List(expressions) => children.extend(expressions.iter()),
-                Operand::Comprehension(comprehension) => {
-                    let fs = &comprehension.set;
-                    children.push(&fs.domain);
-                    children.extend(fs.filter.iter());
-                    children.push(&comprehension.expression);
-                }
-            },
 
             Comprehension(comprehension) => {
                 let fs = &comprehension.set;
@@ -188,8 +168,6 @@ impl<N, R> Variant<N, R> {
         match self {
             Variant::Branch(branch) => Variant::Branch(branch),
             Variant::When(when) => Variant::When(when),
-            Variant::Forall(forall) => Variant::Forall(forall),
-            Variant::Exists(exists) => Variant::Exists(exists),
             Variant::Aggregation(aggregation) => Variant::Aggregation(aggregation),
             Variant::Comprehension(comprehension) => Variant::Comprehension(comprehension),
             Variant::UnaryOp(unary_op) => Variant::UnaryOp(unary_op),
@@ -222,33 +200,9 @@ impl<N, R> Variant<N, R> {
                 otherwise: when.otherwise.map(&mut f),
             }),
 
-            Variant::Forall(forall) => Variant::Forall(Forall {
-                set: SetElement {
-                    variable: forall.set.variable,
-                    domain: f(forall.set.domain),
-                    filter: forall.set.filter.map(&mut f),
-                },
-                expression: f(forall.expression),
-            }),
-
-            Variant::Exists(exists) => Variant::Exists(Exists {
-                set: SetElement {
-                    variable: exists.set.variable,
-                    domain: f(exists.set.domain),
-                    filter: exists.set.filter.map(&mut f),
-                },
-            }),
-
             Variant::Aggregation(aggregation) => Variant::Aggregation(Aggregation {
                 aggregator: aggregation.aggregator,
-                operand: match aggregation.operand {
-                    Operand::List(expressions) => {
-                        Operand::List(expressions.into_iter().map(&mut f).collect())
-                    }
-                    Operand::Comprehension(comprehension) => {
-                        Operand::Comprehension(comprehension.mape(&mut f))
-                    }
-                },
+                expressions: aggregation.expressions.into_iter().map(&mut f).collect(),
             }),
 
             Variant::Comprehension(comprehension) => {
@@ -311,13 +265,7 @@ impl<N, R> Variant<N, R> {
         use Variant::*;
 
         match self {
-            Forall(forall) => Some(&forall.set),
-            Exists(exists) => Some(&exists.set),
             Comprehension(comprehension) => Some(&comprehension.set),
-            Aggregation(aggregation) => match &aggregation.operand {
-                Operand::Comprehension(comprehension) => Some(&comprehension.set),
-                Operand::List(_) => None,
-            },
             _ => None,
         }
     }
@@ -326,7 +274,9 @@ impl<N, R> Variant<N, R> {
         use Variant::*;
 
         match self {
-            Branch(_) | Forall(_) | When(_) | Exists(_) | Aggregation(_) => true,
+            Branch(_) | When(_) | Aggregation(_) => true,
+            // `{ e for x in S }` is closed by its brace, `sum e for x in S end` by `end`
+            Comprehension(comprehension) => comprehension.aggregator.is_some(),
             _ => false,
         }
     }
@@ -425,29 +375,6 @@ impl<N> Case<N> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Forall<N> {
-    pub set: SetElement<N>,
-    pub expression: N,
-}
-
-impl<N> Forall<N> {
-    pub fn new(set: SetElement<N>, expression: N) -> Self {
-        Forall { set, expression }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Exists<N> {
-    pub set: SetElement<N>,
-}
-
-impl<N> Exists<N> {
-    pub fn new(set: SetElement<N>) -> Self {
-        Exists { set }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct SetElement<N> {
     pub variable: String,
     pub domain: N,
@@ -478,36 +405,35 @@ impl<N> SetElement<N> {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Aggregation<N> {
     pub aggregator: Aggregator,
-    pub operand: Operand<N>,
+    pub expressions: Vec<N>,
 }
 
 impl<N> Aggregation<N> {
-    pub fn new(aggregator: Aggregator, operand: Operand<N>) -> Self {
+    pub fn new(aggregator: Aggregator) -> Self {
         Aggregation {
             aggregator,
-            operand,
+            expressions: Vec::new(),
         }
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum Operand<N> {
-    /// `sum a, b, c end`
-    List(Vec<N>),
-    /// `sum e for x in S such that C end`, an aggregation over `{ e for x in S such that C }`
-    Comprehension(Comprehension<N>),
-}
-
-/// `{ expression for variable in domain such that filter }`
+/// `{ expression for variable in domain such that filter }`, or its aggregation
+/// `aggregator expression for variable in domain such that filter end` when an
+/// aggregator is given. The aggregator is applied to the family indexed by the variable.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Comprehension<N> {
+    pub aggregator: Option<Aggregator>,
     pub set: SetElement<N>,
     pub expression: N,
 }
 
 impl<N> Comprehension<N> {
-    pub fn new(set: SetElement<N>, expression: N) -> Self {
-        Comprehension { set, expression }
+    pub fn new(aggregator: Option<Aggregator>, set: SetElement<N>, expression: N) -> Self {
+        Comprehension {
+            aggregator,
+            set,
+            expression,
+        }
     }
 
     pub fn mape<F, M>(self, mut f: F) -> Comprehension<M>
@@ -515,6 +441,7 @@ impl<N> Comprehension<N> {
         F: FnMut(N) -> M,
     {
         Comprehension {
+            aggregator: self.aggregator,
             set: self.set.mape(&mut f),
             expression: f(self.expression),
         }

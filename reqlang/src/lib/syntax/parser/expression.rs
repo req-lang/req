@@ -139,87 +139,42 @@ impl<'s> Builder<'s> {
                         Node::new(span, variant)
                     }
 
-                    Rule::forall => {
+                    // `{ a, b }`, `{ e for x in S }`, `sum a, b end` and `sum e for x in S end`
+                    Rule::set | Rule::aggregation => {
+                        let is_aggregation = primary.as_rule() == Rule::aggregation;
                         let mut inner = operands(primary);
-                        let expression = self.build(inner.next_back().unwrap(), *arena);
-                        let variable = inner.next().unwrap().as_str().to_string();
-                        let domain = self.build(inner.next().unwrap(), *arena);
-                        let mut set = SetElement::new(variable, domain);
-                        if let Some(p) = inner.next() {
-                            set.filter = Some(self.build(p, *arena));
-                        }
-
-                        let variant = Variant::Forall(Forall::new(set, expression));
-                        Node::new(span, variant)
-                    }
-
-                    Rule::exists => {
-                        let mut inner = operands(primary);
-
-                        let variable = inner.next().unwrap().as_str().to_string();
-                        let domain = self.build(inner.next().unwrap(), *arena);
-                        let mut set = SetElement::new(variable, domain);
-                        if let Some(p) = inner.next() {
-                            set.filter = Some(self.build(p, *arena));
-                        }
-
-                        let variant = Variant::Exists(Exists::new(set));
-                        Node::new(span, variant)
-                    }
-
-                    Rule::aggregation => {
-                        let mut inner = operands(primary);
-                        let aggregator = inner.next().unwrap().as_rule().into();
-                        let first = self.build(inner.next().unwrap(), *arena);
-
-                        let operand = match inner.next() {
-                            Some(p) if p.as_rule() == Rule::binding => {
-                                let mut inner = operands(p);
-                                let variable = inner.next().unwrap().as_str().to_string();
-                                let domain = self.build(inner.next().unwrap(), &mut arena);
-                                let mut set = SetElement::new(variable, domain);
-                                if let Some(p) = inner.next() {
-                                    set.filter = Some(self.build(p, &mut arena));
-                                }
-
-                                Operand::Comprehension(Comprehension::new(set, first))
-                            }
-                            next => {
-                                let mut expressions = vec![first];
-                                for p in next.into_iter().chain(inner) {
-                                    expressions.push(self.build(p, *arena));
-                                }
-                                Operand::List(expressions)
-                            }
-                        };
-
-                        let variant = Variant::Aggregation(Aggregation::new(aggregator, operand));
-                        Node::new(span, variant)
-                    }
-
-                    Rule::set => {
-                        let mut inner = operands(primary);
+                        let aggregator: Option<Aggregator> =
+                            is_aggregation.then(|| inner.next().unwrap().as_rule().into());
                         let first = self.build(inner.next().unwrap(), *arena);
 
                         let variant = match inner.next() {
                             Some(p) if p.as_rule() == Rule::binding => {
                                 let mut inner = operands(p);
                                 let variable = inner.next().unwrap().as_str().to_string();
-                                let domain = self.build(inner.next().unwrap(), &mut arena);
+                                let domain = self.build(inner.next().unwrap(), *arena);
                                 let mut set = SetElement::new(variable, domain);
                                 if let Some(p) = inner.next() {
-                                    set.filter = Some(self.build(p, &mut arena));
+                                    set.filter = Some(self.build(p, *arena));
                                 }
 
-                                Variant::Comprehension(Comprehension::new(set, first))
+                                Variant::Comprehension(Comprehension::new(aggregator, set, first))
                             }
+
                             next => {
-                                let mut set = Set::default();
-                                set.elements.push(first);
+                                let mut expressions = vec![first];
                                 for p in next.into_iter().chain(inner) {
-                                    set.elements.push(self.build(p, *arena));
+                                    expressions.push(self.build(p, *arena));
                                 }
-                                Variant::Set(set)
+
+                                match aggregator {
+                                    Some(aggregator) => Variant::Aggregation(Aggregation {
+                                        aggregator,
+                                        expressions,
+                                    }),
+                                    None => Variant::Set(Set {
+                                        elements: expressions,
+                                    }),
+                                }
                             }
                         };
 
@@ -325,8 +280,6 @@ fn is_keyword(rule: Rule) -> bool {
         Rule::r#if
             | Rule::r#else
             | Rule::whe
-            | Rule::fora
-            | Rule::exi
             | Rule::then
             | Rule::end
             | Rule::such
@@ -547,8 +500,8 @@ mod tests {
 
     #[test]
     fn keywords_are_reserved() {
-        assert!(!parses("forall end in real end end"));
-        assert!(!parses("exists then in real such that true end"));
+        assert!(!parses("{ s for end in { 1 } }"));
+        assert!(!parses("all true for then in real end"));
         assert!(!parses("{ s for for in { 1 } }"));
         assert!(!parses("and"));
         assert!(!parses("a + in"));
@@ -557,6 +510,6 @@ mod tests {
     #[test]
     fn aggregator_names_are_not_reserved() {
         assert!(parses("max + sum"));
-        assert!(parses("forall max in real max > 0 end"));
+        assert!(parses("all max > 0 for max in real end"));
     }
 }

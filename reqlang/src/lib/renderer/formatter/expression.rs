@@ -1,10 +1,7 @@
 use std::{fmt::Display, ops::Add};
 
 use crate::{
-    node::expression::{
-        Aggregator, Arena, BinaryOperator, Case, Idx, Node, Operand, SetElement,
-        UnaryOperator,
-    },
+    node::expression::{Aggregator, Arena, BinaryOperator, Case, Idx, Node, UnaryOperator},
     renderer::formatter::padding::pad,
 };
 
@@ -101,44 +98,43 @@ pub fn format<W: std::io::Write, E, T: Display>(
             }
         }
 
-        Forall(forall) => {
-            write!(out, "forall ")?;
-            format_set_elem(arena, &forall.set, out)?;
-            write!(out, "{}", sep)?;
-            format(arena, forall.expression, ctx + 1, out)?;
-        }
-
-        Exists(exists) => {
-            write!(out, "exists ")?;
-            format_set_elem(arena, &exists.set, out)?;
-        }
-
         Aggregation(aggregation) => {
             write!(out, "{}{}", aggregator_symbol(&aggregation.aggregator), sep)?;
-            match &aggregation.operand {
-                Operand::List(expressions) => {
-                    for (idx, val) in expressions.iter().enumerate() {
-                        format(arena, *val, ctx + 1, out)?;
-                        if idx < expressions.len() - 1 {
-                            write!(out, ",{}", sep)?;
-                        }
-                    }
-                }
-
-                Operand::Comprehension(comprehension) => {
-                    format(arena, comprehension.expression, ctx + 1, out)?;
-                    write!(out, "{}{}for ", sep, pad((ctx + 1).indent))?;
-                    format_set_elem(arena, &comprehension.set, out)?;
+            let n = aggregation.expressions.len();
+            for (idx, val) in aggregation.expressions.iter().enumerate() {
+                format(arena, *val, ctx + 1, out)?;
+                if idx < n - 1 {
+                    write!(out, ",{}", sep)?;
                 }
             }
         }
 
         Comprehension(comprehension) => {
-            write!(out, "{{ ")?;
-            format(arena, comprehension.expression, Ctx::default(), out)?;
-            write!(out, " for ")?;
-            format_set_elem(arena, &comprehension.set, out)?;
-            write!(out, " }}")?;
+            // `{ e for x in S }` is inline, `sum e for x in S end` follows the aggregation layout
+            match &comprehension.aggregator {
+                None => {
+                    write!(out, "{{ ")?;
+                    format(arena, comprehension.expression, Ctx::default(), out)?;
+                    write!(out, " for ")?;
+                }
+                Some(aggregator) => {
+                    write!(out, "{}{}", aggregator_symbol(aggregator), sep)?;
+                    format(arena, comprehension.expression, ctx + 1, out)?;
+                    write!(out, "{}{}for ", sep, pad((ctx + 1).indent))?;
+                }
+            }
+
+            let set = &comprehension.set;
+            write!(out, "{} in ", set.variable)?;
+            format(arena, set.domain, Ctx::default(), out)?;
+            if let Some(filter) = &set.filter {
+                write!(out, " such that ")?;
+                format(arena, *filter, Ctx::default(), out)?;
+            }
+
+            if comprehension.aggregator.is_none() {
+                write!(out, " }}")?;
+            }
         }
 
         UnaryOp(unary) => {
@@ -257,22 +253,6 @@ fn format_case<W: std::io::Write, E, T: Display>(
     format(arena, case.condition, Ctx::default(), out)?;
     write!(out, " then ")?;
     format(arena, case.consequence, Ctx::default(), out)
-}
-
-fn format_set_elem<W: std::io::Write, E, T: Display>(
-    arena: &Arena<Node<E, T>>,
-    set: &SetElement<Idx>,
-    out: &mut W,
-) -> std::io::Result<()> {
-    write!(out, "{} in ", set.variable)?;
-    format(arena, set.domain, Ctx::default(), out)?;
-
-    if let Some(ref filter) = set.filter {
-        write!(out, " such that ")?;
-        format(arena, *filter, Ctx::default(), out)?;
-    }
-
-    Ok(())
 }
 
 fn boolean_keyword(b: bool) -> &'static str {

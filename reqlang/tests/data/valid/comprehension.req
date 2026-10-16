@@ -83,4 +83,20 @@ package A
   is
     choose t for t in argmax 0 - s ^ 2 for s in real end end = 0
   requirement
+  requirement R14 
+    on B
+  is
+    all
+      s < B::x + B::y
+      for s in real such that s > 10
+    end
+  requirement
+  requirement R15 
+    on B
+  is
+    any
+      s > B::y and s < B::x
+      for s in real
+    end
+  requirement
 package

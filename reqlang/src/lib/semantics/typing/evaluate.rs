@@ -1,7 +1,7 @@
 use crate::{
     node::{
         self,
-        expression::{Aggregator, Arena, Case, Idx, Operand, Selector, SetElement},
+        expression::{Aggregator, Arena, Case, Idx, Selector},
     },
     semantics::{
         link::{
@@ -50,78 +50,34 @@ pub(super) fn evaluate_node<P>(
             Ok(expected)
         }
 
-        Forall(forall) => {
-            use TypeKind::*;
-
-            evaluate_set_element(&local, &forall.set)?;
-
-            let expr = type_or_poison(&local, forall.expression)?;
-            if expr != Boolean {
-                return Err(UnexpectedType(Boolean, expr.clone()));
-            }
-
-            Ok(Boolean)
-        }
-
-        Exists(exists) => {
-            use TypeKind::*;
-
-            evaluate_set_element(&local, &exists.set)?;
-            Ok(Boolean)
-        }
-
         Aggregation(aggregation) => {
-            use Aggregator::*;
-            use TypeKind::*;
-
-            let (operands, binder) = match &aggregation.operand {
-                Operand::List(expressions) => (expressions.clone(), None),
-                Operand::Comprehension(comprehension) => {
-                    let binder = evaluate_set_element(&local, &comprehension.set)?;
-                    (vec![comprehension.expression], Some(binder))
-                }
-            };
-
-            let first = operands.iter().next().ok_or(NotEvaluable);
-            let (expected, result) = match aggregation.aggregator {
-                All | Any | One => (Boolean, Boolean),
-                Maximum | Minimum | Supremum | Infimum | Sum | Product => (Number, Number),
-                // The set of maximizers: binder values for `for`, 1-based indices for a list
-                ArgMaximum | ArgMinimum => {
-                    let element = binder.unwrap_or(Number);
-                    (Number, Set(Box::new(element)))
-                }
-                Union | Intersection => {
-                    let first = type_or_poison(&local, *first?)?;
-                    match first {
-                        Set(x) => (Set(x.clone()), Set(x)),
-                        t => return Err(NotASet(t)),
-                    }
-                }
-                Choose => {
-                    let typ = type_or_poison(&local, *first?)?;
-                    (typ.clone(), typ)
-                }
-                Count => {
-                    let typ = type_or_poison(&local, *first?)?;
-                    (typ, Number)
-                }
-            };
-
-            for expression in &operands {
-                let expr = type_or_poison(&local, *expression)?;
-                if expr != expected {
-                    return Err(UnexpectedType(expected, expr.clone()));
-                }
-            }
-
-            Ok(result)
+            aggregation
+                .aggregator
+                .check(&local, &aggregation.expressions, None)
         }
 
         Comprehension(comprehension) => {
-            evaluate_set_element(&local, &comprehension.set)?;
-            let expression = type_or_poison(&local, comprehension.expression)?;
-            Ok(TypeKind::Set(Box::new(expression)))
+            use TypeKind::*;
+
+            let set = &comprehension.set;
+            let element = match type_or_poison(&local, set.domain)? {
+                Set(t) => *t,
+                typ => return Err(NotASet(typ)),
+            };
+
+            if let Some(filter) = &set.filter {
+                let typ = type_or_poison(&local, *filter)?;
+                if typ != Boolean {
+                    return Err(UnexpectedType(Boolean, typ));
+                }
+            }
+
+            match &comprehension.aggregator {
+                None => Ok(Set(Box::new(type_or_poison(&local, comprehension.expression)?))),
+                Some(aggregator) => {
+                    aggregator.check(&local, &[comprehension.expression], Some(element))
+                }
+            }
         }
 
         UnaryOp(una) => {
@@ -278,23 +234,51 @@ fn evaluate_case(
     }
 }
 
-fn evaluate_set_element(types: &Arena<Option<TypeResult>>, set: &SetElement<Idx>) -> TypeResult {
-    use Issue::*;
-    use TypeKind::*;
+impl Aggregator {
+    /// Type of the aggregate. The operands are the items of the list, or the body of
+    /// a comprehension, in which case `element` is the type of its variable.
+    fn check(
+        &self,
+        types: &Arena<Option<TypeResult>>,
+        operands: &[Idx],
+        element: Option<TypeKind>,
+    ) -> TypeResult {
+        use Aggregator::*;
+        use Issue::*;
+        use TypeKind::*;
 
-    let typ = match type_or_poison(types, set.domain)? {
-        Set(t) => t,
-        typ => return Err(NotASet(typ.clone())),
-    };
+        let first = operands.first().ok_or(NotEvaluable);
+        let (expected, result) = match self {
+            All | Any | One => (Boolean, Boolean),
+            Maximum | Minimum | Supremum | Infimum | Sum | Product => (Number, Number),
+            // The set of maximizers: variable values for `for`, 1-based positions for a list
+            ArgMaximum | ArgMinimum => (Number, Set(Box::new(element.unwrap_or(Number)))),
+            Union | Intersection => {
+                let first = type_or_poison(types, *first?)?;
+                match first {
+                    Set(x) => (Set(x.clone()), Set(x)),
+                    t => return Err(NotASet(t)),
+                }
+            }
+            Choose => {
+                let typ = type_or_poison(types, *first?)?;
+                (typ.clone(), typ)
+            }
+            Count => {
+                let typ = type_or_poison(types, *first?)?;
+                (typ, Number)
+            }
+        };
 
-    if let Some(filter) = &set.filter {
-        let typ = type_or_poison(types, *filter)?;
-        if typ != Boolean {
-            return Err(UnexpectedType(Boolean, typ.clone()));
+        for operand in operands {
+            let typ = type_or_poison(types, *operand)?;
+            if typ != expected {
+                return Err(UnexpectedType(expected, typ));
+            }
         }
-    }
 
-    Ok(*typ.clone())
+        Ok(result)
+    }
 }
 
 fn type_or_poison(types: &Arena<Option<TypeResult>>, idx: Idx) -> TypeResult {

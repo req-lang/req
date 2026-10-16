@@ -113,11 +113,6 @@ mod valid {
     }
 
     #[test]
-    fn forall() {
-        assert_valid_parsing_and_analysis("forall.req");
-    }
-
-    #[test]
     fn comprehension() {
         assert_valid_parsing_and_analysis("comprehension.req");
     }
@@ -125,11 +120,6 @@ mod valid {
     #[test]
     fn keywords() {
         assert_valid_parsing_and_analysis("keywords.req");
-    }
-
-    #[test]
-    fn exists() {
-        assert_valid_parsing_and_analysis("exists.req");
     }
 
     #[test]

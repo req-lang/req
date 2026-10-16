@@ -11,29 +11,36 @@ package A
   requirement R1 
     on B
   is
-    forall notable in real such that notable > 0
+    all
       notable < B::ending
+      for notable in real such that notable > 0
     end
   requirement
   requirement R2 
     on B
   is
-    forall infinityLoop in integer such that infinityLoop > 0
-      exists trueValue in integer such that trueValue > infinityLoop
+    all
+      any
+        trueValue > infinityLoop
+        for trueValue in integer
       end
+      for infinityLoop in integer such that infinityLoop > 0
     end
   requirement
   requirement R3 
     on B
   is
-    exists eventuallyDone in integer such that eventuallyDone > B::ending
+    any
+      eventuallyDone > B::ending
+      for eventuallyDone in integer
     end
   requirement
   requirement R4 
     on B
   is
-    forall always_ in boolean
+    all
       always_ or not always_
+      for always_ in boolean
     end
   requirement
 package

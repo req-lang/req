@@ -71,11 +71,6 @@ mod formatter {
     }
 
     #[test]
-    fn forall() {
-        assert_isomorphic_formatter("forall.req");
-    }
-
-    #[test]
     fn comprehension() {
         assert_isomorphic_formatter("comprehension.req");
     }
@@ -83,11 +78,6 @@ mod formatter {
     #[test]
     fn keywords() {
         assert_isomorphic_formatter("keywords.req");
-    }
-
-    #[test]
-    fn exists() {
-        assert_isomorphic_formatter("exists.req");
     }
 
     #[test]

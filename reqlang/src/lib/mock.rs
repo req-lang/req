@@ -185,7 +185,7 @@ pub mod generator {
     /// Flat tree: root package containing one part "attrs" (with attr_a: real, attr_b: real,
     /// attr_bool: boolean) and N*3 formal requirements cycling through:
     ///   - addition:  attr_a + attr_b
-    ///   - forall:    forall x in real, x > 0
+    ///   - all:       all x > 0 for x in real end
     ///   - when:      when attr_bool then attr_a + 1
     pub struct ExpressionTyping {
         pub cycles: u64,
@@ -220,7 +220,7 @@ pub mod generator {
                 for i in 0..self.cycles {
                     arena.push(Rc::new(RefCell::new(make_addition(i))));
                     push_child(&root, arena.len() - 1);
-                    arena.push(Rc::new(RefCell::new(make_forall(i))));
+                    arena.push(Rc::new(RefCell::new(make_all(i))));
                     push_child(&root, arena.len() - 1);
                     arena.push(Rc::new(RefCell::new(make_when(i))));
                     push_child(&root, arena.len() - 1);
@@ -258,18 +258,20 @@ pub mod generator {
         super::entity::formal(&format!("addition_{i}"), exprs)
     }
 
-    fn make_forall(i: u64) -> Node {
-        use crate::node::expression::{BinOp, BinaryOperator, Forall, SetElement, Variant};
+    fn make_all(i: u64) -> Node {
+        use crate::node::expression::{
+            Aggregator, BinOp, BinaryOperator, Comprehension, SetElement, Variant,
+        };
         use crate::syntax::expression::Node as ExprNode;
-        // 0: forall x in real, x > 0
+        // 0: all x > 0 for x in real end
         // 1: identifier("real")
         // 2: x > 0
         // 3: identifier("x")
         // 4: number(0)
         let set = SetElement::new("x".to_string(), 1.into());
-        let forall_node = Forall::new(set, 2.into());
+        let all_node = Comprehension::new(Some(Aggregator::All), set, 2.into());
         let exprs = vec![
-            ExprNode::empty(Variant::Forall(forall_node)),
+            ExprNode::empty(Variant::Comprehension(all_node)),
             super::expression::identifier("real"),
             ExprNode::empty(Variant::BinOp(BinOp::new(
                 BinaryOperator::GreaterThan,
@@ -279,7 +281,7 @@ pub mod generator {
             super::expression::identifier("x"),
             super::expression::number(0),
         ];
-        super::entity::formal(&format!("forall_{i}"), exprs)
+        super::entity::formal(&format!("all_{i}"), exprs)
     }
 
     fn make_when(i: u64) -> Node {
