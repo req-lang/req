@@ -5,6 +5,8 @@ use std::{
 
 mod entity;
 
+use unicode_normalization::{UnicodeNormalization, is_nfc};
+
 use crate::{
     node::entity::{Arena, Idx, Node},
     semantics::path::entity::count_duplicates,
@@ -77,8 +79,14 @@ impl Located for Location {
 pub struct Path(String);
 
 impl Path {
+    // INVARIANT: the inner string is NFC, so that visually identical paths compare equal
     pub fn new<P: Into<String>>(value: P) -> Self {
-        Self(value.into())
+        let value = value.into();
+        let norm = match is_nfc(&value) {
+            true => value,
+            false => value.nfc().collect(),
+        };
+        Self(norm)
     }
 
     pub fn parent(&self) -> Option<Self> {
@@ -97,6 +105,10 @@ impl Path {
 
     pub fn join<P: ToString>(&self, rhs: &P) -> Self {
         let rhs = rhs.to_string();
+        let rhs = match is_nfc(&rhs) {
+            true => rhs,
+            false => rhs.nfc().collect(),
+        };
 
         if self.as_str().is_empty() {
             return Self(rhs);
@@ -132,7 +144,7 @@ impl From<&str> for Path {
 }
 impl From<String> for Path {
     fn from(value: String) -> Self {
-        Self(value)
+        Self::new(value)
     }
 }
 
