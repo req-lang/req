@@ -1,7 +1,10 @@
-use std::{fmt::Display, ops::Add};
+use std::ops::Add;
 
 use crate::{
-    node::expression::{Aggregator, Arena, BinaryOperator, Case, Idx, Node, UnaryOperator},
+    node::{
+        expression::{Aggregator, BinaryOperator, Case, Idx, UnaryOperator},
+        tree::Tree,
+    },
     renderer::formatter::padding::pad,
 };
 
@@ -51,15 +54,15 @@ impl Ctx {
     }
 }
 
-pub fn format<W: std::io::Write, E, T: Display>(
-    arena: &Arena<Node<E, T>>,
+pub fn format<W: std::io::Write>(
+    tree: &Tree,
     idx: Idx,
     ctx: Ctx,
     out: &mut W,
 ) -> std::io::Result<()> {
     use crate::node::expression::Variant::*;
 
-    let node = &arena[idx];
+    let node = &tree.expressions[idx];
     let pd = pad(ctx.indent);
     let parens = ctx.parens;
     let sep = if ctx.indent > 0 { "\n" } else { " " };
@@ -76,7 +79,7 @@ pub fn format<W: std::io::Write, E, T: Display>(
             let pd1 = pad(ctx.indent + 1);
             for (idx, case) in when.cases.iter().enumerate() {
                 write!(out, "{}", pd1)?;
-                format_case(arena, case, out)?;
+                format_case(tree, case, out)?;
                 if idx < when.cases.len() - 1 || when.otherwise.is_some() {
                     write!(out, ",{}", sep)?;
                 }
@@ -84,7 +87,7 @@ pub fn format<W: std::io::Write, E, T: Display>(
 
             if let Some(otherwise) = &when.otherwise {
                 write!(out, "{}otherwise ", pd1)?;
-                format(arena, *otherwise, Ctx::default(), out)?;
+                format(tree, *otherwise, Ctx::default(), out)?;
             }
         }
 
@@ -92,7 +95,7 @@ pub fn format<W: std::io::Write, E, T: Display>(
             write!(out, "{}{}", aggregator_symbol(&aggregation.aggregator), sep)?;
             let n = aggregation.expressions.len();
             for (idx, val) in aggregation.expressions.iter().enumerate() {
-                format(arena, *val, ctx + 1, out)?;
+                format(tree, *val, ctx + 1, out)?;
                 if idx < n - 1 {
                     write!(out, ",{}", sep)?;
                 }
@@ -104,22 +107,22 @@ pub fn format<W: std::io::Write, E, T: Display>(
             match &comprehension.aggregator {
                 None => {
                     write!(out, "{{ ")?;
-                    format(arena, comprehension.expression, Ctx::default(), out)?;
+                    format(tree, comprehension.expression, Ctx::default(), out)?;
                     write!(out, " for ")?;
                 }
                 Some(aggregator) => {
                     write!(out, "{}{}", aggregator_symbol(aggregator), sep)?;
-                    format(arena, comprehension.expression, ctx + 1, out)?;
+                    format(tree, comprehension.expression, ctx + 1, out)?;
                     write!(out, "{}{}for ", sep, pad((ctx + 1).indent))?;
                 }
             }
 
             let set = &comprehension.set;
             write!(out, "{} in ", set.variable)?;
-            format(arena, set.domain, Ctx::default(), out)?;
+            format(tree, set.domain, Ctx::default(), out)?;
             if let Some(filter) = &set.filter {
                 write!(out, " such that ")?;
-                format(arena, *filter, Ctx::default(), out)?;
+                format(tree, *filter, Ctx::default(), out)?;
             }
 
             if comprehension.aggregator.is_none() {
@@ -128,41 +131,41 @@ pub fn format<W: std::io::Write, E, T: Display>(
         }
 
         UnaryOp(unary) => {
-            let operand = &arena[unary.operand];
+            let operand = &tree.expressions[unary.operand];
             let parens = operand.variant.needs_parentheses(&node.variant, false);
             let sub = ctx.with_parens(parens).inline();
             let symbol = unary_symbol(&unary.operator);
             match unary.is_postfix() {
                 true => {
-                    format(arena, unary.operand, sub, out)?;
+                    format(tree, unary.operand, sub, out)?;
                     write!(out, " {}", symbol)?;
                 }
                 false => {
                     write!(out, "{} ", symbol)?;
-                    format(arena, unary.operand, sub, out)?;
+                    format(tree, unary.operand, sub, out)?;
                 }
             }
         }
 
         BinOp(bin_op) => {
-            let left = &arena[bin_op.left];
+            let left = &tree.expressions[bin_op.left];
             let left_parens = left.variant.needs_parentheses(&node.variant, false);
             let sub = ctx.with_parens(left_parens).inline();
-            format(arena, bin_op.left, sub, out)?;
+            format(tree, bin_op.left, sub, out)?;
 
             write!(out, " {} ", binary_symbol(&bin_op.operator))?;
 
-            let right = &arena[bin_op.right];
+            let right = &tree.expressions[bin_op.right];
             let right_parens = right.variant.needs_parentheses(&node.variant, true);
             let sub = ctx.with_parens(right_parens).inline();
-            format(arena, bin_op.right, sub, out)?;
+            format(tree, bin_op.right, sub, out)?;
         }
 
         Function(function) => {
-            format(arena, function.expression, ctx, out)?;
+            format(tree, function.expression, ctx, out)?;
             write!(out, "( ")?;
             for (idx, arg) in function.arguments.iter().enumerate() {
-                format(arena, *arg, Ctx::default(), out)?;
+                format(tree, *arg, Ctx::default(), out)?;
                 if idx < function.arguments.len() - 1 {
                     write!(out, ", ")?;
                 }
@@ -173,7 +176,7 @@ pub fn format<W: std::io::Write, E, T: Display>(
         Set(set) => {
             write!(out, "{{ ")?;
             for (idx, elem) in set.elements.iter().enumerate() {
-                format(arena, *elem, Ctx::default(), out)?;
+                format(tree, *elem, Ctx::default(), out)?;
                 if idx < set.elements.len() - 1 {
                     write!(out, ", ")?;
                 }
@@ -188,12 +191,12 @@ pub fn format<W: std::io::Write, E, T: Display>(
             };
             write!(out, "{} ", lsymbol)?;
             let sub = ctx.with_parens(false).inline();
-            format(arena, interval.left.expression, sub, out)?;
+            format(tree, interval.left.expression, sub, out)?;
 
             write!(out, ", ")?;
 
             let sub = ctx.with_parens(false).inline();
-            format(arena, interval.right.expression, sub, out)?;
+            format(tree, interval.right.expression, sub, out)?;
             let rsymbol = match interval.right.is_open {
                 true => "[",
                 false => "]",
@@ -205,17 +208,17 @@ pub fn format<W: std::io::Write, E, T: Display>(
             write!(out, "[[ ")?;
 
             let sub = ctx.with_parens(false).inline();
-            format(arena, range.left, sub, out)?;
+            format(tree, range.left, sub, out)?;
 
             write!(out, ", ")?;
 
             let sub = ctx.with_parens(false).inline();
-            format(arena, range.right, sub, out)?;
+            format(tree, range.right, sub, out)?;
 
             write!(out, " ]]")?;
         }
 
-        Identifier(r) => write!(out, "{}", r.target)?,
+        Identifier(r) => write!(out, "{}", tree.identifiers[r.target])?,
 
         Number(x) => write!(out, "{}", x.value)?,
 
@@ -235,14 +238,10 @@ pub fn format<W: std::io::Write, E, T: Display>(
     Ok(())
 }
 
-fn format_case<W: std::io::Write, E, T: Display>(
-    arena: &Arena<Node<E, T>>,
-    case: &Case<Idx>,
-    out: &mut W,
-) -> std::io::Result<()> {
-    format(arena, case.condition, Ctx::default(), out)?;
+fn format_case<W: std::io::Write>(tree: &Tree, case: &Case, out: &mut W) -> std::io::Result<()> {
+    format(tree, case.condition, Ctx::default(), out)?;
     write!(out, " then ")?;
-    format(arena, case.consequence, Ctx::default(), out)
+    format(tree, case.consequence, Ctx::default(), out)
 }
 
 fn boolean_keyword(b: bool) -> &'static str {

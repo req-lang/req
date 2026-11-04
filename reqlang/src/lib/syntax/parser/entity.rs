@@ -4,21 +4,59 @@ use crate::{
     node::{
         self,
         entity::{
-            self, Attribute, Idx, Meta, RequirementVariant, TraceabilityKind, TraceabilityLink,
-            Variant,
+            self, Attribute, Idx, Meta, Node, RequirementVariant, TraceabilityKind,
+            TraceabilityLink, Variant,
         },
+        path::Path,
+        reference,
+        tree::{self},
     },
     syntax::{
         location::Span,
-        parser::{expression, markup},
+        parser::{SpansDraft, expression, markup},
         tokenizer::entity::{Keyword, TokenIterator, TokenVariant},
     },
-    utils::children::ChildrenMut,
 };
 
-pub(in crate::syntax) type Node = node::entity::Node<Span, String, String, Span, ()>;
+impl<'b> From<&'b mut Draft<'_>> for expression::Draft<'b> {
+    fn from(value: &'b mut Draft<'_>) -> Self {
+        expression::Draft::new(
+            &mut value.tree.expressions,
+            &mut value.tree.identifiers,
+            &mut value.spans.expressions,
+        )
+    }
+}
+
+pub(super) struct Draft<'a> {
+    tree: &'a mut tree::Draft,
+    spans: &'a mut SpansDraft,
+}
+
+impl<'a> Draft<'a> {
+    pub fn new(tree: &'a mut tree::Draft, spans: &'a mut SpansDraft) -> Self {
+        Self { tree, spans }
+    }
+
+    pub fn push_node(&mut self, node: Node, span: Span) -> Idx {
+        let idx = self.tree.entities.len();
+        self.tree.entities.push(node);
+        self.spans.entities.push(span);
+        idx.into()
+    }
+
+    pub fn push_reference(&mut self, path: Path) -> reference::Idx {
+        let idx = self.tree.references.len();
+        self.tree.references.push(path);
+        idx.into()
+    }
+}
+
 // TODO: Use peek_nth to avoid reset_peek
-pub fn parse(tokens: &mut MultiPeek<TokenIterator>, arena: &mut Vec<Node>) -> Result<Idx, Span> {
+pub(super) fn parse_tokens(
+    tokens: &mut MultiPeek<TokenIterator>,
+    draft: &mut Draft,
+) -> Result<Idx, Span> {
     use Keyword::*;
     use TokenVariant::*;
 
@@ -27,7 +65,7 @@ pub fn parse(tokens: &mut MultiPeek<TokenIterator>, arena: &mut Vec<Node>) -> Re
     while let Some(tok) = tokens.next() {
         match tok.variant {
             Markup(comment) => {
-                let markup = markup::Node::from(comment.to_string());
+                let markup = markup::parse(&comment.to_string(), &mut draft.tree.references);
                 meta.comment = Some(markup);
             }
 
@@ -40,11 +78,10 @@ pub fn parse(tokens: &mut MultiPeek<TokenIterator>, arena: &mut Vec<Node>) -> Re
                 let mut prt = node::entity::Part::default();
 
                 meta.label = parse_label(tokens)?;
-                prt.imports = parse_imports(tokens)?;
-                let idx = arena.len();
-                arena.push(Node::new(tok.span, meta, Variant::Part(prt)));
-                let children = parse_children(tokens, &Part, arena)?;
-                arena[idx].variant.children_mut().unwrap().extend(children);
+                prt.imports = parse_imports(tokens, draft)?;
+                prt.children = parse_children(tokens, &Part, draft)?;
+                let node = Node::new(meta, Variant::Part(prt));
+                let idx = draft.push_node(node, tok.span);
                 return Ok(idx.into());
             }
 
@@ -52,11 +89,10 @@ pub fn parse(tokens: &mut MultiPeek<TokenIterator>, arena: &mut Vec<Node>) -> Re
                 let mut pkg = node::entity::Package::default();
 
                 meta.label = parse_label(tokens)?;
-                pkg.imports = parse_imports(tokens)?;
-                let idx = arena.len();
-                arena.push(Node::new(tok.span, meta, Variant::Package(pkg)));
-                let children = parse_children(tokens, &Package, arena)?;
-                arena[idx].variant.children_mut().unwrap().extend(children);
+                pkg.imports = parse_imports(tokens, draft)?;
+                pkg.children = parse_children(tokens, &Package, draft)?;
+                let node = Node::new(meta, Variant::Package(pkg));
+                let idx = draft.push_node(node, tok.span);
                 return Ok(idx.into());
             }
 
@@ -69,7 +105,8 @@ pub fn parse(tokens: &mut MultiPeek<TokenIterator>, arena: &mut Vec<Node>) -> Re
 
                         match token.variant {
                             TokenVariant::Expression(expr) => {
-                                expression::parse(expr, &token.span.start)?
+                                let draft = expression::Draft::from(&mut *draft);
+                                expression::parse(expr, &token.span.start, draft)?
                             }
 
                             _ => return Err(token.span),
@@ -93,9 +130,10 @@ pub fn parse(tokens: &mut MultiPeek<TokenIterator>, arena: &mut Vec<Node>) -> Re
                 };
                 tokens.reset_peek();
 
-                let idx = arena.len();
-                arena.push(Node::new(span.clone(), meta, Variant::Attribute(atr)));
-                return Ok(idx.into());
+                let node = Node::new(meta, Variant::Attribute(atr));
+                let idx = draft.push_node(node, span);
+
+                return Ok(idx);
             }
 
             Reserved(Keyword::Type) => {
@@ -119,9 +157,9 @@ pub fn parse(tokens: &mut MultiPeek<TokenIterator>, arena: &mut Vec<Node>) -> Re
                     _ => return Err(tok.span),
                 }
 
-                let idx = arena.len();
-                arena.push(Node::new(tok.span, meta, Variant::Type(typ)));
-                return Ok(idx.into());
+                let node = Node::new(meta, Variant::Type(typ));
+                let idx = draft.push_node(node, tok.span);
+                return Ok(idx);
             }
 
             Reserved(Requirement) => {
@@ -140,14 +178,14 @@ pub fn parse(tokens: &mut MultiPeek<TokenIterator>, arena: &mut Vec<Node>) -> Re
 
                         Reserved(Keyword::On) => {
                             req.restriction = match parse_identifier(tokens) {
-                                Ok(ident) => Some(ident.into()),
+                                Ok(ident) => Some(draft.push_reference(ident.into())),
                                 Err(span) => return Err(span),
                             };
                         }
 
                         Reserved(Keyword::Via) => {
                             req.allocation = match parse_identifier(tokens) {
-                                Ok(ident) => Some(ident.into()),
+                                Ok(ident) => Some(draft.push_reference(ident.into())),
                                 Err(span) => return Err(span),
                             };
                         }
@@ -155,7 +193,7 @@ pub fn parse(tokens: &mut MultiPeek<TokenIterator>, arena: &mut Vec<Node>) -> Re
                         Reserved(ref k) if TraceabilityKind::is_traceability_keyword(&k) => {
                             let kind = TraceabilityKind::try_from(k).unwrap();
                             let target = match parse_identifier(tokens) {
-                                Ok(ident) => ident.into(),
+                                Ok(ident) => draft.push_reference(ident.into()),
                                 Err(span) => return Err(span),
                             };
                             let link = TraceabilityLink::new(kind, target);
@@ -170,8 +208,13 @@ pub fn parse(tokens: &mut MultiPeek<TokenIterator>, arena: &mut Vec<Node>) -> Re
 
                 use RequirementVariant::*;
                 req.variant = match token.variant {
-                    Markup(expr) => Informal(markup::Node::from(expr.to_string())),
-                    Expression(expr) => Formal(expression::parse(expr, &token.span.start)?),
+                    Markup(expr) => {
+                        Informal(markup::parse(&expr.to_string(), &mut draft.tree.references))
+                    }
+                    Expression(expr) => {
+                        let draft = expression::Draft::from(&mut *draft);
+                        Formal(expression::parse(expr, &token.span.start, draft)?)
+                    }
                     _ => return Err(token.span),
                 };
 
@@ -180,9 +223,9 @@ pub fn parse(tokens: &mut MultiPeek<TokenIterator>, arena: &mut Vec<Node>) -> Re
                     _ => return Err(token.span),
                 }
 
-                let idx = arena.len();
-                arena.push(Node::new(token.span, meta, Variant::Requirement(req)));
-                return Ok(idx.into());
+                let node = Node::new(meta, Variant::Requirement(req));
+                let idx = draft.push_node(node, token.span);
+                return Ok(idx);
             }
 
             _ => return Err(tok.span),
@@ -214,12 +257,12 @@ fn parse_type(expr: &str) -> Result<Vec<String>, Span> {
 fn parse_children(
     tokens: &mut MultiPeek<TokenIterator>,
     stop: &Keyword,
-    arena: &mut Vec<Node>,
+    draft: &mut Draft,
 ) -> Result<Vec<Idx>, Span> {
     let mut children = Vec::new();
 
     while !is_closing(tokens, stop) {
-        children.push(parse(tokens, arena)?);
+        children.push(parse_tokens(tokens, draft)?);
     }
     tokens.next();
 
@@ -267,7 +310,10 @@ fn is_import(tokens: &mut MultiPeek<TokenIterator>) -> bool {
     ret
 }
 
-fn parse_imports(tokens: &mut MultiPeek<TokenIterator>) -> Result<Vec<String>, Span> {
+fn parse_imports(
+    tokens: &mut MultiPeek<TokenIterator>,
+    draft: &mut Draft<'_>,
+) -> Result<Vec<reference::Idx>, Span> {
     use TokenVariant::*;
 
     let mut imports = Vec::new();
@@ -275,7 +321,7 @@ fn parse_imports(tokens: &mut MultiPeek<TokenIterator>) -> Result<Vec<String>, S
         let _ = tokens.next().unwrap();
         let id = tokens.next().unwrap();
         match id.variant {
-            Identifier(ident) => imports.push(ident.into()),
+            Identifier(ident) => imports.push(draft.push_reference(ident.into())),
             _ => unreachable!(),
         }
     }

@@ -3,22 +3,10 @@ use std::{fs, io, path::PathBuf};
 use clap::Parser;
 use colored::Colorize;
 use reqlang::{
-    issue::{self, Severity, connection_errors, expr_errors, path_issues, reference_errors},
-    node::entity::{Arena, Idx},
-    renderer::formatter::entity,
-    semantics::{
-        connection::{
-            Connect, Connected,
-            entity::{Connection, Neighbors},
-        },
-        link::Resolve,
-        path::{self, Locate, Located, Location},
-        typing::Evaluate,
-    },
-    syntax::{
-        location::Span,
-        parser::{self},
-    },
+    Specification,
+    issue::{self, Severity},
+    renderer::formatter,
+    syntax::parser,
 };
 
 #[derive(clap::Parser)]
@@ -51,58 +39,39 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     match cli.command {
         Command::Fmt { input, output } => {
             let source = std::fs::read_to_string(&input)?;
-            let arena = parser::parse(&source)?;
+            let (tree, _) = parser::parse(&source)?;
 
             match output {
-                Some(p) => entity::format(&arena, 0.into(), 0, &mut fs::File::create(p)?),
-                None => entity::format(&arena, 0.into(), 0, &mut io::stdout()),
+                Some(p) => formatter::format(&tree, &mut fs::File::create(p)?),
+                None => formatter::format(&tree, &mut io::stdout()),
             }?;
         }
         Command::Check { input } => {
             let start = std::time::Instant::now();
             let source = std::fs::read_to_string(&input)?;
-            let arena = parser::parse(&source)?;
-            let spans: Arena<_> = (&arena).into_iter().map(|n| n.payload.clone()).collect();
-
-            let arena = arena.locate();
-            let locations: Arena<_> = (&arena).into_iter().map(|n| n.payload.clone()).collect();
-
-            let arena = arena.resolve().evaluate().connect();
-            let arena: Arena<_> = arena
-                .into_iter()
-                .zip(locations)
-                .zip(spans)
-                .map(|((node, loc), span)| node.map(|conns| Payload::new(loc, span, conns)))
-                .collect();
-
-            let issues: Arena<_> = (&arena)
-                .into_iter()
-                .map(|node| {
-                    path_issues(node)
-                        .chain(reference_errors(node))
-                        .chain(connection_errors(node))
-                        .chain(expr_errors(node))
-                        .map(Issue::from)
-                        .collect::<Vec<_>>()
-                })
-                .collect();
+            let (tree, spans) = parser::parse(&source)?;
+            let mut spec = Specification::from(tree);
+            spec.diagnose();
+            let issues = issue::issues(&spec);
 
             let elapsed = start.elapsed();
             let mut count = 0;
 
-            for (node, issues) in arena.into_iter().zip(issues) {
+            for ((issues, path), span) in issues
+                .into_iter()
+                .zip(spec.analysis.paths)
+                .zip(spans.entities)
+            {
                 count += issues.len();
                 if issues.is_empty() {
                     continue;
                 }
 
-                let path = node.payload.location.path;
-                let span = node.payload.span;
                 let sp = format!("{}", span.start).bold();
                 let code = format!("{}", &source[span.start.index..span.end.index]).bold();
-                eprintln!("{:12} {} ---> {}", sp, path, code);
+                eprintln!("{:12} {} ---> {}", sp, path.path, code);
 
-                for issue in issues {
+                for issue in issues.into_iter().map(Issue::from) {
                     eprintln!("    {}", issue.colored_message());
                 }
             }
@@ -115,34 +84,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     Ok(())
-}
-
-struct Payload {
-    location: Location,
-    span: Span,
-    neighbors: Neighbors<Connection<Idx>>,
-}
-
-impl Located for Payload {
-    fn location(&self) -> &path::Location {
-        &self.location
-    }
-}
-
-impl Connected for Payload {
-    fn neigbhors(&self) -> &Neighbors<Connection<Idx>> {
-        &self.neighbors
-    }
-}
-
-impl Payload {
-    pub fn new(location: Location, span: Span, neighbors: Neighbors<Connection<Idx>>) -> Self {
-        Self {
-            location,
-            span,
-            neighbors,
-        }
-    }
 }
 
 struct Issue {

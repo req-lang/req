@@ -1,16 +1,22 @@
-use std::{collections::HashMap, fmt::Display};
+use std::collections::HashMap;
 
 use crate::{
-    node::{
-        self,
-        entity::{Arena, Idx},
-    },
-    semantics::path::{self, Located, Path},
+    node::{self, identifier, path::Path, reference, tree::Tree},
+    semantics::path::Location,
 };
 
 pub mod entity;
 pub mod expression;
-pub mod markup;
+
+/// Resolves every reference and identifier of the tree, `paths` must come from the same entities
+pub fn link(tree: &Tree, paths: &node::entity::Arena<Location>) -> Links {
+    let mut links = Links {
+        references: tree.references.parallel(),
+        identifiers: tree.identifiers.parallel(),
+    };
+    entity::link(tree, paths, &mut links);
+    links
+}
 
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum Issue {
@@ -20,83 +26,16 @@ pub enum Issue {
     Ambiguous,
 }
 
-#[derive(Debug, Clone)]
-pub struct Link<I = Idx> {
-    pub original: Path,
-    pub resolved: Option<I>,
+/// What each path points to, `None` when it does not resolve
+#[derive(Default, Debug, Clone, PartialEq, Eq)]
+pub struct Links {
+    /// Entities can only refer to other entities
+    pub references: reference::Arena<Option<node::entity::Idx>>,
+    /// Identifiers can also refer to builtin types, enum members and local variables
+    pub identifiers: identifier::Arena<Option<Target>>,
 }
 
-impl<I> Link<I> {
-    pub fn valid(original: Path, resolved: I) -> Self {
-        Link {
-            original,
-            resolved: Some(resolved),
-        }
-    }
-
-    pub fn invalid(original: Path) -> Self {
-        Link {
-            original,
-            resolved: None,
-        }
-    }
-
-    pub fn is_valid(&self) -> bool {
-        self.resolved.is_some()
-    }
-
-    pub fn target(&self) -> Option<&I> {
-        match &self.resolved {
-            Some(i) => Some(i),
-            None => None,
-        }
-    }
-
-    pub fn target_mut(&mut self) -> Option<&mut I> {
-        match &mut self.resolved {
-            Some(i) => Some(i),
-            None => None,
-        }
-    }
-
-    pub fn map<J>(self, f: impl FnOnce(I) -> J) -> Link<J> {
-        Link {
-            original: self.original,
-            resolved: self.resolved.map(f),
-        }
-    }
-}
-
-impl<I> From<Link<I>> for Path {
-    fn from(value: Link<I>) -> Self {
-        value.original
-    }
-}
-
-impl<I> Display for Link<I> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.original)
-    }
-}
-
-pub trait Resolve<N, E, M> {
-    fn resolve(self) -> Arena<entity::Node<N, E, M>>;
-}
-
-impl<N: Located, R: Into<Path> + Clone, T: Into<Path> + Clone, E, M> Resolve<N, E, M>
-    for Arena<node::entity::Node<N, R, T, E, M>>
-{
-    fn resolve(self) -> Arena<entity::Node<N, E, M>> {
-        let paths = path::collect(&self)
-            .into_iter()
-            .map(|(p, mut idxs)| (p, idxs.pop().unwrap()))
-            .collect();
-        let annotations = annotate_types(&self);
-        entity::link(&paths, &annotations, self)
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BuiltinKind {
     Real,
     Integer,
@@ -124,44 +63,22 @@ impl BuiltinKind {
     }
 }
 
-#[derive(Debug, Clone)]
-pub enum Target<I = node::entity::Idx> {
-    Entity(I),
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Target {
+    Entity(node::entity::Idx),
     Builtin(BuiltinKind),
-    Enum(I, usize),
+    Enum(node::entity::Idx, usize),
+    // INVARIANT: The expression is always a set element
+    Local(node::expression::Idx),
 }
 
-impl<I> Target<I> {
-    pub fn entity(&self) -> Option<I>
-    where
-        I: Copy,
-    {
-        match self {
-            Target::Entity(rf) => Some(*rf),
-            _ => None,
-        }
-    }
-
-    pub fn entity_mut(&mut self) -> Option<&mut I>
-    where
-        I: Copy,
-    {
-        match self {
-            Target::Entity(rf) => Some(rf),
-            _ => None,
-        }
-    }
-}
-
-impl Target<Idx> {
+impl Target {
+    /// What a path points to when it is not a local variable
     pub fn find(ctx: &FindCtx, rf: &Path) -> Option<Self> {
         let parent = rf.parent().unwrap_or(rf.clone());
         let label = rf.label();
         if let Some(idx) = entity::find(ctx, &parent)
-            && let Some(pos) = ctx.annotations[idx]
-                .enum_members
-                .iter()
-                .position(|s| *s == label)
+            && let Some(pos) = ctx.members(idx).iter().position(|s| *s == label)
         {
             return Some(Self::Enum(idx, pos));
         }
@@ -178,45 +95,32 @@ impl Target<Idx> {
     }
 }
 
-#[derive(Debug, Default)]
-pub(super) struct Annotation {
-    enum_members: Vec<String>,
-}
-
-pub(super) fn annotate_types<N, R, T, E, M>(
-    arena: &Arena<node::entity::Node<N, R, T, E, M>>,
-) -> Arena<Annotation> {
-    (&arena)
-        .into_iter()
-        .map(|node| {
-            let enum_members = match &node.variant {
-                node::entity::Variant::Type(typ) => typ.members.clone(),
-                _ => Vec::new(),
-            };
-            Annotation { enum_members }
-        })
-        .collect()
-}
-
 pub struct FindCtx<'a> {
-    nodes: &'a HashMap<Path, Idx>,
-    annotations: &'a Arena<Annotation>,
+    entities: &'a node::entity::Arena<node::entity::Node>,
+    nodes: &'a HashMap<&'a Path, node::entity::Idx>,
     current: &'a Path,
-    imports: Vec<Path>,
+    imports: Vec<&'a Path>,
 }
 
 impl<'a> FindCtx<'a> {
     fn new(
-        nodes: &'a HashMap<Path, Idx>,
-        annotations: &'a Arena<Annotation>,
+        entities: &'a node::entity::Arena<node::entity::Node>,
+        nodes: &'a HashMap<&'a Path, node::entity::Idx>,
         current: &'a Path,
-        imports: Vec<Path>,
+        imports: Vec<&'a Path>,
     ) -> Self {
         Self {
+            entities,
             nodes,
-            annotations,
             current,
             imports,
+        }
+    }
+
+    fn members(&self, idx: node::entity::Idx) -> &[String] {
+        match &self.entities[idx].variant {
+            node::entity::Variant::Type(typ) => &typ.members,
+            _ => &[],
         }
     }
 }
@@ -226,168 +130,142 @@ mod tests {
     use pretty_assertions::assert_eq;
 
     use crate::{
-        mock,
+        mock::{
+            self,
+            entity::{
+                add, add_parent, attribute, find, package, part, reference, requirement, typ,
+            },
+            expression::{binary, identifier, insert},
+        },
         node::{
             self,
-            entity::{Arena, Idx, RequirementVariant},
+            entity::{Attribute, Idx, Meta, RequirementVariant, Variant},
+            markup::{Item, Markup},
+            tree::{Draft, Tree},
         },
         semantics::{
-            link::{
-                Resolve,
-                entity::{self, Node},
-                expression::Target,
-            },
-            path::{self, Locate},
+            link::{Links, Target, link},
+            path::paths,
         },
-        syntax,
-        utils::children::{Children, ChildrenMut},
     };
 
-    fn resolve(arena: Vec<syntax::entity::Node>) -> Arena<Node<path::Location, (), ()>> {
-        Arena::from(arena).locate().resolve()
+    fn resolved(draft: Draft) -> (Tree, Links) {
+        let tree = Tree::from(draft);
+        let links = link(&tree, &paths(&tree.entities));
+        (tree, links)
     }
 
-    fn get_child(
-        arena: &Arena<entity::Node<path::Location, (), ()>>,
-        parent_idx: Idx,
-        label: &str,
-    ) -> Idx {
-        arena[parent_idx]
-            .variant
-            .children()
-            .expect("node has no children")
-            .iter()
-            .copied()
-            .find(|idx| arena[*idx].meta.label == label)
-            .unwrap_or_else(|| panic!("child '{}' not found", label))
+    fn with_restriction(draft: &mut Draft, label: &str, target: &str) -> Idx {
+        let mut req = requirement(label);
+        let target = reference(draft, target);
+        req.variant.requirement_mut().unwrap().restriction = Some(target);
+        add(draft, req)
     }
 
-    fn assert_resolves_to(
-        arena: &Arena<entity::Node<path::Location, (), ()>>,
-        idx: Idx,
-        label: &str,
-    ) {
-        let rf = arena[idx].variant.references().next().cloned().unwrap();
-        assert!(rf.is_valid(), "expected resolved reference, got: {:?}", rf);
-        assert_eq!(arena[*rf.target().unwrap()].meta.label, label);
+    fn add_attribute(draft: &mut Draft, label: &str, domain: &str) -> Idx {
+        let attr = attribute(draft, label, domain);
+        add(draft, attr)
+    }
+
+    fn assert_resolves_to(tree: &Tree, links: &Links, idx: Idx, label: &str) {
+        let rf = tree.entities[idx].variant.references().next().unwrap();
+        match links.references[rf] {
+            Some(target) => assert_eq!(tree.entities[target].meta.label, label),
+            None => panic!("expected resolved reference"),
+        }
     }
 
     #[test]
     fn resolves_complete_path() {
-        let mut p = mock::entity::package("p");
-        p.variant.children_mut().unwrap().push(1.into());
-        p.variant.children_mut().unwrap().push(2.into());
+        let mut draft = Draft::default();
+        let x = add_attribute(&mut draft, "x", "real");
+        let r1 = with_restriction(&mut draft, "r1", "p::x");
+        add_parent(&mut draft, package("p"), &[x, r1]);
 
-        let x = mock::entity::attribute("x", "real");
+        let (tree, links) = resolved(draft);
 
-        let mut r1 = mock::entity::requirement("r1");
-        r1.variant.requirement_mut().unwrap().restriction = Some("p::x".into());
-
-        let resolved = resolve(vec![p, x, r1]);
-
-        assert_resolves_to(&resolved, 2.into(), "x");
+        assert_resolves_to(&tree, &links, r1, "x");
     }
 
     #[test]
     fn resolves_parent_path() {
-        let mut p = mock::entity::package("p");
-        p.variant.children_mut().unwrap().push(1.into());
-        p.variant.children_mut().unwrap().push(2.into());
+        let mut draft = Draft::default();
+        let x = add_attribute(&mut draft, "x", "real");
+        let r1 = with_restriction(&mut draft, "r1", "x");
+        add_parent(&mut draft, package("p"), &[x, r1]);
 
-        let x = mock::entity::attribute("x", "real");
+        let (tree, links) = resolved(draft);
 
-        let mut r1 = mock::entity::requirement("r1");
-        r1.variant.requirement_mut().unwrap().restriction = Some("x".into());
-
-        let resolved = resolve(vec![p, x, r1]);
-
-        assert_resolves_to(&resolved, 2.into(), "x");
+        assert_resolves_to(&tree, &links, r1, "x");
     }
 
     #[test]
     fn resolves_parent_subpath() {
-        let mut p = mock::entity::package("p");
-        p.variant.children_mut().unwrap().push(1.into());
-        p.variant.children_mut().unwrap().push(3.into());
+        let mut draft = Draft::default();
+        let x = add_attribute(&mut draft, "x", "real");
+        let y = add_parent(&mut draft, part("y"), &[x]);
+        let r1 = with_restriction(&mut draft, "r1", "y::x");
+        add_parent(&mut draft, package("p"), &[y, r1]);
 
-        let mut y = mock::entity::part("y");
-        y.variant.children_mut().unwrap().push(2.into());
+        let (tree, links) = resolved(draft);
 
-        let x = mock::entity::attribute("x", "real");
-
-        let mut r1 = mock::entity::requirement("r1");
-        r1.variant.requirement_mut().unwrap().restriction = Some("y::x".into());
-
-        let resolved = resolve(vec![p, y, x, r1]);
-
-        assert_resolves_to(&resolved, 3.into(), "x");
+        assert_resolves_to(&tree, &links, r1, "x");
     }
 
     #[test]
     fn resolves_import_subpath() {
-        let mut p = mock::entity::package("p");
-        let mut y = mock::entity::part("y");
-        let x = mock::entity::attribute("x", "real");
-        let mut q = mock::entity::package("q");
-        let mut r1 = mock::entity::requirement("r1");
+        let mut draft = Draft::default();
+        let x = add_attribute(&mut draft, "x", "real");
+        let y = add_parent(&mut draft, part("y"), &[x]);
+        let mut q = package("q");
+        let import = reference(&mut draft, "p::y");
+        q.variant.imports_mut().unwrap().push(import);
+        let r1 = with_restriction(&mut draft, "r1", "x");
+        let q = add_parent(&mut draft, q, &[r1]);
+        add_parent(&mut draft, package("p"), &[y, q]);
 
-        p.variant.children_mut().unwrap().push(1.into());
-        p.variant.children_mut().unwrap().push(3.into());
-        y.variant.children_mut().unwrap().push(2.into());
-        q.variant.imports_mut().unwrap().push("p::y".into());
-        q.variant.children_mut().unwrap().push(4.into());
+        let (tree, links) = resolved(draft);
 
-        r1.variant.requirement_mut().unwrap().restriction = Some("x".into());
-
-        let resolved = resolve(vec![p, y, x, q, r1]);
-
-        let r1_idx = get_child(&resolved, 3.into(), "r1");
-        assert_resolves_to(&resolved, r1_idx, "x");
+        let r1 = find(&tree, q, "r1");
+        assert_resolves_to(&tree, &links, r1, "x");
     }
 
     #[test]
     fn resolves_attribute_domain_to_entity() {
-        let mut p = mock::entity::package("p");
-        p.variant.children_mut().unwrap().push(1.into());
-        p.variant.children_mut().unwrap().push(2.into());
+        let mut draft = Draft::default();
+        let y = add_attribute(&mut draft, "y", "real");
+        let x = add_attribute(&mut draft, "x", "p::y");
+        add_parent(&mut draft, package("p"), &[y, x]);
 
-        let y = mock::entity::attribute("y", "real");
-        let x = mock::entity::attribute("x", "p::y");
+        let (tree, links) = resolved(draft);
 
-        let resolved = resolve(vec![p, y, x]);
-
-        let x_idx = get_child(&resolved, 0.into(), "x");
-        let domain = resolved[x_idx].variant.expressions().next().unwrap();
-        let target = match &domain[0.into()].variant {
-            node::expression::Variant::Identifier(ident) => ident.target.target(),
+        let domain = tree.entities[x].variant.expressions().next().unwrap();
+        let target = match &tree.expressions[domain].variant {
+            node::expression::Variant::Identifier(ident) => links.identifiers[ident.target],
             _ => panic!("expected identifier"),
         };
 
         match target {
-            Some(Target::Outer(super::Target::Entity(idx))) => {
-                assert_eq!(resolved[*idx].meta.label, "y");
-            }
+            Some(Target::Entity(idx)) => assert_eq!(tree.entities[idx].meta.label, "y"),
             other => panic!("expected entity target, got {:?}", other),
         }
     }
 
     #[test]
     fn resolves_attribute_domain_to_builtin() {
-        let mut p = mock::entity::package("p");
-        p.variant.children_mut().unwrap().push(1.into());
+        let mut draft = Draft::default();
+        let x = add_attribute(&mut draft, "x", "real");
+        add_parent(&mut draft, package("p"), &[x]);
 
-        let x = mock::entity::attribute("x", "real");
+        let (tree, links) = resolved(draft);
 
-        let resolved = resolve(vec![p, x]);
-
-        let x_idx = get_child(&resolved, 0.into(), "x");
-        let domain = resolved[x_idx].variant.expressions().next().unwrap();
-        let target = match &domain[0.into()].variant {
-            node::expression::Variant::Identifier(ident) => ident.target.target(),
+        let domain = tree.entities[x].variant.expressions().next().unwrap();
+        let target = match &tree.expressions[domain].variant {
+            node::expression::Variant::Identifier(ident) => links.identifiers[ident.target],
             _ => panic!("expected identifier"),
         };
         assert!(
-            matches!(target.unwrap(), Target::Outer(super::Target::Builtin(_))),
+            matches!(target, Some(Target::Builtin(_))),
             "expected builtin target, got {:?}",
             target,
         );
@@ -395,94 +273,73 @@ mod tests {
 
     #[test]
     fn resolves_type_enum() {
-        let mut p = mock::entity::package("p");
-        p.variant
-            .children_mut()
-            .unwrap()
-            .extend(&[1.into(), 2.into(), 3.into()]);
+        let mut draft = Draft::default();
+        let t = add(&mut draft, typ("t", &["a", "b", "c"]));
+        let x = add_attribute(&mut draft, "x", "t");
 
-        let t = mock::entity::typ("t", &["a", "b", "c"]);
-        let x = mock::entity::attribute("x", "t");
-        let mut r1 = mock::entity::requirement("r1");
+        let lhs = identifier(&mut draft, "x");
+        let rhs = identifier(&mut draft, "t::a");
+        let bin = binary(
+            &mut draft,
+            node::expression::BinaryOperator::Equal,
+            lhs,
+            rhs,
+        );
+        let mut r1 = requirement("r1");
+        r1.variant.requirement_mut().unwrap().variant = RequirementVariant::Formal(bin);
+        let r1 = add(&mut draft, r1);
+        add_parent(&mut draft, package("p"), &[t, x, r1]);
 
-        let lhs = mock::expression::identifier("x");
-        let rhs = mock::expression::identifier("t::a");
-        let bin = mock::expression::binary(node::expression::BinaryOperator::Equal, 1, 2);
-        let expr = vec![bin, lhs, rhs];
-        r1.variant.requirement_mut().unwrap().variant = RequirementVariant::Formal(expr.into());
+        let (tree, links) = resolved(draft);
 
-        let resolved = resolve(vec![p, t, x, r1]);
-
-        let r1 = resolved[3.into()].variant.requirement().unwrap();
-        let expr = r1.variant.formal().unwrap();
-        let tgt = &expr[2.into()].variant.identifier().unwrap().target;
-        assert!(tgt.is_valid());
-        if let Target::Outer(super::Target::Enum(idx, 0)) = tgt.resolved.clone().unwrap() {
-            assert_eq!(idx, 1.into());
-            return;
-        }
-        panic!("unexpected target type, {:?}", tgt);
+        let target = match &tree.expressions[rhs].variant {
+            node::expression::Variant::Identifier(ident) => links.identifiers[ident.target],
+            _ => panic!("expected identifier"),
+        };
+        assert_eq!(target, Some(Target::Enum(t, 0)));
     }
 
     #[test]
     fn resolves_comprehension_body_to_local_variable() {
-        // Expression arena (pre-order): [all body for x in domain, S, x]
-        let set = node::expression::SetElement::new("x".to_string(), 1.into());
-        let comprehension = node::expression::Comprehension::new(Some(node::expression::Aggregator::All), set, 2.into());
-        let comprehension_node = syntax::expression::Node::empty(
+        let mut draft = Draft::default();
+        let domain = identifier(&mut draft, "S");
+        let body = identifier(&mut draft, "x");
+        let set = node::expression::SetElement::new("x".to_string(), domain);
+        let comprehension = node::expression::Comprehension::new(
+            Some(node::expression::Aggregator::All),
+            set,
+            body,
+        );
+        let root = insert(
+            &mut draft,
             node::expression::Variant::Comprehension(comprehension),
         );
-        let domain_s = mock::expression::identifier("S");
-        let body_x = mock::expression::identifier("x");
-        let expr_arena = vec![comprehension_node, domain_s, body_x].into();
-
-        let a = syntax::entity::Node::empty(
-            node::entity::Meta::from("a".to_string()),
-            node::entity::Variant::Attribute(node::entity::Attribute::new(expr_arena)),
+        let a = node::entity::Node::new(
+            Meta::from("a".to_string()),
+            Variant::Attribute(Attribute::new(root)),
         );
+        let a = add(&mut draft, a);
+        add_parent(&mut draft, package("p"), &[a]);
 
-        let mut p = mock::entity::package("p");
-        p.variant.children_mut().unwrap().push(1.into());
+        let (tree, links) = resolved(draft);
 
-        let resolved = resolve(vec![p, a]);
-
-        let a_idx = get_child(&resolved, 0.into(), "a");
-        let expr_arena = resolved[a_idx].variant.expressions().next().unwrap();
-
-        let (body_idx, domain_idx) = match &expr_arena[0.into()].variant {
-            node::expression::Variant::Comprehension(c) => {
-                (c.expression, node::expression::Idx::from(0))
-            }
-            _ => panic!("expected comprehension"),
-        };
-
-        let target = match &expr_arena[body_idx].variant {
-            node::expression::Variant::Identifier(ident) => ident.target.target(),
+        let target = match &tree.expressions[body].variant {
+            node::expression::Variant::Identifier(ident) => links.identifiers[ident.target],
             _ => panic!("expected identifier"),
         };
-        match target {
-            Some(Target::Inner(idx)) => {
-                assert_eq!(*idx, domain_idx);
-            }
-            other => panic!("expected local variable target, got {:?}", other),
-        }
+        assert_eq!(target, Some(Target::Local(root)));
     }
 
     #[test]
     fn resolves_markup_reference() {
-        let mut comment = node::markup::Container::default();
-        comment
-            .items
-            .push(node::markup::Item::Reference("p".into()));
-
+        let mut draft = Draft::default();
         let mut p = mock::entity::package("p");
-        p.meta.comment = Some(node::markup::Node::empty(comment));
+        let rf = reference(&mut draft, "p");
+        p.meta.comment = Some(Markup::from(vec![Item::Reference(rf)]));
+        add(&mut draft, p);
 
-        let resolved = resolve(vec![p]);
+        let (_, links) = resolved(draft);
 
-        let markup = resolved[0.into()].markups().next().cloned().unwrap();
-        let rf = markup.container.references().next().cloned().unwrap();
-        assert!(rf.is_valid());
-        assert_eq!(resolved[*rf.target().unwrap()].meta.label, "p");
+        assert_eq!(links.references[rf], Some(0.into()));
     }
 }

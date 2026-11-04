@@ -1,13 +1,11 @@
 pub mod generator {
-    use std::cell::RefCell;
-    use std::rc::Rc;
-
-    use super::entity::{package, part, requirement};
-    use crate::node;
-    use crate::node::entity::Arena;
-    use crate::syntax::entity::Node;
-    use crate::syntax::markup;
-    use crate::utils::children::ChildrenMut;
+    use super::entity::{add_child, add_root, formal, package, part, reference, requirement};
+    use super::expression::{binary, identifier, number};
+    use crate::node::{
+        expression::{Aggregator, BinaryOperator, Case, Comprehension, SetElement, Variant, When},
+        markup::{Item, Markup},
+        tree::{Draft, Tree},
+    };
 
     pub struct ExponentialSizeIterator {
         value: f64,
@@ -30,7 +28,7 @@ pub mod generator {
     }
 
     pub trait Generate {
-        fn generate(&self) -> Arena<Node>;
+        fn generate(&self) -> Tree;
 
         fn size(&self) -> u64;
     }
@@ -52,54 +50,29 @@ pub mod generator {
             .join(" ")
     }
 
-    fn push_child(nd: &Rc<RefCell<Node>>, child: usize) {
-        nd.borrow_mut()
-            .variant
-            .children_mut()
-            .unwrap()
-            .push(child.into());
-    }
-
     impl Generate for Simple {
-        fn generate(&self) -> Arena<Node> {
-            let arena = {
-                let root = Rc::new(RefCell::new(package("root")));
-                let mut arena = vec![root.clone()];
+        fn generate(&self) -> Tree {
+            let mut draft = Draft::default();
+            let root = add_root(&mut draft, package("root"));
 
-                for p in 0..self.packages {
-                    let pkg = Rc::new(RefCell::new(package(format!("package_{p}"))));
-                    arena.push(pkg.clone());
-                    push_child(&root, arena.len() - 1);
+            for p in 0..self.packages {
+                let pkg = add_child(&mut draft, root, package(format!("package_{p}")));
 
-                    let mut prev = pkg;
-                    for d in 0..self.depth {
-                        let curr = Rc::new(RefCell::new(package(format!("package_{p}_{d}"))));
-                        arena.push(curr.clone());
-                        let len = arena.len() - 1;
-                        for r in 0..self.requirements {
-                            let mut req = requirement(format!("requirement_{p}_{d}_{r}"));
-                            let content = repeat_words(self.words as usize);
-                            let mut markup = node::markup::Container::default();
-                            markup.items.push(node::markup::Item::Text(content));
-
-                            let informal = req.variant.requirement_mut().unwrap().informal_mut();
-                            *informal.unwrap() = markup::Node::empty(markup);
-
-                            arena.push(Rc::new(RefCell::new(req)));
-                            push_child(&curr, arena.len() - 1);
-                        }
-
-                        push_child(&prev, len);
-                        prev = curr;
+                let mut prev = pkg;
+                for d in 0..self.depth {
+                    let curr = add_child(&mut draft, prev, package(format!("package_{p}_{d}")));
+                    for r in 0..self.requirements {
+                        let mut req = requirement(format!("requirement_{p}_{d}_{r}"));
+                        let content = repeat_words(self.words as usize);
+                        let informal = req.variant.requirement_mut().unwrap().informal_mut();
+                        *informal.unwrap() = Markup::from(vec![Item::Text(content)]);
+                        add_child(&mut draft, curr, req);
                     }
+                    prev = curr;
                 }
-                arena
-            };
-            arena
-                .into_iter()
-                .map(|n| RefCell::into_inner(Rc::try_unwrap(n).unwrap()))
-                .collect::<Vec<_>>()
-                .into()
+            }
+
+            draft.into()
         }
 
         fn size(&self) -> u64 {
@@ -118,7 +91,7 @@ pub mod generator {
         }
     }
 
-    /// Flat tree: one root package, two parts ("my::part", "my::other_part"),
+    /// Flat draft: one root package, two parts ("my::part", "my::other_part"),
     /// and N informal requirements each linking to one part and restricting to the other.
     /// Intended for benchmarking reference resolution under increasing requirement counts.
     pub struct ReferenceResolution {
@@ -132,49 +105,25 @@ pub mod generator {
     }
 
     impl Generate for ReferenceResolution {
-        fn generate(&self) -> Arena<Node> {
-            let arena = {
-                let root = Rc::new(RefCell::new(package("root")));
-                let mut arena: Vec<Rc<RefCell<Node>>> = vec![
-                    root.clone(),
-                    Rc::new(RefCell::new(part("part"))), // 1
-                    Rc::new(RefCell::new(part("other_part"))), // 2
-                ];
+        fn generate(&self) -> Tree {
+            let mut draft = Draft::default();
+            let root = add_root(&mut draft, package("root"));
+            add_child(&mut draft, root, part("part"));
+            add_child(&mut draft, root, part("other_part"));
 
-                push_child(&root, 1);
-                push_child(&root, 2);
+            for i in 0..self.requirements {
+                let mut req = requirement(format!("req_{i}"));
+                let restriction = reference(&mut draft, "root::other_part");
+                let part = reference(&mut draft, "root::part");
+                let missing = reference(&mut draft, "root::not_existing");
+                let requirement = req.variant.requirement_mut().unwrap();
+                requirement.restriction = Some(restriction);
+                *requirement.informal_mut().unwrap() =
+                    Markup::from(vec![Item::Reference(part), Item::Reference(missing)]);
+                add_child(&mut draft, root, req);
+            }
 
-                for i in 0..self.requirements {
-                    let mut req = requirement(format!("req_{i}"));
-                    req.variant.requirement_mut().unwrap().restriction =
-                        Some("root::other_part".to_string());
-                    let informal = req
-                        .variant
-                        .requirement_mut()
-                        .unwrap()
-                        .informal_mut()
-                        .unwrap();
-                    let mut container = node::markup::Container::default();
-                    container
-                        .items
-                        .push(node::markup::Item::Reference("root::part".to_string()));
-                    container.items.push(node::markup::Item::Reference(
-                        "root::not_existing".to_string(),
-                    ));
-                    *informal = markup::Node::empty(container);
-
-                    let idx = arena.len();
-                    arena.push(Rc::new(RefCell::new(req)));
-                    push_child(&root, idx);
-                }
-                arena
-            };
-
-            arena
-                .into_iter()
-                .map(|n| RefCell::into_inner(Rc::try_unwrap(n).unwrap()))
-                .collect::<Vec<_>>()
-                .into()
+            draft.into()
         }
 
         fn size(&self) -> u64 {
@@ -182,7 +131,7 @@ pub mod generator {
         }
     }
 
-    /// Flat tree: root package containing one part "attrs" (with attr_a: real, attr_b: real,
+    /// Flat draft: root package containing one part "attrs" (with attr_a: real, attr_b: real,
     /// attr_bool: boolean) and N*3 formal requirements cycling through:
     ///   - addition:  attr_a + attr_b
     ///   - all:       all x > 0 for x in real end
@@ -198,41 +147,29 @@ pub mod generator {
     }
 
     impl Generate for ExpressionTyping {
-        fn generate(&self) -> Arena<Node> {
-            let arena: Vec<Rc<RefCell<Node>>> = {
-                let root = Rc::new(RefCell::new(package("root")));
-                let attrs = Rc::new(RefCell::new(part("attrs")));
-                let mut arena = vec![
-                    root.clone(),                                                      // 0
-                    attrs.clone(),                                                     // 1
-                    Rc::new(RefCell::new(super::entity::attribute("attr_a", "real"))), // 2
-                    Rc::new(RefCell::new(super::entity::attribute("attr_b", "real"))), // 3
-                    Rc::new(RefCell::new(super::entity::attribute(
-                        "attr_bool",
-                        "boolean",
-                    ))), // 4
-                ];
-                push_child(&root, 1);
-                push_child(&attrs, 2);
-                push_child(&attrs, 3);
-                push_child(&attrs, 4);
+        fn generate(&self) -> Tree {
+            let mut draft = Draft::default();
+            let root = add_root(&mut draft, package("root"));
+            let attrs = add_child(&mut draft, root, part("attrs"));
+            for (label, domain) in [
+                ("attr_a", "real"),
+                ("attr_b", "real"),
+                ("attr_bool", "boolean"),
+            ] {
+                let attribute = super::entity::attribute(&mut draft, label, domain);
+                add_child(&mut draft, attrs, attribute);
+            }
 
-                for i in 0..self.cycles {
-                    arena.push(Rc::new(RefCell::new(make_addition(i))));
-                    push_child(&root, arena.len() - 1);
-                    arena.push(Rc::new(RefCell::new(make_all(i))));
-                    push_child(&root, arena.len() - 1);
-                    arena.push(Rc::new(RefCell::new(make_when(i))));
-                    push_child(&root, arena.len() - 1);
-                }
-                arena
-            };
+            for i in 0..self.cycles {
+                let addition = make_addition(&mut draft, i);
+                add_child(&mut draft, root, addition);
+                let all = make_all(&mut draft, i);
+                add_child(&mut draft, root, all);
+                let when = make_when(&mut draft, i);
+                add_child(&mut draft, root, when);
+            }
 
-            arena
-                .into_iter()
-                .map(|n| RefCell::into_inner(Rc::try_unwrap(n).unwrap()))
-                .collect::<Vec<_>>()
-                .into()
+            draft.into()
         }
 
         fn size(&self) -> u64 {
@@ -240,115 +177,82 @@ pub mod generator {
         }
     }
 
-    fn make_addition(i: u64) -> Node {
-        use crate::node::expression::{BinOp, BinaryOperator, Variant};
-        use crate::syntax::expression::Node as ExprNode;
-        // 0: attr_a + attr_b
-        // 1: identifier("root::attrs::attr_a")
-        // 2: identifier("root::attrs::attr_b")
-        let exprs = vec![
-            ExprNode::empty(Variant::BinOp(BinOp::new(
-                BinaryOperator::Plus,
-                1.into(),
-                2.into(),
-            ))),
-            super::expression::identifier("root::attrs::attr_a"),
-            super::expression::identifier("root::attrs::attr_b"),
-        ];
-        super::entity::formal(&format!("addition_{i}"), exprs)
+    // attr_a + attr_b
+    fn make_addition(draft: &mut Draft, i: u64) -> crate::node::entity::Node {
+        let left = identifier(draft, "root::attrs::attr_a");
+        let right = identifier(draft, "root::attrs::attr_b");
+        let root = binary(draft, BinaryOperator::Plus, left, right);
+        formal(&format!("addition_{i}"), root)
     }
 
-    fn make_all(i: u64) -> Node {
-        use crate::node::expression::{
-            Aggregator, BinOp, BinaryOperator, Comprehension, SetElement, Variant,
-        };
-        use crate::syntax::expression::Node as ExprNode;
-        // 0: all x > 0 for x in real end
-        // 1: identifier("real")
-        // 2: x > 0
-        // 3: identifier("x")
-        // 4: number(0)
-        let set = SetElement::new("x".to_string(), 1.into());
-        let all_node = Comprehension::new(Some(Aggregator::All), set, 2.into());
-        let exprs = vec![
-            ExprNode::empty(Variant::Comprehension(all_node)),
-            super::expression::identifier("real"),
-            ExprNode::empty(Variant::BinOp(BinOp::new(
-                BinaryOperator::GreaterThan,
-                3.into(),
-                4.into(),
-            ))),
-            super::expression::identifier("x"),
-            super::expression::number(0),
-        ];
-        super::entity::formal(&format!("all_{i}"), exprs)
+    // all x > 0 for x in real end
+    fn make_all(draft: &mut Draft, i: u64) -> crate::node::entity::Node {
+        let domain = identifier(draft, "real");
+        let x = identifier(draft, "x");
+        let zero = number(draft, 0);
+        let body = binary(draft, BinaryOperator::GreaterThan, x, zero);
+        let set = SetElement::new("x".to_string(), domain);
+        let all = Comprehension::new(Some(Aggregator::All), set, body);
+        let root = super::expression::insert(draft, Variant::Comprehension(all));
+        formal(&format!("all_{i}"), root)
     }
 
-    fn make_when(i: u64) -> Node {
-        use crate::node::expression::{BinOp, BinaryOperator, Case, Variant, When};
-        use crate::syntax::expression::Node as ExprNode;
-        // 0: when attr_bool then attr_a + 1
-        // 1: identifier("root::attrs::attr_bool")
-        // 2: attr_a + 1
-        // 3: identifier("root::attrs::attr_a")
-        // 4: number(1)
-        let case = Case {
-            condition: 1.into(),
-            consequence: 2.into(),
-        };
-        let when_node = When {
-            cases: vec![case],
+    // when attr_bool then attr_a + 1
+    fn make_when(draft: &mut Draft, i: u64) -> crate::node::entity::Node {
+        let condition = identifier(draft, "root::attrs::attr_bool");
+        let attr = identifier(draft, "root::attrs::attr_a");
+        let one = number(draft, 1);
+        let consequence = binary(draft, BinaryOperator::Plus, attr, one);
+        let when = When {
+            cases: vec![Case::new(condition, consequence)],
             otherwise: None,
         };
-        let exprs = vec![
-            ExprNode::empty(Variant::When(when_node)),
-            super::expression::identifier("root::attrs::attr_bool"),
-            ExprNode::empty(Variant::BinOp(BinOp::new(
-                BinaryOperator::Plus,
-                3.into(),
-                4.into(),
-            ))),
-            super::expression::identifier("root::attrs::attr_a"),
-            super::expression::number(1),
-        ];
-        super::entity::formal(&format!("when_{i}"), exprs)
+        let root = super::expression::insert(draft, Variant::When(when));
+        formal(&format!("when_{i}"), root)
     }
 }
 
 pub mod entity {
     use crate::{
         mock::expression,
-        node::entity::{
-            Arena, Attribute, Meta, Package, Part, Requirement, RequirementVariant, Type, Variant,
+        node::{
+            entity::{
+                Attribute, Idx, Meta, Node, Package, Part, Requirement, RequirementVariant, Type,
+                Variant,
+            },
+            path::Path,
+            reference,
+            tree::{Draft, Tree},
         },
-        syntax::{self, entity::Node},
+        utils::children::ChildrenMut,
     };
 
     pub fn package<S: ToString>(label: S) -> Node {
         let variant = Variant::Package(Package::new(vec![], vec![]));
-        Node::empty(Meta::from(label.to_string()), variant)
+        Node::new(Meta::from(label.to_string()), variant)
     }
 
     pub fn part<S: ToString>(label: S) -> Node {
         let variant = Variant::Part(Part::new(vec![], vec![]));
-        Node::empty(Meta::from(label.to_string()), variant)
+        Node::new(Meta::from(label.to_string()), variant)
     }
 
-    pub fn attribute<S: ToString>(label: S, domain: S) -> Node {
-        let domain = expression::identifier(domain);
-        let variant = Variant::Attribute(Attribute::new(vec![domain].into()));
-        Node::empty(Meta::from(label.to_string()), variant)
+    /// An attribute whose domain is the identifier `domain`, which is added to the draft
+    pub fn attribute<S: ToString>(draft: &mut Draft, label: S, domain: S) -> Node {
+        let domain = expression::identifier(draft, domain);
+        let variant = Variant::Attribute(Attribute::new(domain));
+        Node::new(Meta::from(label.to_string()), variant)
     }
 
     pub fn requirement<S: ToString>(label: S) -> Node {
         let variant = RequirementVariant::default();
         let variant = Variant::Requirement(Requirement::from(variant));
-        Node::empty(Meta::from(label.to_string()), variant)
+        Node::new(Meta::from(label.to_string()), variant)
     }
 
-    pub fn formal(label: &str, expr: Vec<syntax::expression::Node>) -> Node {
+    pub fn formal(label: &str, root: crate::node::expression::Idx) -> Node {
         let mut req = requirement(label);
-        req.variant.requirement_mut().unwrap().variant = RequirementVariant::Formal(expr.into());
+        req.variant.requirement_mut().unwrap().variant = RequirementVariant::Formal(root);
         req
     }
 
@@ -359,79 +263,101 @@ pub mod entity {
                 .map(|m| m.to_string())
                 .collect::<Vec<_>>(),
         ));
-        Node::empty(Meta::from(label.to_string()), variant)
+        Node::new(Meta::from(label.to_string()), variant)
     }
 
-    pub fn simple_tree() -> Arena<Node> {
-        let mut arena = vec![
-            package("a"),
-            package("b"),
-            package("c"),
-            package("d"),
-            package("e"),
-        ];
+    /// Adds a path to the references of the draft
+    pub fn reference<S: ToString>(draft: &mut Draft, path: S) -> reference::Idx {
+        let idx = draft.references.len().into();
+        draft.references.push(Path::from(path.to_string()));
+        idx
+    }
 
-        let variant = Variant::Package(Package::new(vec![], vec![3.into()]));
-        arena[1].variant = variant;
+    pub fn add(draft: &mut Draft, node: Node) -> Idx {
+        let idx = draft.entities.len().into();
+        draft.entities.push(node);
+        idx
+    }
 
-        let variant = Variant::Package(Package::new(vec![], vec![4.into()]));
-        arena[2].variant = variant;
+    /// Stores `node` after its `children`, the order in which the parser stores entities
+    pub fn add_parent(draft: &mut Draft, mut node: Node, children: &[Idx]) -> Idx {
+        node.variant
+            .children_mut()
+            .expect("node has no children")
+            .extend(children);
+        add(draft, node)
+    }
 
-        let variant = Variant::Package(Package::new(vec![], vec![1.into(), 2.into()]));
-        arena[0].variant = variant;
-        arena.reverse();
+    pub fn add_root(draft: &mut Draft, node: Node) -> Idx {
+        add(draft, node)
+    }
 
-        return arena.into();
+    pub fn add_child(draft: &mut Draft, parent: Idx, node: Node) -> Idx {
+        let idx = add_root(draft, node);
+        draft.entities[usize::from(parent)]
+            .variant
+            .children_mut()
+            .expect("parent has no children")
+            .push(idx);
+        idx
+    }
+
+    /// The child of `parent` named `label`
+    pub fn find(tree: &Tree, parent: Idx, label: &str) -> Idx {
+        use crate::utils::children::Children;
+
+        tree.entities[parent]
+            .variant
+            .children()
+            .expect("node has no children")
+            .iter()
+            .copied()
+            .find(|idx| tree.entities[*idx].meta.label == label)
+            .unwrap_or_else(|| panic!("child '{}' not found", label))
     }
 }
 
 pub mod expression {
-    use crate::{
-        node::{
-            self,
-            expression::{Identifier, Variant},
-        },
-        syntax::expression::Node,
+    use crate::node::{
+        self,
+        expression::{Identifier, Idx, Node, Variant},
+        path::Path,
+        tree::Draft,
     };
 
-    pub fn identifier<S: ToString>(location: S) -> Node {
-        let variant = Variant::Identifier(Identifier::new(location.to_string()));
-        Node::empty(variant)
+    pub fn insert(draft: &mut Draft, variant: Variant) -> Idx {
+        let idx = draft.expressions.len().into();
+        draft.expressions.push(Node::new(variant));
+        idx
     }
 
-    pub fn number(n: i64) -> Node {
+    pub fn identifier<S: ToString>(draft: &mut Draft, location: S) -> Idx {
+        let target = draft.identifiers.len().into();
+        draft.identifiers.push(Path::from(location.to_string()));
+        insert(draft, Variant::Identifier(Identifier::new(target)))
+    }
+
+    pub fn number(draft: &mut Draft, n: i64) -> Idx {
         let num = node::expression::Number {
             kind: node::expression::NumberKind::Integer,
             value: n.to_string(),
         };
-        Node::empty(Variant::Number(num))
+        insert(draft, Variant::Number(num))
     }
 
-    pub fn boolean(b: bool) -> Node {
-        Node::empty(Variant::Boolean(node::expression::Boolean::from(b)))
+    pub fn boolean(draft: &mut Draft, b: bool) -> Idx {
+        insert(draft, Variant::Boolean(node::expression::Boolean::from(b)))
     }
 
-    pub fn binary(op: node::expression::BinaryOperator, left: usize, right: usize) -> Node {
-        Node::empty(node::expression::Variant::BinOp(
-            node::expression::BinOp::new(op, left.into(), right.into()),
-        ))
+    pub fn binary(
+        draft: &mut Draft,
+        op: node::expression::BinaryOperator,
+        left: Idx,
+        right: Idx,
+    ) -> Idx {
+        insert(
+            draft,
+            Variant::BinOp(node::expression::BinOp::new(op, left, right)),
+        )
     }
 }
-
-//
-// #[cfg(test)]
-// mod tests {
-//     use crate::mock::generator::{Generate, Simple};
-//
-//     #[test]
-//     fn simple_has_expected_size() {
-//         let mut generator = Simple::new();
-//
-//         let root = generator.generate();
-//         assert_eq!(root.iter().count() as u64, generator.size());
-//
-//         generator.packages = 5;
-//         let root = generator.generate();
-//         assert_eq!(root.iter().count() as u64, generator.size());
-//     }
-// }

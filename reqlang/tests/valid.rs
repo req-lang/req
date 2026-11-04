@@ -1,57 +1,22 @@
 use reqlang::{
-    issue::{Issue, Severity, connection_errors, expr_errors, path_issues, reference_errors},
-    node::entity::{Arena, Idx},
-    semantics::{
-        connection::{
-            Connect, Connected,
-            entity::{Connection, Neighbors},
-        },
-        link::{self, Resolve},
-        path::{self, Locate, Located, Location},
-        typing::{Evaluate, TypeResult},
-    },
+    Specification,
+    issue::{self, Severity},
     syntax::{self},
 };
 
 pub const PATH_ROOT: &str = "tests/data/valid";
 
-fn assert_valid_parsing_and_analysis(
-    filename: &str,
-) -> Arena<link::entity::Node<Payload, TypeResult, ()>> {
+fn assert_valid_parsing_and_analysis(filename: &str) -> Specification {
     let path = std::path::PathBuf::from(PATH_ROOT).join(filename);
     let input = std::fs::read_to_string(path).unwrap();
     let result = syntax::parser::parse(&input);
 
     assert!(result.is_ok());
 
-    let ast: Arena<_> = result
-        .unwrap()
-        .into_iter()
-        .map(syntax::entity::Node::from)
-        .collect();
-
-    let arena = ast.locate();
-    let locations: Arena<_> = (&arena).into_iter().map(|n| n.payload.clone()).collect();
-
-    let arena = arena.resolve().evaluate().connect();
-    let arena: Arena<_> = arena
-        .into_iter()
-        .zip(locations)
-        .map(|(node, loc)| node.map(|conns| Payload::new(loc, conns)))
-        .collect();
-
-    let issues: Arena<_> = (&arena)
-        .into_iter()
-        .map(|node| {
-            path_issues(node)
-                .chain(reference_errors(node))
-                .chain(connection_errors(node))
-                .chain(expr_errors(node))
-                .map(Issue::from)
-                .collect::<Vec<_>>()
-        })
-        .collect();
-
+    let (tree, _) = result.unwrap();
+    let mut spec = Specification::from(tree);
+    spec.diagnose();
+    let issues: Vec<_> = issue::issues(&spec).into_iter().flatten().collect();
     for issue in &issues {
         eprintln!("{:?}", issue);
     }
@@ -59,14 +24,13 @@ fn assert_valid_parsing_and_analysis(
     assert!(
         issues
             .into_iter()
-            .flatten()
             .map(|issue| Severity::from(&issue))
             .filter(|sev| *sev == Severity::Critical)
             .next()
             .is_none()
     );
 
-    arena
+    spec
 }
 
 mod valid {
@@ -135,31 +99,5 @@ mod valid {
     #[test]
     fn traceability() {
         assert_valid_parsing_and_analysis("traceability.req");
-    }
-}
-
-struct Payload {
-    location: Location,
-    neighbors: Neighbors<Connection<Idx>>,
-}
-
-impl Located for Payload {
-    fn location(&self) -> &path::Location {
-        &self.location
-    }
-}
-
-impl Connected for Payload {
-    fn neigbhors(&self) -> &Neighbors<Connection<Idx>> {
-        &self.neighbors
-    }
-}
-
-impl Payload {
-    pub fn new(location: Location, neighbors: Neighbors<Connection<Idx>>) -> Self {
-        Self {
-            location,
-            neighbors,
-        }
     }
 }

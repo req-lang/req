@@ -4,24 +4,24 @@ use crate::{
     issue::Severity,
     node::{
         self,
-        arena::ArenaEnumerate,
-        expression::{Arena, Idx, Selector},
+        expression::{Arena, Idx, Variant},
+        tree::Tree,
     },
     semantics::{
-        link::{entity, expression::Node},
-        typing::{TypeResult, evaluate::evaluate_node},
+        link::{Links, Target},
+        typing::{Result, evaluate::evaluate_node},
     },
     utils::children::ChildrenIter,
 };
 
 // TODO: Avoid boxed set, limit the number of nested sets
 #[derive(PartialEq, Eq, Debug, Clone)]
-pub enum TypeKind<I = node::entity::Idx> {
+pub enum TypeKind {
     Number,
     Boolean,
     Undefined,
-    Custom(I),
-    Set(Box<TypeKind<I>>),
+    Custom(node::entity::Idx),
+    Set(Box<TypeKind>),
 }
 
 impl Display for TypeKind {
@@ -62,60 +62,39 @@ impl From<&Issue> for Severity {
 }
 //
 // TODO: Circular references between domains and requirements can loop indefinitely
-pub(super) fn collect_types<N, E, M>(
-    entity: node::entity::Selector<entity::Node<N, E, M>>,
-    arena: &Arena<Node<E>>,
-    types: &mut node::entity::Arena<Option<Arena<Option<TypeResult>>>>,
+pub(super) fn collect_types(
+    tree: &Tree,
+    links: &Links,
+    idx: Idx,
+    types: &mut Arena<Option<Result>>,
 ) {
-    for (idx, _) in arena.into_iter().indices() {
-        collect_in_order(entity, Selector::new(arena, idx), types);
+    if types[idx].is_some() {
+        return;
     }
-}
 
-fn collect_in_order<N, E, M>(
-    entity: node::entity::Selector<entity::Node<N, E, M>>,
-    expression: Selector<Node<E>>,
-    types: &mut node::entity::Arena<Option<Arena<Option<TypeResult>>>>,
-) {
-    use crate::semantics::link::Target::*;
-    use crate::semantics::link::expression::Target::*;
-    use node::expression::Variant::*;
-
-    let (entities, i) = entity.into();
-    let (expressions, j) = expression.into();
-
-    match &types[i] {
-        None => return,
-        Some(typs) if typs[j].is_some() => return,
-        Some(_) => {}
-    };
-
-    if let Identifier(ident) = &expressions[j].variant
-        && let Some(target) = &ident.target.target()
+    if let Variant::Identifier(ident) = &tree.expressions[idx].variant
+        && let Some(target) = &links.identifiers[ident.target]
     {
         match target {
-            Outer(Entity(tgt)) => {
-                if let Some(typs) = &types[*tgt]
-                    && typs[Idx::root()].is_none()
-                    && let Some(expr) = entities[*tgt].variant.expressions().next()
-                {
-                    collect_types((entities, *tgt).into(), expr, types);
+            Target::Entity(tgt) => {
+                if let Some(root) = tree.entities[*tgt].variant.expressions().next() {
+                    collect_types(tree, links, root, types);
                 }
             }
-            Inner(idx) => {
-                let domain = expressions[*idx].variant.set_element().unwrap().domain;
-                if types[i].as_ref().unwrap()[domain].is_none() {
-                    collect_in_order((entities, i).into(), (expressions, domain).into(), types);
-                }
+            Target::Local(set) => {
+                let domain = tree.expressions[*set].variant.set_element().unwrap().domain;
+                collect_types(tree, links, domain, types);
             }
             _ => {}
         }
     }
-    for child in expressions[j].children_iter() {
-        collect_in_order((entities, i).into(), (expressions, child).into(), types);
+
+    for child in tree.expressions[idx].children_iter() {
+        collect_types(tree, links, child, types);
     }
-    if types[i].as_ref().unwrap()[j].is_none() {
-        let result = Some(evaluate_node((&*types, i).into(), (expressions, j).into()));
-        types[i].as_mut().unwrap()[j] = result;
+
+    if types[idx].is_none() {
+        let result = evaluate_node(tree, links, types, idx);
+        types[idx] = Some(result);
     }
 }

@@ -1,9 +1,11 @@
-use std::fmt::Display;
+use crate::{
+    node::{markup::Markup, tree::Tree},
+    renderer::formatter::padding::pad,
+};
 
-use crate::{node::markup::Node, renderer::formatter::padding::pad};
-
-pub fn format<W: std::io::Write, M, R: Display>(
-    node: &Node<M, R>,
+pub fn format<W: std::io::Write>(
+    tree: &Tree,
+    markup: &Markup,
     indent: usize,
     out: &mut W,
 ) -> std::io::Result<()> {
@@ -12,10 +14,10 @@ pub fn format<W: std::io::Write, M, R: Display>(
     writeln!(out, "{}@@", pad(indent))?;
 
     write!(out, "{}", pad(indent))?;
-    for item in &node.container.items {
+    for item in &markup.items {
         match item {
             Text(text) => write!(out, "{}", text)?,
-            Reference(reference) => write!(out, "{{{}}}", reference)?,
+            Reference(reference) => write!(out, "{{{}}}", tree.references[*reference])?,
             Newline => write!(out, "\n{}", pad(indent))?,
         }
     }

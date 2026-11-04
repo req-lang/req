@@ -1,18 +1,15 @@
-use std::{cell::RefCell, collections::HashSet};
+use std::collections::HashSet;
 
 use crate::{
     issue::Severity,
     node::{
         self,
-        entity::{Arena, Idx},
+        entity::{Arena, Idx, Node, TraceabilityKind},
     },
-    semantics::{
-        connection::entity::{Connection, Inbound, Neighbors, Outbound, Traceability},
-        link::entity::Node,
-    },
+    semantics::connection::entity::{Connection, Inbound, Neighbors, Traceability},
 };
 
-#[derive(Debug, Clone, thiserror::Error)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum IssueKind {
     #[error("Requirement is missing a constraint")]
     MissingRequirementBinding,
@@ -95,108 +92,127 @@ impl From<&IssueKind> for Severity {
     }
 }
 
-type RcArena<E, M> = Arena<RefCell<Node<Neighbors<Connection<Idx>>, E, M>>>;
+pub(super) fn collect(
+    entities: &Arena<Node>,
+    neighbors: &mut Arena<Neighbors>,
+    cycles: &HashSet<Idx>,
+    idx: Idx,
+) {
+    let mut nd = std::mem::take(&mut neighbors[idx]);
+    collect_inner(entities, neighbors, cycles, idx, &mut nd);
+    neighbors[idx] = nd;
+}
 
-pub(super) fn collect_issues<E, M>(arena: &RcArena<E, M>, idx: Idx) {
+pub(super) fn collect_inner(
+    entities: &Arena<Node>,
+    graph: &Arena<Neighbors>,
+    cycles: &HashSet<Idx>,
+    idx: Idx,
+    nd: &mut Neighbors,
+) {
     use node::entity::Variant::*;
 
-    let nd = &mut arena[idx].borrow_mut();
-
-    match &mut nd.variant {
-        Part(_) => {
-            collect_subject_inbound_issues(&mut nd.payload.inbound);
-        }
+    match &entities[idx].variant {
+        Part(_) => collect_subject_issues(&mut nd.inbound),
         Attribute(_) => {
-            collect_attr_parent_issues(arena, &mut nd.payload.parent);
-            collect_subject_inbound_issues(&mut nd.payload.inbound);
+            collect_parent_issues(
+                entities,
+                &mut nd.parent,
+                |parent| matches!(parent, Part(_)),
+                IssueKind::InvalidAttributeParent,
+            );
+            collect_subject_issues(&mut nd.inbound);
         }
-        Package(_) => {
-            collect_pkg_parent_issues(arena, &mut nd.payload.parent);
-        }
+        Package(_) => collect_parent_issues(
+            entities,
+            &mut nd.parent,
+            |parent| matches!(parent, Package(_)),
+            IssueKind::InvalidPackageParent,
+        ),
         Type(_) => {}
         Requirement(req) => {
             // TODO: Flag inbound restrictions and allocations
 
             let is_bottom = req.inhibitor.bottom;
-            let is_top = req.inhibitor.top;
+            let restriction = nd.outbound.restriction.as_ref().map(|c| c.target);
+            let allocation = nd.outbound.allocation.as_ref().map(|c| c.target);
+            let usages: Vec<_> = nd.outbound.usages.iter().map(|u| u.target).collect();
+
+            collect_parent_issues(
+                entities,
+                &mut nd.parent,
+                |parent| matches!(parent, Package(_)),
+                IssueKind::InvalidRequirementParent,
+            );
+
+            if cycles.contains(&idx) {
+                nd.inbound.traceability.issues.push(IssueKind::CyclicTrace);
+            }
+            if let Some(kind) = inhibition_issue(is_bottom, &nd.inbound.traceability) {
+                nd.inbound.traceability.issues.push(kind);
+            }
+            if let Some(kind) = inhibition_issue(req.inhibitor.top, &nd.outbound.traceability) {
+                nd.outbound.traceability.issues.push(kind);
+            }
+
             let has_valid_derive = nd
-                .payload
                 .inbound
                 .traceability
                 .derivations
                 .iter()
-                .find(|x| is_valid_derivation(arena, *x, &nd.payload.outbound.allocation))
-                .is_some();
-            let usages: Vec<_> = nd
-                .payload
-                .outbound
-                .usages
-                .iter()
-                .map(|p| p.target)
-                .collect();
+                .any(|derivation| is_valid_derivation(graph, derivation, allocation));
 
-            collect_req_parent_issues(&arena, &mut nd.payload.parent);
-
-            if let Ok(restr) = &mut nd.payload.outbound.restriction {
-                collect_restriction_issues(arena, &usages, restr);
+            if let Some(alloc) = &mut nd.outbound.allocation {
+                collect_allocation_issues(entities, is_bottom, has_valid_derive, alloc);
             }
 
-            if let Some(alloc) = &mut nd.payload.outbound.allocation {
-                collect_allocation_issues(arena, is_bottom, has_valid_derive, alloc);
+            match &mut nd.outbound.restriction {
+                Some(restr) => collect_restriction_issues(entities, &usages, restr),
+                None => nd
+                    .outbound
+                    .issues
+                    .push(IssueKind::MissingRequirementBinding),
             }
 
-            collect_alloc_restr_compatibility_issues(&mut nd.payload.outbound);
-
-            collect_inhibition_issues(is_top, &mut nd.payload.outbound.traceability);
-            collect_inhibition_issues(is_bottom, &mut nd.payload.inbound.traceability);
-
-            let mut specializations: HashSet<Idx> = HashSet::new();
-            let mut refinements: HashSet<Idx> = HashSet::new();
-            let mut derivations: HashSet<Idx> = HashSet::new();
-
-            let trace = &mut nd.payload.outbound.traceability;
-
-            collect_duplicated_connection(&mut specializations, &mut trace.specializations);
-            collect_duplicated_connection(&mut refinements, &mut trace.refinements);
-            collect_duplicated_connection(&mut derivations, &mut trace.derivations);
-
-            let other = &[&specializations, &refinements];
-            collect_conflicting_connection(other, &mut trace.derivations);
-
-            let other = &[&derivations, &refinements];
-            collect_conflicting_connection(other, &mut trace.specializations);
-
-            let other = &[&derivations, &specializations];
-            collect_conflicting_connection(other, &mut trace.refinements);
-
-            let restr = nd.payload.outbound.restriction.clone();
-            let trace = &mut nd.payload.outbound.traceability;
-
-            for conn in &mut trace.specializations {
-                if let Ok(restr) = &restr {
-                    collect_specialization_issues(&restr.target, conn);
+            if let (Some(restr), Some(alloc)) = (restriction, allocation)
+                && restr == alloc
+            {
+                let kind = IssueKind::SameAllocationAndRestriction;
+                for conn in nd
+                    .outbound
+                    .restriction
+                    .iter_mut()
+                    .chain(&mut nd.outbound.allocation)
+                {
+                    conn.issues.push(kind.clone());
                 }
-                collect_traceability_target_variant_issues(arena, conn);
             }
 
-            for conn in &mut trace.refinements {
-                if let Ok(restr) = &restr {
-                    collect_refinement_issues(arena, &restr.target, conn);
-                }
-                collect_traceability_target_variant_issues(arena, conn);
-            }
-
-            for conn in &mut trace.derivations {
-                if let Ok(restr) = &restr {
-                    collect_derivation_issues(arena, &usages, &restr.target, conn);
-                }
-                collect_traceability_target_variant_issues(arena, conn);
-            }
+            collect_traceability_issues(
+                entities,
+                graph,
+                &mut nd.outbound.traceability,
+                restriction,
+                &usages,
+            );
         }
     }
 }
 
-fn collect_subject_inbound_issues(inbound: &mut Inbound<Connection<Idx>>) {
+fn collect_parent_issues(
+    entities: &Arena<Node>,
+    parent: &mut Option<Connection>,
+    is_valid: impl Fn(&node::entity::Variant) -> bool,
+    kind: IssueKind,
+) {
+    if let Some(parent) = parent
+        && !is_valid(&entities[parent.target].variant)
+    {
+        parent.issues.push(kind);
+    }
+}
+
+fn collect_subject_issues(inbound: &mut Inbound) {
     if inbound.restrictions.is_empty() {
         inbound.issues.push(IssueKind::UnrestrictedSubject);
     }
@@ -206,26 +222,153 @@ fn collect_subject_inbound_issues(inbound: &mut Inbound<Connection<Idx>>) {
     }
 }
 
-fn collect_pkg_parent_issues<E, M>(arena: &RcArena<E, M>, parent: &mut Option<Connection<Idx>>) {
+fn collect_restriction_issues(entities: &Arena<Node>, usages: &[Idx], restr: &mut Connection) {
+    use IssueKind::{NotAPartOrAttribute, UnrelatedRestriction};
     use node::entity::Variant::*;
 
-    match parent {
-        Some(p) if let Package(_) = arena[p.target].borrow().variant => {}
-        Some(p) => p.issue.push(IssueKind::InvalidPackageParent),
-        None => {}
+    match entities[restr.target].variant {
+        Part(_) | Attribute(_) => {}
+        _ => restr.issues.push(NotAPartOrAttribute),
+    }
+
+    if !usages.contains(&restr.target) {
+        restr.issues.push(UnrelatedRestriction);
     }
 }
 
-fn collect_attr_parent_issues<E, M>(arena: &RcArena<E, M>, parent: &mut Option<Connection<Idx>>) {
+fn collect_allocation_issues(
+    entities: &Arena<Node>,
+    is_bottom: bool,
+    has_valid_derive: bool,
+    alloc: &mut Connection,
+) {
+    use IssueKind::{InhibitorForbidDerives, MissingDerivation, NotAPartOrAttribute};
     use node::entity::Variant::*;
 
-    match parent {
-        Some(p) if let Part(_) = arena[p.target].borrow().variant => {}
-        Some(p) => p.issue.push(IssueKind::InvalidAttributeParent),
-        None => {}
+    match entities[alloc.target].variant {
+        Part(_) | Attribute(_) => {}
+        _ => alloc.issues.push(NotAPartOrAttribute),
+    }
+
+    if is_bottom {
+        alloc.issues.push(InhibitorForbidDerives);
+    }
+
+    if !has_valid_derive {
+        alloc.issues.push(MissingDerivation);
     }
 }
-//
+
+/// Flags the traceability links of a requirement, specializations first and derivations last
+fn collect_traceability_issues(
+    entities: &Arena<Node>,
+    graph: &Arena<Neighbors>,
+    trace: &mut Traceability,
+    restriction: Option<Idx>,
+    usages: &[Idx],
+) {
+    use IssueKind::*;
+    use TraceabilityKind::*;
+    use node::entity::Variant::Requirement;
+
+    let kinds = [Specialization, Refinement, Derivation];
+    let targets = kinds.map(|kind| trace[kind].iter().map(|c| c.target).collect::<Vec<_>>());
+
+    for (pos, kind) in kinds.into_iter().enumerate() {
+        let mut seen: HashSet<Idx> = HashSet::new();
+
+        for conn in &mut trace[kind] {
+            if !seen.insert(conn.target) {
+                conn.issues.push(DuplicatedTrace);
+            }
+
+            let is_conflicting = targets
+                .iter()
+                .enumerate()
+                .any(|(other, t)| other != pos && t.contains(&conn.target));
+            if is_conflicting {
+                conn.issues.push(ConflictingTrace);
+            }
+
+            if let Some(restr) = restriction {
+                match kind {
+                    Specialization if restr != conn.target => {
+                        conn.issues.push(SpecializationMismatch);
+                    }
+                    Refinement if is_refinement_mismatch(graph, restr, conn.target) => {
+                        conn.issues.push(RefinementMismatch);
+                    }
+                    Derivation => collect_derivation_issues(graph, usages, restr, conn),
+                    _ => {}
+                }
+            }
+
+            if !matches!(entities[conn.target].variant, Requirement(_)) {
+                conn.issues.push(NotARequirement);
+            }
+        }
+    }
+}
+
+/// The refined requirement does not restrict an ancestor of what this one restricts
+fn is_refinement_mismatch(graph: &Arena<Neighbors>, restr: Idx, target: Idx) -> bool {
+    let Some(target_restr) = &graph[target].outbound.restriction else {
+        return false;
+    };
+
+    let mut candidate = Some(restr);
+    while let Some(cnd) = candidate {
+        if cnd == target_restr.target {
+            return false;
+        }
+
+        candidate = graph[cnd].parent.as_ref().map(|parent| parent.target);
+    }
+
+    true
+}
+
+fn collect_derivation_issues(
+    graph: &Arena<Neighbors>,
+    usages: &[Idx],
+    restr: Idx,
+    conn: &mut Connection,
+) {
+    use IssueKind::{DerivationMismatch, NoDerivedAllocation, UnrelatedDerivation};
+
+    match &graph[conn.target].outbound.allocation {
+        Some(al) if restr != al.target => conn.issues.push(DerivationMismatch),
+        None => conn.issues.push(NoDerivedAllocation),
+        _ => {}
+    }
+
+    if !usages.contains(&restr) {
+        conn.issues.push(UnrelatedDerivation);
+    }
+}
+
+fn inhibition_issue(is_inhibited: bool, trace: &Traceability) -> Option<IssueKind> {
+    use IssueKind::{ForbiddenTrace, MissingTrace};
+
+    let has_derivation = !trace.derivations.is_empty();
+    let has_refinement = !trace.refinements.is_empty();
+    match is_inhibited {
+        true if has_derivation || has_refinement => Some(ForbiddenTrace),
+        false if !(has_derivation || has_refinement) => Some(MissingTrace),
+        _ => None,
+    }
+}
+
+fn is_valid_derivation(graph: &Arena<Neighbors>, conn: &Connection, alloc: Option<Idx>) -> bool {
+    alloc.is_some_and(|alloc| {
+        graph[conn.target]
+            .outbound
+            .restriction
+            .as_ref()
+            .is_some_and(|restr| restr.target == alloc)
+    })
+}
+
 // TODO: Make this happen in the typing section
 // fn collect_attr_type_issues(
 //     attr: &mut Attribute<Connection<NodeRef<expression::Node>>, markup::Node>,
@@ -259,32 +402,9 @@ fn collect_attr_parent_issues<E, M>(arena: &RcArena<E, M>, parent: &mut Option<C
 //     }
 // }
 //
-fn collect_req_parent_issues<E, M>(arena: &RcArena<E, M>, parent: &mut Option<Connection<Idx>>) {
-    use node::entity::Variant::*;
-
-    match parent {
-        Some(p) if let Package(_) = arena[p.target].borrow().variant => {}
-        Some(p) => p.issue.push(IssueKind::InvalidRequirementParent),
-        None => {}
-    }
-}
-
-fn collect_alloc_restr_compatibility_issues(outbound: &mut Outbound<Connection<Idx>>) {
-    let restr = &mut outbound.restriction;
-    let alloc = &mut outbound.allocation;
-
-    if let Some(alloc) = alloc
-        && let Ok(restr) = restr
-        && restr.target == alloc.target
-    {
-        alloc.issue.push(IssueKind::SameAllocationAndRestriction);
-        restr.issue.push(IssueKind::SameAllocationAndRestriction);
-    }
-}
-
 // TODO: Empty requirement issues
 // TODO: Make this happen in the typing module
-// fn collect_requirement_expr_issues<E, M>(conn: &mut Connection<NodeRef<expression::Node>>) {
+// fn collect_requirement_expr_issues(conn: &mut Connection<NodeRef<expression::Node>>) {
 //     if let Ok(TypeKind::Boolean) = conn.target.borrow().typ {
 //         return;
 //     }
@@ -292,158 +412,3 @@ fn collect_alloc_restr_compatibility_issues(outbound: &mut Outbound<Connection<I
 //     conn.issue.push(IssueKind::NonBooleanRequirement);
 // }
 //
-fn collect_traceability_target_variant_issues<E, M>(
-    arena: &RcArena<E, M>,
-    conn: &mut Connection<Idx>,
-) {
-    use node::entity::Variant::*;
-
-    if let Requirement(_) = arena[conn.target].borrow().variant {
-        return;
-    }
-
-    conn.issue.push(IssueKind::NotARequirement);
-}
-
-fn collect_refinement_issues<E, M>(arena: &RcArena<E, M>, restr: &Idx, conn: &mut Connection<Idx>) {
-    use IssueKind::RefinementMismatch;
-
-    let target = arena[conn.target].borrow();
-    let target_restr = &target.payload.outbound.restriction;
-
-    let mut candidate = Some(*restr);
-    if let Ok(target_restr) = target_restr {
-        while let Some(cnd) = candidate {
-            if cnd == target_restr.target {
-                return;
-            }
-
-            let cnd = arena[cnd].borrow();
-            candidate = cnd.payload.parent.as_ref().map(|c| c.target);
-        }
-
-        conn.issue.push(RefinementMismatch);
-    }
-}
-
-fn collect_derivation_issues<E, M>(
-    arena: &RcArena<E, M>,
-    usages: &Vec<Idx>,
-    restr: &Idx,
-    conn: &mut Connection<Idx>,
-) {
-    use IssueKind::{DerivationMismatch, NoDerivedAllocation, UnrelatedDerivation};
-
-    let target = arena[conn.target].borrow();
-    let target_alloc = &target.payload.outbound.allocation;
-    match target_alloc {
-        Some(al) if *restr != al.target => conn.issue.push(DerivationMismatch),
-        None => conn.issue.push(NoDerivedAllocation),
-        _ => {}
-    }
-
-    let out_restr_usage = usages.iter().find(|u| **u == *restr);
-    if out_restr_usage.is_none() {
-        conn.issue.push(UnrelatedDerivation);
-    }
-}
-
-fn collect_specialization_issues(restr: &Idx, conn: &mut Connection<Idx>) {
-    use IssueKind::SpecializationMismatch;
-
-    if *restr != conn.target {
-        conn.issue.push(SpecializationMismatch);
-    }
-}
-
-fn collect_restriction_issues<E, M>(
-    arena: &RcArena<E, M>,
-    usages: &Vec<Idx>,
-    restr: &mut Connection<Idx>,
-) {
-    use IssueKind::{NotAPartOrAttribute, UnrelatedRestriction};
-    use node::entity::Variant::*;
-
-    match arena[restr.target].borrow().variant {
-        Part(_) | Attribute(_) => {}
-        _ => restr.issue.push(NotAPartOrAttribute),
-    }
-
-    let restr_usage = usages.iter().find(|u| restr.target == **u);
-    if restr_usage.is_none() {
-        restr.issue.push(UnrelatedRestriction);
-    }
-}
-
-fn collect_allocation_issues<E, M>(
-    arena: &RcArena<E, M>,
-    is_bottom: bool,
-    has_valid_derive: bool,
-    alloc: &mut Connection<Idx>,
-) {
-    use IssueKind::{InhibitorForbidDerives, MissingDerivation, NotAPartOrAttribute};
-    use node::entity::Variant::*;
-
-    match arena[alloc.target].borrow().variant {
-        Part(_) | Attribute(_) => {}
-        _ => alloc.issue.push(NotAPartOrAttribute),
-    }
-
-    if is_bottom {
-        alloc.issue.push(InhibitorForbidDerives)
-    }
-
-    if !has_valid_derive {
-        alloc.issue.push(MissingDerivation)
-    }
-}
-
-fn collect_inhibition_issues(is_inhibited: bool, trace: &mut Traceability<Connection<Idx>>) {
-    use IssueKind::{ForbiddenTrace, MissingTrace};
-
-    let has_derivation = !trace.derivations.is_empty();
-    let has_refinement = !trace.refinements.is_empty();
-    let issue = match is_inhibited {
-        true if has_derivation || has_refinement => Some(ForbiddenTrace),
-        false if !(has_derivation || has_refinement) => Some(MissingTrace),
-        _ => None,
-    };
-    trace.issues.extend(issue.into_iter());
-}
-
-fn collect_duplicated_connection(seen: &mut HashSet<Idx>, connections: &mut Vec<Connection<Idx>>) {
-    use IssueKind::DuplicatedTrace;
-
-    for conn in connections {
-        let ptr = conn.target;
-        if !seen.insert(ptr) {
-            conn.issue.push(DuplicatedTrace);
-        }
-    }
-}
-
-fn collect_conflicting_connection(other: &[&HashSet<Idx>], connections: &mut Vec<Connection<Idx>>) {
-    use IssueKind::ConflictingTrace;
-
-    for conn in connections {
-        let ptr = conn.target;
-        if other.iter().find(|s| s.get(&ptr).is_some()).is_some() {
-            conn.issue.push(ConflictingTrace);
-        }
-    }
-}
-
-fn is_valid_derivation<E, M>(
-    arena: &RcArena<E, M>,
-    conn: &Connection<Idx>,
-    alloc: &Option<Connection<Idx>>,
-) -> bool {
-    if let Some(alloc) = alloc
-        && let Ok(restr) = &arena[conn.target].borrow().payload.outbound.restriction
-        && restr.target == alloc.target
-    {
-        return true;
-    }
-
-    return false;
-}

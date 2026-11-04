@@ -1,43 +1,15 @@
-use std::{
-    collections::HashMap,
-    fmt::{Debug, Display},
-};
+use std::collections::HashMap;
 
-mod entity;
+use crate::node::entity::{Arena, Idx, Node};
 
-use unicode_normalization::{UnicodeNormalization, is_nfc};
+pub mod entity;
 
-use crate::{
-    node::entity::{Arena, Idx, Node},
-    semantics::path::entity::count_duplicates,
-    syntax::tokenizer::entity::REFERENCE_SEPARATOR,
-};
-
-pub trait Located {
-    fn location(&self) -> &Location;
-}
+pub use crate::node::path::Path;
 
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum Issue {
     #[error("Two entities have the same name at the same location")]
     Duplicated,
-}
-
-pub trait Locate<R, T, E, M> {
-    fn locate(self) -> Arena<Node<Location, R, T, E, M>>;
-}
-
-impl<N, R, T, E, M> Locate<R, T, E, M> for Arena<Node<N, R, T, E, M>> {
-    fn locate(self) -> Arena<Node<Location, R, T, E, M>> {
-        let paths = count_duplicates(collect(&self));
-        entity::discover(paths, self)
-    }
-}
-
-pub fn collect<P, R, T, E, M>(arena: &Arena<Node<P, R, T, E, M>>) -> HashMap<Path, Vec<Idx>> {
-    let mut paths = HashMap::new();
-    entity::collect(&arena, &mut paths);
-    paths
 }
 
 #[derive(Debug, Clone)]
@@ -46,144 +18,151 @@ pub struct Location {
     pub issue: Option<Issue>,
 }
 
-impl Location {
-    fn valid(path: Path) -> Self {
-        Self { path, issue: None }
-    }
-
-    fn invalid(path: Path, issue: Issue) -> Self {
-        Self {
-            path,
-            issue: Some(issue),
+impl From<Path> for Location {
+    fn from(value: Path) -> Self {
+        Location {
+            path: value,
+            issue: None,
         }
     }
-
-    pub fn path(&self) -> &Path {
-        &self.path
-    }
 }
 
-impl AsRef<Path> for Location {
-    fn as_ref(&self) -> &Path {
-        self.path()
-    }
+pub fn paths(entities: &Arena<Node>) -> Arena<Location> {
+    let mut paths = entities.parallel();
+    entity::paths(entities, &mut paths);
+    paths.into_iter().map(Location::from).collect()
 }
 
-impl Located for Location {
-    fn location(&self) -> &Self {
-        &self
-    }
+pub fn reverse(paths: &Arena<Location>) -> HashMap<&Path, Idx> {
+    paths
+        .enumerate()
+        .map(|(idx, loc)| (&loc.path, idx))
+        .collect()
 }
 
-#[derive(Default, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Path(String);
-
-impl Path {
-    // INVARIANT: the inner string is NFC, so that visually identical paths compare equal
-    pub fn new<P: Into<String>>(value: P) -> Self {
-        let value = value.into();
-        let norm = match is_nfc(&value) {
-            true => value,
-            false => value.nfc().collect(),
-        };
-        Self(norm)
-    }
-
-    pub fn parent(&self) -> Option<Self> {
-        let v = self.as_str();
-        let idx = v.rfind(REFERENCE_SEPARATOR)?;
-        Some(Self::new(&v[..idx]))
-    }
-
-    pub fn label(&self) -> &str {
-        let v = self.as_str();
-        match v.rfind(REFERENCE_SEPARATOR) {
-            None => v,
-            Some(idx) => &v[idx + REFERENCE_SEPARATOR.len()..],
-        }
-    }
-
-    pub fn join<P: ToString>(&self, rhs: &P) -> Self {
-        let rhs = rhs.to_string();
-        let rhs = match is_nfc(&rhs) {
-            true => rhs,
-            false => rhs.nfc().collect(),
-        };
-
-        if self.as_str().is_empty() {
-            return Self(rhs);
-        }
-
-        let Self(inner) = self;
-
-        let sep = REFERENCE_SEPARATOR;
-        let mut buf = String::with_capacity(inner.len() + sep.len() + rhs.len());
-        buf.push_str(inner);
-        buf.push_str(sep);
-        buf.push_str(&rhs);
-
-        Self(buf)
-    }
-
-    pub fn as_str(&self) -> &str {
-        let Self(inner) = self;
-        inner.as_str()
-    }
-}
-
-impl Display for Path {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.as_str())
-    }
-}
-
-impl From<&str> for Path {
-    fn from(value: &str) -> Self {
-        Self::new(value)
-    }
-}
-impl From<String> for Path {
-    fn from(value: String) -> Self {
-        Self::new(value)
-    }
-}
-
-impl AsRef<str> for Path {
-    fn as_ref(&self) -> &str {
-        self.as_str()
-    }
+pub fn duplicates(paths: &mut Arena<Location>) {
+    entity::duplicates(paths);
 }
 
 #[cfg(test)]
 mod tests {
-    use super::Path;
+    use super::*;
+    use crate::node::entity::{Meta, Package, Variant};
 
-    #[test]
-    fn creates_from_str() {
-        let s = "this::is::a::path";
-        let path = Path::new(s);
-        assert_eq!(path.as_str(), s);
+    fn package(label: &str, children: &[usize]) -> Node {
+        let children = children.iter().map(|&c| Idx::from(c)).collect();
+        Node::new(
+            Meta::from(label.to_string()),
+            Variant::Package(Package::new(Vec::new(), children)),
+        )
+    }
+
+    // INVARIANT: the parser stores children before their parent, the root is the last entity
+    //
+    // root (3)
+    // ├── a (1)
+    // │   └── c (0)
+    // └── b (2)
+    fn sample() -> Arena<Node> {
+        vec![
+            package("c", &[]),
+            package("a", &[0]),
+            package("b", &[]),
+            package("root", &[1, 2]),
+        ]
+        .into()
     }
 
     #[test]
-    fn joins() {
-        let s: Path = "this::is::a".into();
-        let t: Path = "path".into();
-        let expected: Path = "this::is::a::path".into();
-        assert_eq!(expected, s.join(&t));
+    fn root_path_is_its_label() {
+        let paths = paths(&vec![package("root", &[])].into());
+        assert_eq!(paths[Idx::from(0)].path, Path::from("root"));
     }
 
     #[test]
-    fn gets_parent() {
-        let s: Path = "this::is::a::path".into();
-        let expected: Path = "this::is::a".into();
-        assert_eq!(expected, s.parent().unwrap());
+    fn paths_join_labels_from_the_root() {
+        let paths = paths(&sample());
+        let root = Path::from("root");
+        let a = root.join(&"a");
+        let c = a.join(&"c");
+        let b = root.join(&"b");
+
+        assert_eq!(paths[Idx::from(0)].path, c);
+        assert_eq!(paths[Idx::from(1)].path, a);
+        assert_eq!(paths[Idx::from(2)].path, b);
+        assert_eq!(paths[Idx::from(3)].path, root);
     }
 
     #[test]
-    fn gets_label() {
-        let s: Path = "this::is::a::path".into();
-        let expected = "path";
-        assert_eq!(expected, s.label());
+    fn paths_are_normalized() {
+        // "é" as `e` followed by a combining acute accent, against the single code point
+        let paths = paths(&vec![package("re\u{301}sume\u{301}", &[])].into());
+        assert_eq!(paths[Idx::from(0)].path, Path::from("r\u{e9}sum\u{e9}"));
+    }
+
+    #[test]
+    fn reverse_finds_each_entity() {
+        let paths = paths(&sample());
+        let reverse = reverse(&paths);
+
+        assert_eq!(reverse.len(), 4);
+        for (idx, path) in paths.enumerate() {
+            assert_eq!(reverse[&path.path], idx);
+        }
+    }
+
+    #[test]
+    fn reverse_keeps_the_last_of_a_shared_path() {
+        let entities: Arena<Node> = vec![
+            package("a", &[]),
+            package("a", &[]),
+            package("root", &[0, 1]),
+        ]
+        .into();
+        let paths = paths(&entities);
+        let reverse = reverse(&paths);
+
+        assert_eq!(reverse.len(), 2);
+        assert_eq!(reverse[&Path::from("root").join(&"a")], Idx::from(1));
+    }
+
+    #[test]
+    fn no_duplicates_when_paths_differ() {
+        let mut locs = paths(&sample());
+        duplicates(&mut locs);
+        assert!(locs.into_iter().all(|loc| loc.issue.is_none()));
+    }
+
+    #[test]
+    fn same_label_under_different_parents_is_not_a_duplicate() {
+        let entities: Arena<Node> = vec![
+            package("x", &[]),
+            package("a", &[0]),
+            package("x", &[]),
+            package("b", &[2]),
+            package("root", &[1, 3]),
+        ]
+        .into();
+        let mut locs = paths(&entities);
+        duplicates(&mut locs);
+        assert!(locs.into_iter().all(|loc| loc.issue.is_none()));
+    }
+
+    #[test]
+    fn flags_every_entity_sharing_a_path() {
+        let entities: Arena<Node> = vec![
+            package("a", &[]),
+            package("a", &[]),
+            package("b", &[]),
+            package("root", &[0, 1, 2]),
+        ]
+        .into();
+        let mut locs = paths(&entities);
+        duplicates(&mut locs);
+
+        assert!(matches!(locs[Idx::from(0)].issue, Some(Issue::Duplicated)));
+        assert!(matches!(locs[Idx::from(1)].issue, Some(Issue::Duplicated)));
+        assert!(matches!(locs[Idx::from(2)].issue, None));
+        assert!(matches!(locs[Idx::from(3)].issue, None));
     }
 }

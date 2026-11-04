@@ -1,32 +1,25 @@
 use crate::{
     node::{
-        self,
-        markup::{Container, Item},
+        markup::{Item, Markup},
+        path::Path,
     },
     syntax::tokenizer::markup::{IntoTokens, Token},
 };
 
-pub(in crate::syntax) type Node = node::markup::Node<(), String>;
-
-pub fn parse<S: ToString>(s: &S) -> Node {
-    Node::from(s.to_string())
-}
-
-impl Item<String> {
-    pub fn from_token(token: Token<'_>) -> Self {
-        match token {
+/// Parses the text, the paths it references are appended to `references`
+pub fn parse<S: ToString>(s: &S, references: &mut Vec<Path>) -> Markup {
+    let unindented = unindent::unindent(&s.to_string());
+    let tokens = unindented.char_indices().tokens();
+    let items: Vec<_> = tokens
+        .map(|token| match token {
             Token::Text(text) => Item::Text(text.to_string()),
-            Token::Reference(ident) => Item::Reference(ident.to_string()),
+            Token::Reference(ident) => {
+                let idx = references.len().into();
+                references.push(Path::from(ident));
+                Item::Reference(idx)
+            }
             Token::Newline => Item::Newline,
-        }
-    }
-}
-
-impl From<String> for Node {
-    fn from(value: String) -> Self {
-        let unindented = unindent::unindent(&value);
-        let tokens = unindented.char_indices().tokens();
-        let value: Vec<_> = tokens.map(|token| Item::from_token(token)).collect();
-        Node::empty(Container::from(value))
-    }
+        })
+        .collect();
+    Markup::from(items)
 }

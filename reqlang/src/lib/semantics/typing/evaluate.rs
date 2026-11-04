@@ -1,31 +1,39 @@
 use crate::{
     node::{
-        self,
-        expression::{Aggregator, Arena, Case, Idx, Selector},
+        self, entity,
+        expression::{Aggregator, Arena, Case, Idx},
+        tree::Tree,
     },
     semantics::{
-        link::{
-            BuiltinKind,
-            Target::*,
-            expression::{Node, Target::*},
-        },
+        link::{BuiltinKind, Links, Target::*},
         typing::{
-            TypeResult,
+            Result,
             expression::{Issue, TypeKind},
         },
     },
 };
 
-pub(super) fn evaluate_node<P>(
-    types: node::entity::Selector<Option<Arena<Option<TypeResult>>>>,
-    expression: Selector<Node<P>>,
-) -> TypeResult {
+/// The type of an entity is the one of its first expression, a type is a set of its own values
+fn entity_type(tree: &Tree, types: &Arena<Option<Result>>, idx: entity::Idx) -> Option<Result> {
+    match &tree.entities[idx].variant {
+        entity::Variant::Type(_) => Some(Ok(TypeKind::Set(Box::new(TypeKind::Custom(idx))))),
+        variant => variant
+            .expressions()
+            .next()
+            .map(|root| type_or_poison(types, root)),
+    }
+}
+
+// INVARIANT: the types of the children, and of the targets of the identifiers, are already known
+pub(super) fn evaluate_node(
+    tree: &Tree,
+    links: &Links,
+    local: &Arena<Option<Result>>,
+    expression: Idx,
+) -> Result {
     use Issue::*;
     use node::expression::Variant::*;
-    let (expressions, expression) = expression.into();
-    let (types, entity) = types.into();
-    let local = types[entity].as_ref().unwrap();
-    match &expressions[expression].variant {
+    match &tree.expressions[expression].variant {
         When(when) => {
             let mut cases = when.cases.iter();
             let expected = match &when.otherwise {
@@ -64,7 +72,10 @@ pub(super) fn evaluate_node<P>(
             }
 
             match &comprehension.aggregator {
-                None => Ok(Set(Box::new(type_or_poison(&local, comprehension.expression)?))),
+                None => Ok(Set(Box::new(type_or_poison(
+                    &local,
+                    comprehension.expression,
+                )?))),
                 Some(aggregator) => {
                     aggregator.check(&local, &[comprehension.expression], Some(element))
                 }
@@ -176,24 +187,24 @@ pub(super) fn evaluate_node<P>(
             Ok(TypeKind::Undefined)
         }
 
-        Identifier(ident) => match &ident.target.target().ok_or(Poison)? {
-            Outer(Entity(tgt)) | Outer(Enum(tgt, _)) => match &types[*tgt] {
-                Some(types) => match type_or_poison(&types, 0.into())? {
+        Identifier(ident) => match &links.identifiers[ident.target].ok_or(Poison)? {
+            Entity(tgt) | Enum(tgt, _) => match entity_type(tree, local, *tgt) {
+                Some(result) => match result? {
                     TypeKind::Set(inner) => Ok(inner.as_ref().clone()),
                     TypeKind::Custom(idx) => Ok(TypeKind::Custom(idx)),
                     typ => Err(NotASet(typ.clone())),
                 },
                 None => Err(NotEvaluable),
             },
-            Inner(tgt) => {
-                let domain = expressions[*tgt].variant.set_element().unwrap().domain;
+            Local(tgt) => {
+                let domain = tree.expressions[*tgt].variant.set_element().unwrap().domain;
                 match type_or_poison(&local, domain)? {
                     TypeKind::Set(inner) => Ok(inner.as_ref().clone()),
                     TypeKind::Custom(idx) => Ok(TypeKind::Custom(idx)),
                     typ => Err(NotASet(typ.clone())),
                 }
             }
-            Outer(Builtin(kind)) => Ok(TypeKind::from(*kind)),
+            Builtin(kind) => Ok(TypeKind::from(*kind)),
         },
 
         Number(_) => Ok(TypeKind::Number),
@@ -204,11 +215,7 @@ pub(super) fn evaluate_node<P>(
     }
 }
 
-fn evaluate_case(
-    types: &Arena<Option<TypeResult>>,
-    case: &Case<Idx>,
-    expected: Option<TypeKind>,
-) -> TypeResult {
+fn evaluate_case(types: &Arena<Option<Result>>, case: &Case, expected: Option<TypeKind>) -> Result {
     use Issue::*;
     use TypeKind::*;
 
@@ -230,10 +237,10 @@ impl Aggregator {
     /// a comprehension, in which case `element` is the type of its variable.
     fn check(
         &self,
-        types: &Arena<Option<TypeResult>>,
+        types: &Arena<Option<Result>>,
         operands: &[Idx],
         element: Option<TypeKind>,
-    ) -> TypeResult {
+    ) -> Result {
         use Aggregator::*;
         use Issue::*;
         use TypeKind::*;
@@ -272,7 +279,7 @@ impl Aggregator {
     }
 }
 
-fn type_or_poison(types: &Arena<Option<TypeResult>>, idx: Idx) -> TypeResult {
+fn type_or_poison(types: &Arena<Option<Result>>, idx: Idx) -> Result {
     types[idx]
         .clone()
         .unwrap()

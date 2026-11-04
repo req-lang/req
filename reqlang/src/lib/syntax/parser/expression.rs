@@ -1,4 +1,4 @@
-use std::{cell::RefCell, rc::Rc, sync::OnceLock};
+use std::{cell::RefCell, sync::OnceLock};
 
 use pest::{
     Parser,
@@ -7,9 +7,12 @@ use pest::{
 };
 
 use crate::{
-    node::{self, expression::*},
+    node::{
+        expression::{self, *},
+        identifier,
+        path::Path,
+    },
     syntax::location::{Position, Span},
-    utils::children::ChildrenIter,
 };
 
 use pest_derive;
@@ -17,241 +20,221 @@ use pest_derive;
 #[grammar = "grammars/expression.pest"]
 struct PairParser;
 
-pub(in crate::syntax) type Node = node::expression::Node<Span, String>;
+#[derive(Debug)]
+pub(super) struct Draft<'a> {
+    expressions: &'a mut Vec<expression::Node>,
+    identifiers: &'a mut Vec<Path>,
+    spans: &'a mut Vec<Span>,
+}
 
-pub fn parse(input: &str, offset: &Position) -> Result<Arena<Node>, Span> {
-    let mut arena = Vec::new();
+impl<'a> Draft<'a> {
+    pub fn new(
+        expressions: &'a mut Vec<expression::Node>,
+        identifiers: &'a mut Vec<Path>,
+        spans: &'a mut Vec<Span>,
+    ) -> Self {
+        Self {
+            expressions,
+            identifiers,
+            spans,
+        }
+    }
+
+    pub fn push_node(&mut self, node: Node, span: Span) -> Idx {
+        let idx = self.expressions.len();
+        self.expressions.push(node);
+        self.spans.push(span);
+        idx.into()
+    }
+
+    pub fn push_identifier(&mut self, path: Path) -> identifier::Idx {
+        let idx = self.identifiers.len();
+        self.identifiers.push(path);
+        idx.into()
+    }
+}
+
+pub(super) fn parse(input: &str, offset: &Position, mut draft: Draft) -> Result<Idx, Span> {
     match PairParser::parse(Rule::root, input) {
         Ok(mut pair) => {
-            Builder::new(offset).build(pair.next().unwrap(), &mut arena);
-            let len = arena.len();
-
-            // Pratt parser builds bottom-up: root is at len-1, children always at lower indices.
-            // DFS from root assigns each node its pre-order index in one pass.
-            let mut old_to_new = vec![0usize; len];
-            let mut stack = vec![len - 1];
-            let mut new_pos = 0usize;
-            while let Some(idx) = stack.pop() {
-                old_to_new[idx] = new_pos;
-                new_pos += 1;
-                let children: Vec<_> = arena[idx].children_iter().collect();
-                for child in children.into_iter().rev() {
-                    stack.push(usize::from(child));
-                }
-            }
-
-            let mut new_arena: Vec<Option<Node>> = (0..len).map(|_| None).collect();
-            for (old_idx, node) in arena.into_iter().enumerate() {
-                let new_idx = old_to_new[old_idx];
-                let remapped = Node::new(
-                    node.payload,
-                    node.variant.mape(|idx| old_to_new[usize::from(idx)].into()),
-                );
-                new_arena[new_idx] = Some(remapped);
-            }
-
-            let arena: Vec<Node> = new_arena.into_iter().map(|n| n.unwrap()).collect();
-            Ok(arena.into())
+            let draft = RefCell::new(&mut draft);
+            parse_pair(offset, pair.next().unwrap(), &draft);
+            let root = draft.borrow().expressions.len() - 1;
+            Ok(root.into())
         }
         Err(err) => Err(Span::from((err.line_col, err.location)) + *offset),
     }
 }
 
-struct Builder<'s> {
-    pub offset: &'s Position,
-}
-
-impl<'s> Builder<'s> {
-    fn new(offset: &'s Position) -> Self {
-        Self { offset }
-    }
-
-    fn build(&self, pair: Pair<Rule>, arena: &mut Vec<Node>) -> Idx {
-        let ar = Rc::new(RefCell::new(arena));
-        let node = pratt_parser()
-            .map_primary(|primary| {
-                let mut arena = ar.borrow_mut();
-                let span = Span::from(primary.as_span()) + *self.offset;
-                match primary.as_rule() {
-                    Rule::ident => {
-                        let value = primary.as_str();
-                        let reference = value.to_string();
-                        let ident = Identifier::new(reference);
-                        let variant = Variant::Identifier(ident);
-                        Node::new(span, variant)
-                    }
-
-                    Rule::num => {
-                        let value = primary.as_str().to_string();
-                        let kind = primary.into_inner().next().unwrap().as_rule().into();
-                        let mut number = Number::new(kind);
-                        number.value = value;
-                        let variant = Variant::Number(number);
-                        Node::new(span, variant)
-                    }
-
-                    Rule::bool => {
-                        let value = primary.into_inner().next().unwrap().as_rule().into();
-                        let variant = Variant::Boolean(value);
-                        Node::new(span, variant)
-                    }
-
-                    Rule::undefined => {
-                        let variant = Variant::Undefined;
-                        Node::new(span, variant)
-                    }
-
-                    Rule::when => {
-                        let inner = operands(primary);
-                        let mut when = When::new(Vec::new());
-                        for p in inner {
-                            match p.as_rule() {
-                                Rule::case => {
-                                    let mut inner = operands(p);
-                                    let condition = self.build(inner.next().unwrap(), *arena);
-                                    let consequence = self.build(inner.next().unwrap(), *arena);
-                                    when.cases.push(Case::new(condition, consequence));
-                                }
-
-                                Rule::otherwise => {
-                                    let node = self.build(operands(p).next().unwrap(), *arena);
-                                    when.otherwise = Some(node);
-                                }
-
-                                _ => unreachable!(),
-                            }
-                        }
-
-                        let variant = Variant::When(when);
-                        Node::new(span, variant)
-                    }
-
-                    // `{ a, b }`, `{ e for x in S }`, `sum a, b end` and `sum e for x in S end`
-                    Rule::set | Rule::aggregation => {
-                        let is_aggregation = primary.as_rule() == Rule::aggregation;
-                        let mut inner = operands(primary);
-                        let aggregator: Option<Aggregator> =
-                            is_aggregation.then(|| inner.next().unwrap().as_rule().into());
-                        let first = self.build(inner.next().unwrap(), *arena);
-
-                        let variant = match inner.next() {
-                            Some(p) if p.as_rule() == Rule::binding => {
-                                let mut inner = operands(p);
-                                let variable = inner.next().unwrap().as_str().to_string();
-                                let domain = self.build(inner.next().unwrap(), *arena);
-                                let mut set = SetElement::new(variable, domain);
-                                if let Some(p) = inner.next() {
-                                    set.filter = Some(self.build(p, *arena));
-                                }
-
-                                Variant::Comprehension(Comprehension::new(aggregator, set, first))
-                            }
-
-                            next => {
-                                let mut expressions = vec![first];
-                                for p in next.into_iter().chain(inner) {
-                                    expressions.push(self.build(p, *arena));
-                                }
-
-                                match aggregator {
-                                    Some(aggregator) => Variant::Aggregation(Aggregation {
-                                        aggregator,
-                                        expressions,
-                                    }),
-                                    None => Variant::Set(Set {
-                                        elements: expressions,
-                                    }),
-                                }
-                            }
-                        };
-
-                        Node::new(span, variant)
-                    }
-
-                    Rule::rng => {
-                        let mut inner = primary.into_inner();
-
-                        let lvalue = self.build(inner.next().unwrap(), *arena);
-                        let rvalue = self.build(inner.next().unwrap(), *arena);
-                        let interval = Range::new(lvalue, rvalue);
-                        let variant = Variant::Range(interval);
-                        Node::new(span, variant)
-                    }
-
-                    Rule::intv => {
-                        let mut inner = primary.into_inner();
-                        let lbrack = inner.next().unwrap();
-                        let lvalue = self.build(inner.next().unwrap(), *arena);
-                        let lbound = match lbrack.as_rule() {
-                            Rule::lbrkt => IntervalBound::closed(lvalue),
-                            Rule::rbrkt => IntervalBound::open(lvalue),
-                            _ => unreachable!(),
-                        };
-
-                        let rvalue = self.build(inner.next().unwrap(), *arena);
-                        let rbrack = inner.next().unwrap();
-                        let rbound = match rbrack.as_rule() {
-                            Rule::lbrkt => IntervalBound::open(rvalue),
-                            Rule::rbrkt => IntervalBound::closed(rvalue),
-                            _ => unreachable!(),
-                        };
-
-                        let interval = Interval::new(lbound, rbound);
-                        let variant = Variant::Interval(interval);
-                        Node::new(span, variant)
-                    }
-
-                    Rule::expr => {
-                        self.build(primary, *arena);
-                        arena.pop().unwrap()
-                    }
-
-                    _ => unreachable!(),
+fn parse_pair(ctx: &Position, pair: Pair<Rule>, draft: &RefCell<&mut Draft>) -> Idx {
+    pratt_parser()
+        .map_primary(|primary| {
+            let span = Span::from(primary.as_span()) + *ctx;
+            match primary.as_rule() {
+                Rule::ident => {
+                    let path = Path::from(primary.as_str());
+                    let target = draft.borrow_mut().push_identifier(path);
+                    let ident = Identifier::new(target);
+                    let variant = Variant::Identifier(ident);
+                    draft.borrow_mut().push_node(Node::new(variant), span)
                 }
-            })
-            .map_infix(|lhs, op, rhs| {
-                let n = ar.borrow().len();
-                ar.borrow_mut().extend([lhs, rhs]);
-                let span = Span::from(op.as_span()) + *self.offset;
-                let operator = op.as_rule().into();
-                let variant = Variant::BinOp(BinOp::new(operator, n.into(), (n + 1).into()));
 
-                Node::new(span, variant)
-            })
-            .map_prefix(|op, operand| {
-                let n = ar.borrow().len();
-                ar.borrow_mut().push(operand);
-                let span = Span::from(op.as_span()) + *self.offset;
-                let operator = op.as_rule().into();
-                let variant = Variant::UnaryOp(UnaryOp::new(operator, n.into()));
+                Rule::num => {
+                    let value = primary.as_str().to_string();
+                    let kind = primary.into_inner().next().unwrap().as_rule().into();
+                    let mut number = Number::new(kind);
+                    number.value = value;
+                    let variant = Variant::Number(number);
+                    draft.borrow_mut().push_node(Node::new(variant), span)
+                }
 
-                Node::new(span, variant)
-            })
-            .map_postfix(|operand, op| {
-                let mut ar = ar.borrow_mut();
-                let n = ar.len();
-                ar.push(operand);
-                let span = Span::from(op.as_span()) + *self.offset;
-                let variant = match op.as_rule() {
-                    Rule::call => {
-                        let mut function = Function::new(n.into());
-                        for p in op.into_inner() {
-                            function.arguments.push(self.build(p, *ar));
+                Rule::bool => {
+                    let value = primary.into_inner().next().unwrap().as_rule().into();
+                    let variant = Variant::Boolean(value);
+                    draft.borrow_mut().push_node(Node::new(variant), span)
+                }
+
+                Rule::undefined => {
+                    let variant = Variant::Undefined;
+                    draft.borrow_mut().push_node(Node::new(variant), span)
+                }
+
+                Rule::when => {
+                    let inner = operands(primary);
+                    let mut when = When::new(Vec::new());
+                    for p in inner {
+                        match p.as_rule() {
+                            Rule::case => {
+                                let mut inner = operands(p);
+                                let condition = parse_pair(ctx, inner.next().unwrap(), draft);
+                                let consequence = parse_pair(ctx, inner.next().unwrap(), draft);
+                                when.cases.push(Case::new(condition, consequence));
+                            }
+
+                            Rule::otherwise => {
+                                let node = parse_pair(ctx, operands(p).next().unwrap(), draft);
+                                when.otherwise = Some(node);
+                            }
+
+                            _ => unreachable!(),
                         }
-                        Variant::Function(function)
                     }
-                    Rule::fac => Variant::UnaryOp(UnaryOp::new(UnaryOperator::Factorial, n.into())),
-                    _ => unreachable!(),
-                };
 
-                Node::new(span, variant)
-            })
-            .parse(pair.into_inner());
+                    let variant = Variant::When(when);
+                    draft.borrow_mut().push_node(Node::new(variant), span)
+                }
 
-        let n = ar.borrow().len();
-        ar.borrow_mut().push(node);
-        n.into()
-    }
+                Rule::set | Rule::aggregation => {
+                    let is_aggregation = primary.as_rule() == Rule::aggregation;
+                    let mut inner = operands(primary);
+                    let aggregator: Option<Aggregator> =
+                        is_aggregation.then(|| inner.next().unwrap().as_rule().into());
+                    let first = parse_pair(ctx, inner.next().unwrap(), draft);
+
+                    let variant = match inner.next() {
+                        Some(p) if p.as_rule() == Rule::binding => {
+                            let mut inner = operands(p);
+                            let variable = inner.next().unwrap().as_str().to_string();
+                            let domain = parse_pair(ctx, inner.next().unwrap(), draft);
+                            let mut set = SetElement::new(variable, domain);
+                            if let Some(p) = inner.next() {
+                                set.filter = Some(parse_pair(ctx, p, draft));
+                            }
+
+                            Variant::Comprehension(Comprehension::new(aggregator, set, first))
+                        }
+
+                        next => {
+                            let mut expressions = vec![first];
+                            for p in next.into_iter().chain(inner) {
+                                expressions.push(parse_pair(ctx, p, draft));
+                            }
+
+                            match aggregator {
+                                Some(aggregator) => Variant::Aggregation(Aggregation {
+                                    aggregator,
+                                    expressions,
+                                }),
+                                None => Variant::Set(Set {
+                                    elements: expressions,
+                                }),
+                            }
+                        }
+                    };
+
+                    draft.borrow_mut().push_node(Node::new(variant), span)
+                }
+
+                Rule::rng => {
+                    let mut inner = primary.into_inner();
+
+                    let lvalue = parse_pair(ctx, inner.next().unwrap(), draft);
+                    let rvalue = parse_pair(ctx, inner.next().unwrap(), draft);
+                    let interval = Range::new(lvalue, rvalue);
+                    let variant = Variant::Range(interval);
+
+                    draft.borrow_mut().push_node(Node::new(variant), span)
+                }
+
+                Rule::intv => {
+                    let mut inner = primary.into_inner();
+                    let lbrack = inner.next().unwrap();
+                    let lvalue = parse_pair(ctx, inner.next().unwrap(), draft);
+                    let lbound = match lbrack.as_rule() {
+                        Rule::lbrkt => IntervalBound::closed(lvalue),
+                        Rule::rbrkt => IntervalBound::open(lvalue),
+                        _ => unreachable!(),
+                    };
+
+                    let rvalue = parse_pair(ctx, inner.next().unwrap(), draft);
+                    let rbrack = inner.next().unwrap();
+                    let rbound = match rbrack.as_rule() {
+                        Rule::lbrkt => IntervalBound::open(rvalue),
+                        Rule::rbrkt => IntervalBound::closed(rvalue),
+                        _ => unreachable!(),
+                    };
+
+                    let interval = Interval::new(lbound, rbound);
+                    let variant = Variant::Interval(interval);
+                    draft.borrow_mut().push_node(Node::new(variant), span)
+                }
+
+                Rule::expr => parse_pair(ctx, primary, draft),
+
+                _ => unreachable!(),
+            }
+        })
+        .map_infix(|lhs, op, rhs| {
+            let span = Span::from(op.as_span()) + *ctx;
+            let operator = op.as_rule().into();
+            let variant = Variant::BinOp(BinOp::new(operator, lhs, rhs));
+
+            draft.borrow_mut().push_node(Node::new(variant), span)
+        })
+        .map_prefix(|op, operand| {
+            let span = Span::from(op.as_span()) + *ctx;
+            let operator = op.as_rule().into();
+            let variant = Variant::UnaryOp(UnaryOp::new(operator, operand));
+
+            draft.borrow_mut().push_node(Node::new(variant), span)
+        })
+        .map_postfix(|operand, op| {
+            let span = Span::from(op.as_span()) + *ctx;
+            let variant = match op.as_rule() {
+                Rule::call => {
+                    let mut function = Function::new(operand);
+                    for p in op.into_inner() {
+                        function.arguments.push(parse_pair(ctx, p, draft));
+                    }
+                    Variant::Function(function)
+                }
+                Rule::fac => Variant::UnaryOp(UnaryOp::new(UnaryOperator::Factorial, operand)),
+                _ => unreachable!(),
+            };
+
+            draft.borrow_mut().push_node(Node::new(variant), span)
+        })
+        .parse(pair.into_inner())
 }
 
 /// Inner pairs of a rule without its keyword tokens (`if`, `then`, `end`, `for`...)
@@ -419,8 +402,17 @@ impl From<Rule> for Boolean {
 mod tests {
     use super::*;
 
+    fn parse_alone(input: &str) -> Result<(Vec<Node>, Vec<Path>, Idx), Span> {
+        let mut expressions = Vec::new();
+        let mut identifiers = Vec::new();
+        let mut spans = Vec::new();
+        let draft = Draft::new(&mut expressions, &mut identifiers, &mut spans);
+        let root = parse(input, &Position::default(), draft)?;
+        Ok((expressions, identifiers, root))
+    }
+
     fn parses(input: &str) -> bool {
-        parse(input, &Position::default()).is_ok()
+        parse_alone(input).is_ok()
     }
 
     #[test]
@@ -439,9 +431,9 @@ mod tests {
         assert!(!parses("a +"));
     }
 
-    fn root_variant(input: &str) -> Option<Variant<Idx, String>> {
-        let arena = parse(input, &Position::default()).ok()?;
-        Some(arena[Idx::root()].variant.clone())
+    fn root_variant(input: &str) -> Option<(Variant, Vec<Path>)> {
+        let (expressions, identifiers, root) = parse_alone(input).ok()?;
+        Some((expressions[usize::from(root)].variant.clone(), identifiers))
     }
 
     #[test]
@@ -461,7 +453,9 @@ mod tests {
             "index",
         ] {
             match root_variant(word) {
-                Some(Variant::Identifier(id)) => assert_eq!(id.target, word),
+                Some((Variant::Identifier(id), identifiers)) => {
+                    assert_eq!(identifiers[usize::from(id.target)].as_str(), word)
+                }
                 other => panic!("{word}: expected an identifier, got {other:?}"),
             }
         }

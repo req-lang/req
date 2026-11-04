@@ -1,42 +1,43 @@
-use std::collections::HashMap;
-
-use crate::node::entity::Arena;
-use crate::semantics::link::{Annotation, FindCtx};
-use crate::semantics::path::{Located, Path};
 use crate::{
-    node::{self, entity::Idx},
-    semantics::link::{Link, expression, markup},
+    node::{
+        entity::{Arena, Idx},
+        path::Path,
+        tree::Tree,
+    },
+    semantics::{
+        link::{FindCtx, Links, expression},
+        path::{self, Location},
+    },
 };
 
-pub type Node<N, E, M> = node::entity::Node<N, Link, expression::Link, E, M>;
+/// Fills the links of the tree, `paths` must come from the same entities
+pub fn link(tree: &Tree, paths: &Arena<Location>, links: &mut Links) {
+    let nodes = path::reverse(paths);
+    let parents = tree.entities.parents();
+    let expression_parents = tree.expressions.parents();
 
-pub(super) fn link<N: Located, R: Into<Path> + Clone, T: Into<Path>, E, M>(
-    paths: &HashMap<Path, Idx>,
-    annotations: &Arena<Annotation>,
-    arena: Arena<node::entity::Node<N, R, T, E, M>>,
-) -> Arena<Node<N, E, M>> {
-    arena.from_walk(Vec::new(), |node, imports, _| {
-        let parent = node.payload.location().path().parent().unwrap_or_default();
-        let ctx = FindCtx::new(&paths, &annotations, &parent, imports);
-        let imports = match node.variant.imports() {
-            Some(imports) => imports.iter().map(|i| i.clone().into()).collect(),
-            None => Vec::new(),
-        };
-        let meta = node.meta.mapm(|r| markup::link(&ctx, r));
-        let variant = node
+    for ((node, path), parent) in tree.entities.iter().zip(paths).zip(parents) {
+        let imports = parent
+            .and_then(|parent| tree.entities[parent].variant.imports())
+            .into_iter()
+            .flatten()
+            .map(|import| &tree.references[*import])
+            .collect();
+        let current = path.path.parent().unwrap_or_default();
+        let ctx = FindCtx::new(&tree.entities, &nodes, &current, imports);
+
+        let references = node
             .variant
-            .mapr(|r| {
-                let r = r.into();
-                match find(&ctx, &r) {
-                    Some(idx) => Link::valid(r, idx),
-                    None => Link::invalid(r),
-                }
-            })
-            .mape(|e| expression::link(&ctx, e))
-            .mapm(|m| markup::link(&ctx, m));
+            .references()
+            .chain(node.markups().flat_map(|markup| markup.references()));
+        for reference in references {
+            links.references[reference] = find(&ctx, &tree.references[reference]);
+        }
 
-        (imports, Node::new(node.payload, meta, variant))
-    })
+        for root in node.variant.expressions() {
+            expression::link(&ctx, tree, root, &expression_parents, links);
+        }
+    }
 }
 
 pub(super) fn find(ctx: &FindCtx, rf: &Path) -> Option<Idx> {

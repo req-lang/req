@@ -1,59 +1,29 @@
 use std::collections::HashMap;
 
 use crate::{
-    node::{
-        arena::ArenaEnumerate,
-        entity::{Arena, Idx, Node},
-    },
+    node::entity::{Arena, Node},
     semantics::path::{Issue, Location, Path},
-    utils::upsert::Upsert,
 };
 
-pub fn discover<N, R, T, E, M>(
-    mut paths: HashMap<Idx, (Path, bool)>,
-    arena: Arena<Node<N, R, T, E, M>>,
-) -> Arena<Node<Location, R, T, E, M>> {
-    arena
-        .into_iter()
-        .indices()
-        .map(|(idx, node)| {
-            let (path, is_duplicate) = paths.remove(&idx).unwrap();
-            node.map(|_| match is_duplicate {
-                false => Location::valid(path),
-                _ => Location::invalid(path, Issue::Duplicated),
-            })
-        })
-        .collect()
+pub fn paths(entities: &Arena<Node>, paths: &mut Arena<Path>) {
+    let parents = entities.parents();
+    for (idx, node) in entities.enumerate().rev() {
+        paths[idx] = match parents[idx] {
+            Some(parent) => paths[parent].join(&node.meta.label),
+            None => Path::from(node.meta.label.as_str()),
+        };
+    }
 }
 
-pub(crate) fn collect<'n, P, R, T, E, M>(
-    arena: &Arena<Node<P, R, T, E, M>>,
-    out: &mut HashMap<Path, Vec<Idx>>,
-) {
-    arena
-        .walk(Path::default(), |node, parent, idx| {
-            let current = parent.join(&node.meta.label);
-            out.upsert(current.clone(), idx);
+pub fn duplicates(locs: &mut Arena<Location>) {
+    let mut counts: HashMap<Path, usize> = HashMap::with_capacity(locs.len());
+    for loc in &*locs {
+        *counts.entry(loc.path.clone()).or_default() += 1;
+    }
 
-            current
-        })
-        .for_each(drop);
-}
-
-pub(super) fn count_duplicates(paths: HashMap<Path, Vec<Idx>>) -> HashMap<Idx, (Path, bool)> {
-    let mut counts: HashMap<Idx, (Path, bool)> = HashMap::new();
-
-    for (p, idx) in paths {
-        for idx in idx {
-            match counts.remove(&idx) {
-                Some((p, _)) => {
-                    counts.insert(idx, (p, true));
-                }
-                None => {
-                    counts.insert(idx, (p.clone(), false));
-                }
-            }
+    for loc in locs {
+        if counts[&loc.path] > 1 {
+            loc.issue = Some(Issue::Duplicated);
         }
     }
-    counts
 }

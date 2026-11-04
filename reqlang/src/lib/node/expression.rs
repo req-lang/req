@@ -1,85 +1,52 @@
-use crate::{node::arena, utils::children::ChildrenIter};
+use crate::{
+    node::{arena, identifier},
+    utils::children::ChildrenIter,
+};
 
 #[derive(Default, Debug, Copy, Clone, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub struct IdxMarker;
 pub type Idx = arena::idx::Idx<IdxMarker>;
 pub type Arena<T> = arena::Arena<T, IdxMarker>;
-pub type Selector<'a, T> = arena::selector::Selector<'a, T, IdxMarker>;
 
 #[derive(Default, Debug, Clone, Eq, PartialEq, Hash)]
-pub struct Node<P, R, I = Idx> {
-    pub payload: P,
-    pub variant: Variant<I, R>,
+pub struct Node {
+    pub variant: Variant,
 }
 
-impl<P, R, I> Node<P, R, I> {
-    pub fn empty(variant: Variant<I, R>) -> Self
-    where
-        P: Default,
-    {
-        Self {
-            payload: Default::default(),
-            variant,
-        }
-    }
-
-    pub fn new(payload: P, variant: Variant<I, R>) -> Self {
-        Self { payload, variant }
-    }
-
-    pub fn map<F, Q>(self, f: F) -> Node<Q, R, I>
-    where
-        F: FnOnce(P) -> Q,
-    {
-        Node {
-            payload: f(self.payload),
-            variant: self.variant,
-        }
-    }
-
-    pub fn mapr<F, S>(self, f: F) -> Node<P, S, I>
-    where
-        F: FnMut(R) -> S,
-    {
-        Node {
-            payload: self.payload,
-            variant: self.variant.mapr(f),
-        }
+impl Node {
+    pub fn new(variant: Variant) -> Self {
+        Self { variant }
     }
 }
 
-impl<N, R, I: Clone> ChildrenIter<I> for Node<N, R, I> {
-    fn children_iter(&self) -> impl DoubleEndedIterator<Item = I> {
+impl ChildrenIter<Idx> for Node {
+    fn children_iter(&self) -> impl DoubleEndedIterator<Item = Idx> {
         self.variant.children_iter()
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum Variant<I, R> {
-    When(When<I>),
-    Aggregation(Aggregation<I>),
-    Comprehension(Comprehension<I>),
+pub enum Variant {
+    When(When),
+    Aggregation(Aggregation),
+    Comprehension(Comprehension),
 
-    UnaryOp(UnaryOp<I>),
-    BinOp(BinOp<I>),
-    Function(Function<I>),
+    UnaryOp(UnaryOp),
+    BinOp(BinOp),
+    Function(Function),
 
-    Identifier(Identifier<R>),
+    Identifier(Identifier),
     Number(Number),
     Boolean(Boolean),
     Undefined,
 
-    Set(Set<I>),
-    Interval(Interval<I>),
-    Range(Range<I>),
+    Set(Set),
+    Interval(Interval),
+    Range(Range),
 }
 
-pub trait IntoVariable<N, R> {
-    fn into_variant(self) -> Variant<N, R>;
-}
-
-impl<I: Clone, R> ChildrenIter<I> for Variant<I, R> {
-    fn children_iter(&self) -> impl DoubleEndedIterator<Item = I> {
+impl ChildrenIter<Idx> for Variant {
+    fn children_iter(&self) -> impl DoubleEndedIterator<Item = Idx> {
         use Variant::*;
 
         let mut children = Vec::new();
@@ -146,43 +113,22 @@ impl<I: Clone, R> ChildrenIter<I> for Variant<I, R> {
     }
 }
 
-impl<N, R> Default for Variant<N, R> {
+impl Default for Variant {
     fn default() -> Self {
         Variant::Undefined
     }
 }
 
-impl<N, R> Variant<N, R> {
-    pub fn mapr<F, S>(self, mut f: F) -> Variant<N, S>
-    where
-        F: FnMut(R) -> S,
-    {
-        match self {
-            Variant::When(when) => Variant::When(when),
-            Variant::Aggregation(aggregation) => Variant::Aggregation(aggregation),
-            Variant::Comprehension(comprehension) => Variant::Comprehension(comprehension),
-            Variant::UnaryOp(unary_op) => Variant::UnaryOp(unary_op),
-            Variant::BinOp(bin_op) => Variant::BinOp(bin_op),
-            Variant::Function(function) => Variant::Function(function),
-            Variant::Identifier(identifier) => {
-                Variant::Identifier(Identifier::new(f(identifier.target)))
-            }
-            Variant::Number(number) => Variant::Number(number),
-            Variant::Boolean(boolean) => Variant::Boolean(boolean),
-            Variant::Undefined => Variant::Undefined,
-            Variant::Set(set) => Variant::Set(set),
-            Variant::Interval(interval) => Variant::Interval(interval),
-            Variant::Range(range) => Variant::Range(range),
-        }
-    }
-
-    pub fn mape<F, O>(self, mut f: F) -> Variant<O, R>
-    where
-        F: FnMut(N) -> O,
-    {
+impl Variant {
+    /// Replaces every child index, which is needed when moving nodes from an arena to another
+    pub fn remap(self, mut f: impl FnMut(Idx) -> Idx) -> Variant {
         match self {
             Variant::When(when) => Variant::When(When {
-                cases: when.cases.into_iter().map(|c| c.map(&mut f)).collect(),
+                cases: when
+                    .cases
+                    .into_iter()
+                    .map(|c| Case::new(f(c.condition), f(c.consequence)))
+                    .collect(),
                 otherwise: when.otherwise.map(&mut f),
             }),
 
@@ -191,9 +137,15 @@ impl<N, R> Variant<N, R> {
                 expressions: aggregation.expressions.into_iter().map(&mut f).collect(),
             }),
 
-            Variant::Comprehension(comprehension) => {
-                Variant::Comprehension(comprehension.mape(&mut f))
-            }
+            Variant::Comprehension(comprehension) => Variant::Comprehension(Comprehension {
+                aggregator: comprehension.aggregator,
+                set: SetElement {
+                    variable: comprehension.set.variable,
+                    domain: f(comprehension.set.domain),
+                    filter: comprehension.set.filter.map(&mut f),
+                },
+                expression: f(comprehension.expression),
+            }),
 
             Variant::UnaryOp(unary) => Variant::UnaryOp(UnaryOp {
                 operator: unary.operator,
@@ -216,38 +168,36 @@ impl<N, R> Variant<N, R> {
             }),
 
             Variant::Interval(interval) => Variant::Interval(Interval {
-                left: interval.left.mape(&mut f),
-                right: interval.right.mape(&mut f),
+                left: IntervalBound {
+                    expression: f(interval.left.expression),
+                    is_open: interval.left.is_open,
+                },
+                right: IntervalBound {
+                    expression: f(interval.right.expression),
+                    is_open: interval.right.is_open,
+                },
             }),
+
             Variant::Range(range) => Variant::Range(Range {
                 left: f(range.left),
                 right: f(range.right),
             }),
 
-            Variant::Identifier(identifier) => Variant::Identifier(Identifier {
-                target: identifier.target,
-            }),
-            Variant::Number(number) => Variant::Number(number),
-            Variant::Boolean(boolean) => Variant::Boolean(boolean),
-            Variant::Undefined => Variant::Undefined,
+            variant @ (Variant::Identifier(_)
+            | Variant::Number(_)
+            | Variant::Boolean(_)
+            | Variant::Undefined) => variant,
         }
     }
 
-    pub fn identifier(&self) -> Option<&Identifier<R>> {
+    pub fn identifier(&self) -> Option<&Identifier> {
         match self {
             Variant::Identifier(id) => Some(id),
             _ => None,
         }
     }
 
-    pub fn identifier_mut(&mut self) -> Option<&mut Identifier<R>> {
-        match self {
-            Variant::Identifier(id) => Some(id),
-            _ => None,
-        }
-    }
-
-    pub fn set_element(&self) -> Option<&SetElement<N>> {
+    pub fn set_element(&self) -> Option<&SetElement> {
         use Variant::*;
 
         match self {
@@ -306,13 +256,13 @@ impl<N, R> Variant<N, R> {
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq, Hash)]
-pub struct When<N> {
-    pub cases: Vec<Case<N>>,
-    pub otherwise: Option<N>,
+pub struct When {
+    pub cases: Vec<Case>,
+    pub otherwise: Option<Idx>,
 }
 
-impl<N> When<N> {
-    pub fn new(cases: Vec<Case<N>>) -> Self {
+impl When {
+    pub fn new(cases: Vec<Case>) -> Self {
         When {
             cases,
             otherwise: None,
@@ -321,65 +271,44 @@ impl<N> When<N> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Case<N> {
-    pub condition: N,
-    pub consequence: N,
+pub struct Case {
+    pub condition: Idx,
+    pub consequence: Idx,
 }
 
-impl<N> Case<N> {
-    pub fn new(condition: N, consequence: N) -> Self {
+impl Case {
+    pub fn new(condition: Idx, consequence: Idx) -> Self {
         Case {
             condition,
             consequence,
         }
     }
-
-    pub fn map<F, O>(self, mut f: F) -> Case<O>
-    where
-        F: FnMut(N) -> O,
-    {
-        Case {
-            condition: f(self.condition),
-            consequence: f(self.consequence),
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct SetElement<N> {
+pub struct SetElement {
     pub variable: String,
-    pub domain: N,
-    pub filter: Option<N>,
+    pub domain: Idx,
+    pub filter: Option<Idx>,
 }
 
-impl<N> SetElement<N> {
-    pub fn new(variable: String, domain: N) -> Self {
+impl SetElement {
+    pub fn new(variable: String, domain: Idx) -> Self {
         SetElement {
             variable,
             domain,
             filter: None,
         }
     }
-
-    pub fn mape<F, M>(self, mut f: F) -> SetElement<M>
-    where
-        F: FnMut(N) -> M,
-    {
-        SetElement {
-            variable: self.variable,
-            domain: f(self.domain),
-            filter: self.filter.map(&mut f),
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Aggregation<N> {
+pub struct Aggregation {
     pub aggregator: Aggregator,
-    pub expressions: Vec<N>,
+    pub expressions: Vec<Idx>,
 }
 
-impl<N> Aggregation<N> {
+impl Aggregation {
     pub fn new(aggregator: Aggregator) -> Self {
         Aggregation {
             aggregator,
@@ -392,29 +321,18 @@ impl<N> Aggregation<N> {
 /// `aggregator expression for variable in domain such that filter end` when an
 /// aggregator is given. The aggregator is applied to the family indexed by the variable.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Comprehension<N> {
+pub struct Comprehension {
     pub aggregator: Option<Aggregator>,
-    pub set: SetElement<N>,
-    pub expression: N,
+    pub set: SetElement,
+    pub expression: Idx,
 }
 
-impl<N> Comprehension<N> {
-    pub fn new(aggregator: Option<Aggregator>, set: SetElement<N>, expression: N) -> Self {
+impl Comprehension {
+    pub fn new(aggregator: Option<Aggregator>, set: SetElement, expression: Idx) -> Self {
         Comprehension {
             aggregator,
             set,
             expression,
-        }
-    }
-
-    pub fn mape<F, M>(self, mut f: F) -> Comprehension<M>
-    where
-        F: FnMut(N) -> M,
-    {
-        Comprehension {
-            aggregator: self.aggregator,
-            set: self.set.mape(&mut f),
-            expression: f(self.expression),
         }
     }
 }
@@ -439,24 +357,24 @@ pub enum Aggregator {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Identifier<R> {
-    pub target: R,
+pub struct Identifier {
+    pub target: identifier::Idx,
 }
 
-impl<R> Identifier<R> {
-    pub fn new(target: R) -> Self {
+impl Identifier {
+    pub fn new(target: identifier::Idx) -> Self {
         Self { target }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct UnaryOp<N> {
+pub struct UnaryOp {
     pub operator: UnaryOperator,
-    pub operand: N,
+    pub operand: Idx,
 }
 
-impl<N> UnaryOp<N> {
-    pub fn new(operator: UnaryOperator, operand: N) -> Self {
+impl UnaryOp {
+    pub fn new(operator: UnaryOperator, operand: Idx) -> Self {
         UnaryOp { operator, operand }
     }
 
@@ -497,14 +415,14 @@ impl UnaryOperator {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct BinOp<N> {
+pub struct BinOp {
     pub operator: BinaryOperator,
-    pub left: N,
-    pub right: N,
+    pub left: Idx,
+    pub right: Idx,
 }
 
-impl<N> BinOp<N> {
-    pub fn new(operator: BinaryOperator, left: N, right: N) -> Self {
+impl BinOp {
+    pub fn new(operator: BinaryOperator, left: Idx, right: Idx) -> Self {
         BinOp {
             operator,
             left,
@@ -590,13 +508,13 @@ impl BinaryOperator {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Function<N> {
-    pub expression: N,
-    pub arguments: Vec<N>,
+pub struct Function {
+    pub expression: Idx,
+    pub arguments: Vec<Idx>,
 }
 
-impl<N> Function<N> {
-    pub fn new(expression: N) -> Self {
+impl Function {
+    pub fn new(expression: Idx) -> Self {
         Function {
             expression,
             arguments: Vec::new(),
@@ -605,11 +523,11 @@ impl<N> Function<N> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Set<N> {
-    pub elements: Vec<N>,
+pub struct Set {
+    pub elements: Vec<Idx>,
 }
 
-impl<N> Default for Set<N> {
+impl Default for Set {
     fn default() -> Self {
         Self {
             elements: Default::default(),
@@ -618,54 +536,47 @@ impl<N> Default for Set<N> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Interval<N> {
-    pub left: IntervalBound<N>,
-    pub right: IntervalBound<N>,
+pub struct Interval {
+    pub left: IntervalBound,
+    pub right: IntervalBound,
 }
 
-impl<N> Interval<N> {
-    pub fn new(left: IntervalBound<N>, right: IntervalBound<N>) -> Self {
+impl Interval {
+    pub fn new(left: IntervalBound, right: IntervalBound) -> Self {
         Self { left, right }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct IntervalBound<N> {
-    pub expression: N,
+pub struct IntervalBound {
+    pub expression: Idx,
     pub is_open: bool,
 }
 
-impl<N> IntervalBound<N> {
-    pub fn open(expression: N) -> Self {
+impl IntervalBound {
+    pub fn open(expression: Idx) -> Self {
         Self {
             expression,
             is_open: true,
         }
     }
 
-    pub fn closed(expression: N) -> Self {
+    pub fn closed(expression: Idx) -> Self {
         Self {
             expression,
             is_open: false,
         }
     }
-
-    pub fn mape<E>(self, f: impl FnOnce(N) -> E) -> IntervalBound<E> {
-        IntervalBound {
-            expression: f(self.expression),
-            is_open: self.is_open,
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Range<N> {
-    pub left: N,
-    pub right: N,
+pub struct Range {
+    pub left: Idx,
+    pub right: Idx,
 }
 
-impl<N> Range<N> {
-    pub fn new(left: N, right: N) -> Self {
+impl Range {
+    pub fn new(left: Idx, right: Idx) -> Self {
         Self { left, right }
     }
 }

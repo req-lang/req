@@ -1,23 +1,14 @@
 use criterion::*;
 use reqlang::{
+    Specification,
     mock::generator::{self, Generate},
-    node::entity::{Arena, Idx},
-    semantics::{
-        connection::{
-            Connect,
-            entity::{Connection, Neighbors},
-        },
-        link::{self, Resolve},
-        path::Locate,
-        typing::{Evaluate, TypeResult},
-    },
-    syntax,
+    node::tree::Tree,
 };
 
-fn complete_pipeline(
-    root: Arena<syntax::entity::Node>,
-) -> Arena<link::entity::Node<Neighbors<Connection<Idx>>, TypeResult, ()>> {
-    root.locate().resolve().evaluate().connect()
+fn complete_pipeline(tree: Tree) -> Specification {
+    let mut analysis = Specification::from(tree);
+    analysis.diagnose();
+    analysis
 }
 
 pub mod simple {

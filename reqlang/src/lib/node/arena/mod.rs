@@ -1,97 +1,77 @@
-use std::{collections::HashSet, iter::FusedIterator, marker::PhantomData};
+use std::{collections::HashSet, marker::PhantomData};
 
 use crate::{node::arena::idx::Idx, utils::children::ChildrenIter};
 
 pub mod idx;
-pub mod selector;
 
 /// Arena containing elements that can reference to each other
 /// - Might have children that implements [ChildrenIter] with [Idx]
 /// - Can have other references as [Idx]
-/// - Must be constructed from DFS ordered tree
 /// - Cannot be mutated directly, only elements can be mutated
-#[derive(Default, Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Arena<T, M> {
     inner: Vec<T>,
     phantom: PhantomData<M>,
 }
 
+impl<T, M> Default for Arena<T, M> {
+    fn default() -> Self {
+        Vec::new().into()
+    }
+}
+
 impl<T, M> Arena<T, M> {
-    pub fn with_capacity<U: Default + Clone>(&self) -> Arena<U, M> {
+    pub fn len(&self) -> usize {
+        self.inner.len()
+    }
+
+    pub fn last_idx(&self) -> Idx<M> {
+        (self.inner.len() - 1).into()
+    }
+
+    pub fn indices(&self) -> impl Iterator<Item = Idx<M>> + use<T, M> {
+        (0..self.inner.len()).map(Idx::from)
+    }
+
+    pub fn iter(&self) -> std::slice::Iter<'_, T> {
+        self.inner.iter()
+    }
+
+    pub fn enumerate(&self) -> impl DoubleEndedIterator<Item = (Idx<M>, &T)> {
+        self.inner
+            .iter()
+            .enumerate()
+            .map(|(i, t)| (Idx::from(i), t))
+    }
+
+    pub fn parallel<U: Default + Clone>(&self) -> Arena<U, M> {
         std::iter::repeat(Default::default())
             .take(self.inner.len())
             .collect::<Vec<_>>()
             .into()
     }
 
-    pub fn descendants<'a>(&'a self, idx: Idx<M>) -> DescendantIter<'a, T, M>
+    pub fn subtree<'a>(&'a self, root: Idx<M>) -> SubtreeIter<'a, T, M>
     where
         T: ChildrenIter<Idx<M>>,
     {
-        DescendantIter {
+        SubtreeIter {
             arena: self,
-            stack: self[idx].children_iter().collect(),
+            stack: vec![root],
         }
     }
 
-    pub fn walk<'a, U>(
-        &'a self,
-        ctx: U,
-        f: impl FnMut(&T, U, Idx<M>) -> U,
-    ) -> WalkIter<'a, T, U, impl FnMut(&T, U, Idx<M>) -> U, M>
+    pub fn parents(&self) -> Arena<Option<Idx<M>>, M>
     where
-        U: Clone,
         T: ChildrenIter<Idx<M>>,
     {
-        WalkIter {
-            remaining: self.inner.len(),
-            arena: self,
-            stack: vec![(Idx::root(), ctx)],
-            f,
+        let mut parents = self.parallel();
+        for (idx, node) in self.enumerate() {
+            for child in node.children_iter() {
+                parents[child] = Some(idx);
+            }
         }
-    }
-
-    pub fn walk_mut<'a, U>(
-        &'a mut self,
-        ctx: U,
-        f: impl FnMut(&mut T, U, Idx<M>) -> U,
-    ) -> WalkIterMut<'a, T, U, impl FnMut(&mut T, U, Idx<M>) -> U, M>
-    where
-        U: Clone,
-        T: ChildrenIter<Idx<M>>,
-    {
-        WalkIterMut {
-            remaining: self.inner.len(),
-            arena: self,
-            stack: vec![(Idx::root(), ctx)],
-            f,
-        }
-    }
-
-    pub fn from_walk<U, V>(self, ctx: U, mut f: impl FnMut(T, U, Idx<M>) -> (U, V)) -> Arena<V, M>
-    where
-        U: Clone,
-        T: ChildrenIter<Idx<M>>,
-    {
-        let len = self.inner.len();
-        let mut slots: Vec<Option<T>> = self.inner.into_iter().map(Some).collect();
-        let mut stack: Vec<(Idx<M>, U)> = vec![(Idx::root(), ctx)];
-        let mut ret: Vec<Option<V>> = (0..len).map(|_| None).collect();
-        let mut buf: Vec<Idx<M>> = Vec::new();
-
-        while let Some((idx, ctx)) = stack.pop() {
-            let node = slots[usize::from(idx)].take().unwrap();
-            buf.clear();
-            buf.extend(node.children_iter());
-            let (ctx, value) = f(node, ctx, idx);
-            ret[usize::from(idx)] = Some(value);
-            stack.extend(buf.iter().copied().map(|c| (c, ctx.clone())).rev());
-        }
-
-        ret.into_iter()
-            .map(|v| v.unwrap())
-            .collect::<Vec<_>>()
-            .into()
+        parents
     }
 
     pub fn cycles<I, F>(&self, mut f: F) -> Vec<Vec<Idx<M>>>
@@ -145,111 +125,20 @@ impl<T, M> Arena<T, M> {
     }
 }
 
-pub struct DescendantIter<'a, T, M> {
+pub struct SubtreeIter<'a, T, M> {
     arena: &'a Arena<T, M>,
     stack: Vec<Idx<M>>,
 }
 
-impl<'a, T: ChildrenIter<Idx<M>>, M> Iterator for DescendantIter<'a, T, M> {
-    type Item = Idx<M>;
+impl<'a, T: ChildrenIter<Idx<M>>, M> Iterator for SubtreeIter<'a, T, M> {
+    type Item = (Idx<M>, &'a T);
 
     fn next(&mut self) -> Option<Self::Item> {
         let idx = self.stack.pop()?;
-        self.stack.extend(self.arena[idx].children_iter().rev());
-        Some(idx)
-    }
-}
-
-pub struct WalkIter<'a, T, U, F, M> {
-    remaining: usize,
-    arena: &'a Arena<T, M>,
-    stack: Vec<(Idx<M>, U)>,
-    f: F,
-}
-
-impl<'a, T, U, F, M> Iterator for WalkIter<'a, T, U, F, M>
-where
-    F: FnMut(&T, U, Idx<M>) -> U,
-    T: ChildrenIter<Idx<M>>,
-    U: Clone,
-{
-    type Item = (&'a T, U, Idx<M>);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let (idx, ctx) = self.stack.pop()?;
-        self.remaining -= 1;
         let node = &self.arena[idx];
-        let ctx = (self.f)(node, ctx, idx);
-        let children = node.children_iter().map(|c| (c, ctx.clone())).rev();
-        self.stack.extend(children);
-        Some((node, ctx, idx))
+        self.stack.extend(node.children_iter().rev());
+        Some((idx, node))
     }
-}
-
-impl<'a, T, U, F, M> ExactSizeIterator for WalkIter<'a, T, U, F, M>
-where
-    F: FnMut(&T, U, Idx<M>) -> U,
-    T: ChildrenIter<Idx<M>>,
-    U: Clone,
-{
-    fn len(&self) -> usize {
-        self.remaining
-    }
-}
-
-impl<'a, T, U, F, M> FusedIterator for WalkIter<'a, T, U, F, M>
-where
-    F: FnMut(&T, U, Idx<M>) -> U,
-    T: ChildrenIter<Idx<M>>,
-    U: Clone,
-{
-}
-
-pub struct WalkIterMut<'a, T, U, F, M> {
-    remaining: usize,
-    arena: &'a mut Arena<T, M>,
-    stack: Vec<(Idx<M>, U)>,
-    f: F,
-}
-
-impl<'a, T, U, F, M> Iterator for WalkIterMut<'a, T, U, F, M>
-where
-    F: FnMut(&mut T, U, Idx<M>) -> U,
-    T: ChildrenIter<Idx<M>>,
-    U: Clone,
-{
-    type Item = (&'a mut T, U, Idx<M>);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let (idx, ctx) = self.stack.pop()?;
-        self.remaining -= 1;
-        let node = &mut self.arena[idx];
-        let ret = std::ptr::from_mut(node);
-        let ctx = (self.f)(node, ctx, idx);
-        let node = unsafe { ret.as_mut().unwrap() };
-        let children = node.children_iter().map(|c| (c, ctx.clone())).rev();
-        self.stack.extend(children);
-        Some((node, ctx, idx))
-    }
-}
-
-impl<'a, T, U, F, M> ExactSizeIterator for WalkIterMut<'a, T, U, F, M>
-where
-    F: FnMut(&mut T, U, Idx<M>) -> U,
-    T: ChildrenIter<Idx<M>>,
-    U: Clone,
-{
-    fn len(&self) -> usize {
-        self.remaining
-    }
-}
-
-impl<'a, T, U, F, M> FusedIterator for WalkIterMut<'a, T, U, F, M>
-where
-    F: FnMut(&mut T, U, Idx<M>) -> U,
-    T: ChildrenIter<Idx<M>>,
-    U: Clone,
-{
 }
 
 impl<T, M> IntoIterator for Arena<T, M> {
@@ -297,36 +186,6 @@ impl<T, M> From<Arena<T, M>> for Vec<T> {
     }
 }
 
-pub struct Enumerate<I, M> {
-    inner: I,
-    count: usize,
-    phantom: PhantomData<M>,
-}
-
-impl<I: Iterator, M> Iterator for Enumerate<I, M> {
-    type Item = (Idx<M>, I::Item);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let item = self.inner.next()?;
-        let idx = Idx::from(self.count);
-        self.count += 1;
-        Some((idx, item))
-    }
-}
-
-pub trait ArenaEnumerate<M>: Iterator + Sized {
-    fn indices(self) -> Enumerate<Self, M> {
-        Enumerate {
-            inner: self,
-            count: 0,
-            phantom: PhantomData,
-        }
-    }
-}
-
-impl<T, M> ArenaEnumerate<M> for std::slice::Iter<'_, T> {}
-impl<T, M> ArenaEnumerate<M> for std::vec::IntoIter<T> {}
-
 struct CycleCtx<M> {
     in_path: HashSet<Idx<M>>,
     path: Vec<Idx<M>>,
@@ -356,5 +215,62 @@ impl<M> From<Idx<M>> for CycleCtx<M> {
             in_path: HashSet::from([value]),
             path: vec![value],
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        node::arena::{Arena, idx::Idx},
+        utils::children::ChildrenIter,
+    };
+
+    struct Marker;
+    struct Node(Vec<usize>);
+
+    impl ChildrenIter<Idx<Marker>> for Node {
+        fn children_iter(&self) -> impl DoubleEndedIterator<Item = Idx<Marker>> {
+            self.0.iter().map(|c| Idx::from(*c))
+        }
+    }
+
+    /// 0 -> (1 -> (3, 4), 2)
+    fn tree() -> Arena<Node, Marker> {
+        vec![
+            Node(vec![1, 2]),
+            Node(vec![3, 4]),
+            Node(vec![]),
+            Node(vec![]),
+            Node(vec![]),
+        ]
+        .into()
+    }
+
+    #[test]
+    fn subtree_visits_a_node_before_its_children() {
+        let arena = tree();
+
+        let all: Vec<_> = arena
+            .subtree(0.into())
+            .map(|(idx, _)| usize::from(idx))
+            .collect();
+        let below: Vec<_> = arena
+            .subtree(1.into())
+            .map(|(idx, _)| usize::from(idx))
+            .collect();
+
+        assert_eq!(all, vec![0, 1, 3, 4, 2]);
+        assert_eq!(below, vec![1, 3, 4]);
+    }
+
+    #[test]
+    fn parents_are_the_nodes_having_it_as_a_child() {
+        let parents: Vec<_> = tree()
+            .parents()
+            .into_iter()
+            .map(|p| p.map(usize::from))
+            .collect();
+
+        assert_eq!(parents, vec![None, Some(0), Some(0), Some(1), Some(1)]);
     }
 }

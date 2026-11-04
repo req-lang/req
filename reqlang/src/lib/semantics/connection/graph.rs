@@ -1,93 +1,87 @@
 use crate::{
-    node::{
-        self,
-        entity::{Arena, Idx},
+    node::{self, entity::Arena, tree::Tree},
+    semantics::{
+        connection::entity::{Connection, Neighbors},
+        link::Links,
     },
-    semantics::{connection::entity::Neighbors, link::entity::Node},
 };
 
-pub(super) fn collect_neighbors<N, E, M>(
-    arena: &Arena<Node<N, E, M>>,
-    neighbors: &mut Arena<Neighbors<Idx>>,
-) {
+pub(super) fn collect_neighbors(tree: &Tree, links: &Links, neighbors: &mut Arena<Neighbors>) {
     use node::entity::Variant::*;
 
-    arena
-        .walk(None, |node, parent, idx| {
-            neighbors[idx].parent = parent;
+    let parents = tree.entities.parents();
+    for (idx, node) in tree.entities.enumerate() {
+        neighbors[idx].parent = parents[idx].map(Connection::new);
 
-            if let Requirement(req) = &node.variant {
-                if let Some(alloc) = req.allocation.as_ref().and_then(|a| a.target()) {
-                    neighbors[*alloc].inbound.allocations.push(idx);
-                    neighbors[idx].outbound.allocation = Some(*alloc);
-                }
+        if let Requirement(req) = &node.variant {
+            if let Some(reference) = req.allocation
+                && let Some(alloc) = links.references[reference]
+            {
+                neighbors[alloc]
+                    .inbound
+                    .allocations
+                    .push(Connection::new(idx));
+                neighbors[idx].outbound.allocation = Some(Connection::new(alloc));
+            }
 
-                if let Some(restr) = req.restriction.as_ref().and_then(|a| a.target()) {
-                    neighbors[*restr].inbound.restrictions.push(idx);
-                    neighbors[idx].outbound.restriction = Ok(*restr);
-                }
+            if let Some(reference) = req.restriction
+                && let Some(restr) = links.references[reference]
+            {
+                neighbors[restr]
+                    .inbound
+                    .restrictions
+                    .push(Connection::new(idx));
+                neighbors[idx].outbound.restriction = Some(Connection::new(restr));
+            }
 
-                for trace in &req.traceability {
-                    if let Some(source) = trace.target.target() {
-                        neighbors[*source].inbound.traceability[trace.kind].push(idx);
-                        neighbors[idx].outbound.traceability[trace.kind].push(*source);
-                    }
-                }
-
-                use node::entity::RequirementVariant::*;
-
-                match &req.variant {
-                    Formal(expr) => expression::collect_neighbors(&expr, neighbors, idx),
-                    Informal(markup) => markup::collect_neighbors(&markup, neighbors, idx),
+            for trace in &req.traceability {
+                if let Some(source) = links.references[trace.target] {
+                    neighbors[source].inbound.traceability[trace.kind].push(Connection::new(idx));
+                    neighbors[idx].outbound.traceability[trace.kind].push(Connection::new(source));
                 }
             }
 
-            Some(idx)
-        })
-        .for_each(drop);
+            use node::entity::RequirementVariant::*;
+
+            match &req.variant {
+                Formal(expr) => expression::collect_neighbors(tree, links, *expr, neighbors, idx),
+                Informal(markup) => {
+                    for reference in markup.references() {
+                        if let Some(src) = links.references[reference] {
+                            neighbors[src].inbound.usages.push(Connection::new(idx));
+                            neighbors[idx].outbound.usages.push(Connection::new(src));
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 mod expression {
     use crate::{
-        node::{self, expression::Arena},
-        semantics::{self, connection::entity::Neighbors, link::expression::Node},
+        node::{self, entity::Arena, entity::Idx, tree::Tree},
+        semantics::{
+            connection::entity::{Connection, Neighbors},
+            link::{Links, Target},
+        },
     };
 
-    pub(super) fn collect_neighbors<P>(
-        arena: &Arena<Node<P>>,
-        neighbors: &mut node::entity::Arena<Neighbors<node::entity::Idx>>,
-        parent: node::entity::Idx,
-    ) {
-        use node::expression::Variant::*;
-        use semantics::link::Target::*;
-
-        arena.into_iter().for_each(|node| {
-            if let Identifier(ident) = &node.variant
-                && let Some(tgt) = ident.target.target()
-                && let Some(Entity(src)) = tgt.outer()
-            {
-                neighbors[*src].inbound.usages.push(parent);
-                neighbors[parent].outbound.usages.push(*src);
-            }
-        });
-    }
-}
-
-mod markup {
-    use crate::{
-        node::entity::{Arena, Idx},
-        semantics::{connection::entity::Neighbors, link::markup::Node},
-    };
-
-    pub(super) fn collect_neighbors<P>(
-        node: &Node<P>,
-        graph: &mut Arena<Neighbors<Idx>>,
+    pub(super) fn collect_neighbors(
+        tree: &Tree,
+        links: &Links,
+        root: node::expression::Idx,
+        neighbors: &mut Arena<Neighbors>,
         parent: Idx,
     ) {
-        for rf in node.container.references() {
-            if let Some(src) = rf.target() {
-                graph[*src].inbound.usages.push(parent);
-                graph[parent].outbound.usages.push(*src);
+        use node::expression::Variant::*;
+
+        for (_, node) in tree.expressions.subtree(root) {
+            if let Identifier(ident) = &node.variant
+                && let Some(Target::Entity(src)) = links.identifiers[ident.target]
+            {
+                neighbors[src].inbound.usages.push(Connection::new(parent));
+                neighbors[parent].outbound.usages.push(Connection::new(src));
             }
         }
     }
