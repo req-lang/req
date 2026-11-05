@@ -6,7 +6,7 @@ use reqlang::{
     Specification,
     issue::{self, Severity},
     renderer::formatter,
-    syntax::parser,
+    syntax::{location::Span, parser},
 };
 
 #[derive(clap::Parser)]
@@ -39,7 +39,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     match cli.command {
         Command::Fmt { input, output } => {
             let source = std::fs::read_to_string(&input)?;
-            let (tree, _) = parser::parse(&source)?;
+            let (tree, _, errors) = parser::parse(&source);
+
+            // The tree is incomplete when there are syntax errors, formatting it would lose code
+            if !errors.is_empty() {
+                report_syntax_errors(&source, &errors);
+                std::process::exit(1);
+            }
 
             match output {
                 Some(p) => formatter::format(&tree, &mut fs::File::create(p)?),
@@ -49,13 +55,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Command::Check { input } => {
             let start = std::time::Instant::now();
             let source = std::fs::read_to_string(&input)?;
-            let (tree, spans) = parser::parse(&source)?;
+            let (tree, spans, errors) = parser::parse(&source);
+            report_syntax_errors(&source, &errors);
             let mut spec = Specification::from(tree);
             spec.diagnose();
             let issues = issue::issues(&spec);
 
             let elapsed = start.elapsed();
-            let mut count = 0;
+            let mut count = errors.len();
 
             for ((issues, path), span) in issues
                 .into_iter()
@@ -84,6 +91,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     Ok(())
+}
+
+fn report_syntax_errors(source: &str, errors: &[Span]) {
+    for span in errors {
+        let end = span.end.index.min(source.len());
+        let start = span.start.index.min(end);
+        let code = source[start..end].bold();
+        eprintln!("{:12} {}", format!("{}", span.start).bold(), "syntax error".red());
+        if !code.is_empty() {
+            eprintln!("    {}", code);
+        }
+    }
 }
 
 struct Issue {

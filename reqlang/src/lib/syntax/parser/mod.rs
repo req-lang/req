@@ -1,5 +1,3 @@
-use itertools::Itertools;
-
 use crate::{
     node::{
         self,
@@ -9,6 +7,7 @@ use crate::{
         location::Span,
         tokenizer::entity::{IntoLexeme, IntoPosition, IntoTokens},
     },
+    utils::cursor::Cursor,
 };
 
 pub mod entity;
@@ -29,22 +28,24 @@ struct SpansDraft {
     expressions: Vec<Span>,
 }
 
-pub fn parse(input: &str) -> Result<(Tree, Spans), Span> {
+pub fn parse(input: &str) -> (Tree, Spans, Vec<Span>) {
     let mut tree = Draft::default();
     let mut spans = SpansDraft::default();
     let mut draft = entity::Draft::new(&mut tree, &mut spans);
-    let mut tokens = input
+    let mut errors = Vec::new();
+    let tokens: Vec<_> = input
         .char_indices()
         .positioned()
         .lexemes()
         .tokens()
-        .multipeek();
-    entity::parse_tokens(&mut tokens, &mut draft)?;
+        .collect();
+    let mut cursor = Cursor::new(&tokens);
+    entity::parse_tree(&mut cursor, &mut draft, &mut errors);
     let spans = Spans {
         entities: spans.entities.into(),
         expressions: spans.expressions.into(),
     };
-    Ok((tree.into(), spans))
+    (tree.into(), spans, errors)
 }
 
 #[cfg(test)]
@@ -82,8 +83,8 @@ mod tests {
         let mut expected = Draft::default();
         push(&mut expected, mock::entity::package("x"), &[]);
 
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap().0, Tree::from(expected));
+        assert!(result.2.is_empty());
+        assert_eq!(result.0, Tree::from(expected));
     }
 
     #[test]
@@ -94,41 +95,41 @@ mod tests {
         let mut expected = Draft::default();
         push(&mut expected, mock::entity::package("x"), &[]);
 
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap().0, Tree::from(expected));
+        assert!(result.2.is_empty());
+        assert_eq!(result.0, Tree::from(expected));
     }
 
     #[test]
     fn parses_input_with_nested_packages() {
         let input = "package x package p package package";
         let result = parse(input);
-        assert!(result.is_ok());
+        assert!(result.2.is_empty());
 
         let mut expected = Draft::default();
         let p = push(&mut expected, mock::entity::package("p"), &[]);
         push(&mut expected, mock::entity::package("x"), &[p]);
 
-        assert_eq!(result.unwrap().0, Tree::from(expected));
+        assert_eq!(result.0, Tree::from(expected));
     }
 
     #[test]
     fn parses_input_with_nested_part_and_package() {
         let input = "package x part p part package";
         let result = parse(input);
-        assert!(result.is_ok());
+        assert!(result.2.is_empty());
 
         let mut expected = Draft::default();
         let p = push(&mut expected, mock::entity::part("p"), &[]);
         push(&mut expected, mock::entity::package("x"), &[p]);
 
-        assert_eq!(result.unwrap().0, Tree::from(expected));
+        assert_eq!(result.0, Tree::from(expected));
     }
 
     #[test]
     fn parses_input_with_single_attribute() {
         let input = "package x part p let u in real part package";
         let result = parse(input);
-        assert!(result.is_ok());
+        assert!(result.2.is_empty());
 
         let mut expected = Draft::default();
         let u = mock::entity::attribute(&mut expected, "u", "real");
@@ -136,14 +137,14 @@ mod tests {
         let p = push(&mut expected, mock::entity::part("p"), &[u]);
         push(&mut expected, mock::entity::package("x"), &[p]);
 
-        assert_eq!(result.unwrap().0, Tree::from(expected));
+        assert_eq!(result.0, Tree::from(expected));
     }
 
     #[test]
     fn parses_input_with_part_and_attribute() {
         let input = "package x part p let u in real \\m\\ let v in integer part package";
         let result = parse(input);
-        assert!(result.is_ok());
+        assert!(result.2.is_empty());
 
         let mut expected = Draft::default();
         let mut u = mock::entity::attribute(&mut expected, "u", "real");
@@ -157,26 +158,27 @@ mod tests {
         let p = push(&mut expected, mock::entity::part("p"), &[u, v]);
         push(&mut expected, mock::entity::package("x"), &[p]);
 
-        assert_eq!(result.unwrap().0, Tree::from(expected));
+        assert_eq!(result.0, Tree::from(expected));
     }
 
     #[test]
     fn parses_enum_type() {
         let input = "package x type T has a | b | c type package";
         let result = parse(input);
-        assert!(result.is_ok());
+        assert!(result.2.is_empty());
 
         let mut expected = Draft::default();
         let t = push(&mut expected, mock::entity::typ("T", &["a", "b", "c"]), &[]);
         push(&mut expected, mock::entity::package("x"), &[t]);
 
-        assert_eq!(result.unwrap().0, Tree::from(expected));
+        assert_eq!(result.0, Tree::from(expected));
     }
 
     #[test]
     fn keeps_one_span_per_node() {
         let input = "package x part p let u in real + 1 part package";
-        let (tree, spans) = parse(input).unwrap();
+        let (tree, spans, errors) = parse(input);
+        assert!(errors.is_empty());
 
         assert_eq!(spans.entities.len(), tree.entities.len());
         assert_eq!(spans.expressions.len(), tree.expressions.len());
@@ -185,7 +187,8 @@ mod tests {
     #[test]
     fn spans_follow_the_order_of_the_entities() {
         let input = "package x part p part part q part package";
-        let (tree, spans) = parse(input).unwrap();
+        let (tree, spans, errors) = parse(input);
+        assert!(errors.is_empty());
 
         // A parent is stored after its children, and so is its span
         let starts: Vec<_> = spans.entities.iter().map(|s| s.start.index).collect();
@@ -278,12 +281,53 @@ mod tests {
     }
 
     fn get_requirement(input: &str) -> (Tree, Requirement) {
-        let (tree, _) = parse(input).unwrap();
+        let (tree, _, errors) = parse(input);
+        assert!(errors.is_empty());
         let requirement = tree
             .entities
             .iter()
             .find_map(|n| n.variant.requirement().cloned())
             .expect("no requirement found");
         (tree, requirement)
+    }
+
+    #[test]
+    fn attaches_comments_to_the_following_nested_entity() {
+        use crate::node::markup::{Item, Markup};
+
+        let input = "@@ first comment @@ package x @@ second comment @@ package y package package";
+        let result = parse(input);
+        assert!(result.2.is_empty());
+
+        let comment = |text: &str| Some(Markup::from(vec![Item::Text(text.to_string())]));
+
+        let mut expected = Draft::default();
+        let mut y = mock::entity::package("y");
+        y.meta.comment = comment("second comment");
+        let y = push(&mut expected, y, &[]);
+        let mut x = mock::entity::package("x");
+        x.meta.comment = comment("first comment");
+        push(&mut expected, x, &[y]);
+
+        assert_eq!(result.0, Tree::from(expected));
+    }
+
+    #[test]
+    fn attaches_tags_to_the_following_nested_entity() {
+        let input = "# kind outer # package x # kind inner # package y package package";
+        let result = parse(input);
+        assert!(result.2.is_empty());
+
+        let tag = |value: &str| entity::Tag::new("kind".to_string(), Some(value.to_string()));
+
+        let mut expected = Draft::default();
+        let mut y = mock::entity::package("y");
+        y.meta.tags.push(tag("inner"));
+        let y = push(&mut expected, y, &[]);
+        let mut x = mock::entity::package("x");
+        x.meta.tags.push(tag("outer"));
+        push(&mut expected, x, &[y]);
+
+        assert_eq!(result.0, Tree::from(expected));
     }
 }

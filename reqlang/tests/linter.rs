@@ -2,13 +2,19 @@ use reqlang::*;
 
 pub const PATH_ROOT: &str = "tests/data/valid";
 
+fn parse_without_errors(input: &str) -> node::tree::Tree {
+    let (tree, _, errors) = syntax::parser::parse(input);
+    assert!(errors.is_empty(), "syntax errors: {:?}", errors);
+    tree
+}
+
 fn assert_isomorphic_formatter(filename: &str) {
     let path = std::path::PathBuf::from(PATH_ROOT).join(filename);
     let input = std::fs::read_to_string(path).unwrap();
-    let (expected, _) = syntax::parser::parse(&input).unwrap();
+    let expected = parse_without_errors(&input);
 
     let output = renderer::formatter::format_string(&expected, 0);
-    let (actual, _) = syntax::parser::parse(&output).unwrap();
+    let actual = parse_without_errors(&output);
 
     if actual != expected || input != output {
         eprintln!("*** INPUT ***\n{}\n\n", input);

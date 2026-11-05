@@ -9,11 +9,10 @@ pub const PATH_ROOT: &str = "tests/data/valid";
 fn assert_valid_parsing_and_analysis(filename: &str) -> Specification {
     let path = std::path::PathBuf::from(PATH_ROOT).join(filename);
     let input = std::fs::read_to_string(path).unwrap();
-    let result = syntax::parser::parse(&input);
+    let (tree, _, errors) = syntax::parser::parse(&input);
 
-    assert!(result.is_ok());
+    assert!(errors.is_empty(), "syntax errors: {:?}", errors);
 
-    let (tree, _) = result.unwrap();
     let mut spec = Specification::from(tree);
     spec.diagnose();
     let issues: Vec<_> = issue::issues(&spec).into_iter().flatten().collect();

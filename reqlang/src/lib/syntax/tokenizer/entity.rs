@@ -81,7 +81,7 @@ impl Keyword {
     }
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum TokenVariant<'a> {
     Identifier(&'a str),
     Expression(&'a str),
@@ -92,7 +92,7 @@ pub enum TokenVariant<'a> {
     Tag(&'a str, Option<&'a str>),
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Token<'a> {
     pub span: Span,
     pub variant: TokenVariant<'a>,
