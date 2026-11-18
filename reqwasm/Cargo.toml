@@ -1,0 +1,21 @@
+[package]
+name = "reqwasm"
+version = "0.1.0"
+description = "req language checker and formatter for the browser (WebAssembly)"
+edition = "2024"
+
+[package.metadata]
+author = "Sami Dahoux <sami@qitab.io>"
+copyright = "© 2025-2026. All rights reserved. Sami Dahoux"
+
+[dependencies]
+reqlang = { path = "../reqlang/" }
+wasm-bindgen = "0.2.117"
+serde = { version = "1", features = ["derive"] }
+serde-wasm-bindgen = "0.6"
+console_error_panic_hook = "0.1"
+
+[lib]
+name = "reqwasm"
+path = "src/lib.rs"
+crate-type = ["cdylib", "rlib"]

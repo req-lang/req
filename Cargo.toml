@@ -1,6 +1,6 @@
 [workspace]
 
-members = ["reqlang", "reqtool", "reqlsp"]
+members = ["reqlang", "reqtool", "reqlsp", "reqwasm"]
 resolver = "2"
 
 [workspace.package]
@@ -9,3 +9,11 @@ version = "0.9.0"
 [profile.profiling]
 inherits = "release"
 debug = true
+
+# The WebAssembly build of the checker (see scripts/build-wasm.sh): small, the CLI's release profile is untouched
+[profile.wasm]
+inherits = "release"
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true
