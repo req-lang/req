@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 set -e
 
-REPO="req-lang/reqtool"
+REPO="req-lang/req"
 BINARY="reqtool"
 INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
 
@@ -54,15 +54,15 @@ echo "Installing ${BINARY} ${VERSION} (${TARGET}) to ${INSTALL_DIR}"
 
 # Download
 TMP=$(mktemp)
+trap 'rm -f "$TMP"' EXIT
 curl -fsSL "$URL" -o "$TMP"
-chmod +x "$TMP"
 
 # Install
 if [ -w "$INSTALL_DIR" ]; then
-  mv "$TMP" "${INSTALL_DIR}/${BINARY}"
+  install -m 755 "$TMP" "${INSTALL_DIR}/${BINARY}"
 else
   echo "Installing to ${INSTALL_DIR} requires elevated privileges."
-  sudo mv "$TMP" "${INSTALL_DIR}/${BINARY}"
+  sudo install -m 755 "$TMP" "${INSTALL_DIR}/${BINARY}"
 fi
 
 echo "Done. Run 'reqtool --help' to get started."

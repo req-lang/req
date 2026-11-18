@@ -25,6 +25,9 @@ jobs:
           - target: aarch64-apple-darwin
             os: macos-latest
             use_cross: false
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            use_cross: false
           - target: x86_64-pc-windows-msvc
             os: windows-latest
             use_cross: false
@@ -45,26 +48,29 @@ jobs:
         shell: bash
         run: |
           if [ "${{ matrix.use_cross }}" = "true" ]; then
-            cross build --release --bin reqtool --target ${{ matrix.target }}
+            cross build --release --bin reqtool --bin reqlsp --target ${{ matrix.target }}
           else
-            cargo build --release --bin reqtool --target ${{ matrix.target }}
+            cargo build --release --bin reqtool --bin reqlsp --target ${{ matrix.target }}
           fi
 
-      - name: Package binary
+      - name: Package binaries
         shell: bash
         run: |
           TARGET=${{ matrix.target }}
+          EXT=""
           if [[ "$TARGET" == *windows* ]]; then
-            ARTIFACT="reqtool-${TARGET}.exe"
-            mv target/${TARGET}/release/reqtool.exe ${ARTIFACT}
-          else
-            ARTIFACT="reqtool-${TARGET}"
-            mv target/${TARGET}/release/reqtool ${ARTIFACT}
-            strip ${ARTIFACT} || true
+            EXT=".exe"
           fi
-          echo "ARTIFACT=${ARTIFACT}" >> $GITHUB_ENV
+          mkdir dist
+          for BIN in reqtool reqlsp; do
+            ARTIFACT="dist/${BIN}-${TARGET}${EXT}"
+            mv "target/${TARGET}/release/${BIN}${EXT}" "${ARTIFACT}"
+            if [ -z "$EXT" ]; then
+              strip "${ARTIFACT}" || true
+            fi
+          done
 
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ env.ARTIFACT }}
+          files: dist/*

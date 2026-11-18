@@ -1,6 +1,6 @@
 $ErrorActionPreference = "Stop"
 
-$Repo = "req-lang/reqtool"
+$Repo = "req-lang/req"
 $Binary = "reqtool"
 $InstallDir = "$env:LOCALAPPDATA\Programs\reqtool"
 
