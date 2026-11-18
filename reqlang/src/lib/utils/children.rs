@@ -23,6 +23,12 @@ pub trait ChildrenIter<N> {
     fn children_iter(&self) -> impl DoubleEndedIterator<Item = N>;
 }
 
+pub trait ChildrenIterMut<N> {
+    fn children_iter_mut<'a>(&'a mut self) -> impl Iterator<Item = &'a mut N>
+    where
+        N: 'a;
+}
+
 impl<N, T: ChildrenIter<N>> ChildrenIter<N> for &T {
     fn children_iter(&self) -> impl DoubleEndedIterator<Item = N> {
         (*self).children_iter()

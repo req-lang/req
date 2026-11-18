@@ -1,5 +1,5 @@
 use crate::{
-    node::{arena, expression, markup::Markup, reference},
+    node::{arena, expression, markup, reference},
     utils::children::{Children, ChildrenIter, ChildrenMut, IntoChildren},
 };
 
@@ -19,19 +19,11 @@ impl Node {
         Self { meta, variant }
     }
 
-    pub fn markups(&self) -> impl Iterator<Item = &Markup> {
+    pub fn markups(&self) -> impl Iterator<Item = markup::Idx> {
         let mut ret = Vec::new();
 
         ret.extend(self.variant.markups());
-        ret.extend(self.meta.comment.iter());
-        ret.into_iter()
-    }
-
-    pub fn markups_mut(&mut self) -> impl Iterator<Item = &mut Markup> {
-        let mut ret = Vec::new();
-
-        ret.extend(self.variant.markups_mut());
-        ret.extend(self.meta.comment.iter_mut());
+        ret.extend(self.meta.comment);
         ret.into_iter()
     }
 }
@@ -164,6 +156,20 @@ impl Variant {
         }
     }
 
+    pub fn typ(&self) -> Option<&Type> {
+        match self {
+            Variant::Type(typ) => Some(typ),
+            _ => None,
+        }
+    }
+
+    pub fn typ_mut(&mut self) -> Option<&mut Type> {
+        match self {
+            Variant::Type(typ) => Some(typ),
+            _ => None,
+        }
+    }
+
     pub fn references(&self) -> impl Iterator<Item = reference::Idx> {
         let mut ret = Vec::new();
 
@@ -201,29 +207,13 @@ impl Variant {
         ret.into_iter()
     }
 
-    pub fn markups(&self) -> impl Iterator<Item = &Markup> {
+    pub fn markups(&self) -> impl Iterator<Item = markup::Idx> {
         let mut ret = Vec::new();
 
         match self {
             Variant::Requirement(requirement) => match &requirement.variant {
                 RequirementVariant::Informal(markup) => {
-                    ret.push(markup);
-                }
-                RequirementVariant::Formal(_) => {}
-            },
-            _ => {}
-        }
-
-        ret.into_iter()
-    }
-
-    pub fn markups_mut(&mut self) -> impl Iterator<Item = &mut Markup> {
-        let mut ret = Vec::new();
-
-        match self {
-            Variant::Requirement(requirement) => match &mut requirement.variant {
-                RequirementVariant::Informal(markup) => {
-                    ret.push(markup);
+                    ret.push(*markup);
                 }
                 RequirementVariant::Formal(_) => {}
             },
@@ -286,7 +276,7 @@ impl Package {
     }
 }
 
-#[derive(Default, Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Requirement {
     pub restriction: Option<reference::Idx>,
     pub allocation: Option<reference::Idx>,
@@ -308,31 +298,15 @@ impl From<RequirementVariant> for Requirement {
 }
 
 impl Requirement {
-    pub fn informal(&self) -> Option<&Markup> {
-        match &self.variant {
-            RequirementVariant::Informal(markup) => Some(markup),
-            _ => None,
-        }
-    }
-
-    pub fn informal_mut(&mut self) -> Option<&mut Markup> {
-        match &mut self.variant {
-            RequirementVariant::Informal(markup) => Some(markup),
-            _ => None,
-        }
+    pub fn informal(&self) -> Option<markup::Idx> {
+        self.variant.informal()
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RequirementVariant {
     Formal(expression::Idx),
-    Informal(Markup),
-}
-
-impl Default for RequirementVariant {
-    fn default() -> Self {
-        Self::Informal(Markup::default())
-    }
+    Informal(markup::Idx),
 }
 
 impl RequirementVariant {
@@ -344,9 +318,9 @@ impl RequirementVariant {
             _ => None,
         }
     }
-    pub fn informal(&self) -> Option<&Markup> {
+    pub fn informal(&self) -> Option<markup::Idx> {
         match self {
-            RequirementVariant::Informal(markup) => Some(markup),
+            RequirementVariant::Informal(markup) => Some(*markup),
             _ => None,
         }
     }
@@ -392,7 +366,7 @@ impl From<Vec<String>> for Type {
 pub struct Meta {
     pub label: String,
     pub tags: Vec<Tag>,
-    pub comment: Option<Markup>,
+    pub comment: Option<markup::Idx>,
 }
 
 impl From<String> for Meta {

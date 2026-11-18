@@ -1,6 +1,6 @@
 package Specification
   requirement r 
   is
-    all
+    allowed
   requirement
 package

@@ -24,7 +24,6 @@ package A
     @@
     very broad requirement
     @@
-
   requirement
   requirement R1 
     on X::X1
@@ -33,7 +32,6 @@ package A
     @@
     Some tests 1
     @@
-
   requirement
   requirement R2 
     on X::X1::X2
@@ -43,7 +41,6 @@ package A
     @@
     Some tests 2
     @@
-
   requirement
   requirement R3 
     on X::X1::X2::x
@@ -53,6 +50,5 @@ package A
     @@
     Some tests on {X::X1::X2::x}
     @@
-
   requirement
 package

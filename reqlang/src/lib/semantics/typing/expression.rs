@@ -43,12 +43,10 @@ impl TypeKind {
 pub enum Issue {
     #[error("previously caught error")]
     Poison,
-    #[error("expected a set got {0}")]
+    #[error("expected a set type got {0}")]
     NotASet(TypeKind),
-    #[error("expected {0} got {1}")]
+    #[error("expected type {0} got {1}")]
     UnexpectedType(TypeKind, TypeKind),
-    #[error("cannot retrieve the domain for this identifier")]
-    DomainNotFound,
     #[error("this expression points to an entity that has no type")]
     NotEvaluable,
 }

@@ -2,16 +2,19 @@ use crate::{
     Specification,
     issue::Issue::Reference,
     node::{
+        self,
         entity::{self, Idx},
-        expression::Variant,
+        expression::{self, Variant},
+        identifier, reference,
         tree::Tree,
     },
     semantics::{
-        connection::{self, entity::Neighbors},
+        Analysis, connection,
         link::Links,
         path,
         typing::{self, Result},
     },
+    syntax::{location::Span, parser::Info},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -24,22 +27,47 @@ pub enum Severity {
 
 #[derive(Debug, thiserror::Error)]
 pub enum Issue {
-    #[error("reference not found")]
-    Reference,
-    #[error("type error: {0}")]
-    Type(typing::expression::Issue),
-    #[error("connection error: {0}")]
-    Connection(connection::issue::IssueKind),
-    #[error("path error: {0}")]
+    #[error("reference target not found in scope")]
+    Reference(reference::Idx),
+    #[error("reference target not found in scope")]
+    Identifier(identifier::Idx),
+    #[error("{0}")]
+    Type(typing::expression::Issue, expression::Idx),
+    #[error("{0}")]
+    Owned(connection::issue::entity::Issue),
+    #[error("{0}")]
+    Network(connection::issue::reference::Issue, reference::Idx),
+    #[error("{0}")]
     Path(path::Issue),
 }
 
 impl From<&Issue> for Severity {
     fn from(value: &Issue) -> Self {
-        match value {
-            Issue::Reference => Severity::Critical,
-            Issue::Type(issue) => issue.into(),
-            Issue::Connection(kind) => kind.into(),
+        value.severity()
+    }
+}
+
+impl Issue {
+    /// Where the issue is in the source: the most precise span the issue knows, `entity` (the
+    /// span of the entity it was reported on) otherwise
+    pub fn span(&self, entity: node::entity::Idx, info: &Info) -> Span {
+        match self {
+            Issue::Type(_, expr) => info.expression.span_of(*expr),
+            Issue::Identifier(identifier) => info.identifiers.span_of(*identifier),
+            Issue::Reference(reference) => info.references.span_of(*reference),
+            Issue::Network(_, reference) => info.references.span_of(*reference),
+            Issue::Owned(_) | Issue::Path(_) => {
+                info.entities.tokens_of(entity).first().unwrap().span
+            }
+        }
+    }
+
+    pub fn severity(&self) -> Severity {
+        match self {
+            Issue::Reference(_) | Issue::Identifier(_) => Severity::Critical,
+            Issue::Type(issue, _) => issue.into(),
+            Issue::Owned(kind) => kind.into(),
+            Issue::Network(kind, _) => kind.into(),
             Issue::Path(_) => Severity::Critical,
         }
     }
@@ -47,17 +75,18 @@ impl From<&Issue> for Severity {
 
 /// Every issue of every entity, `analysis` must have been diagnosed
 pub fn issues(spec: &Specification) -> entity::Arena<Vec<Issue>> {
+    let analysis = &spec.analysis;
     spec.tree
         .entities
         .indices()
-        .zip(&spec.analysis.paths)
-        .zip(&spec.analysis.neighbors)
-        .map(|((idx, location), neighbors)| {
+        .zip(&analysis.paths)
+        .zip(&analysis.connection.entity)
+        .map(|((idx, location), owned)| {
             path_issues(location)
-                .chain(reference_errors(&spec.tree, &spec.analysis.links, idx))
-                .chain(connection_errors(neighbors))
-                .chain(expr_errors(&spec.tree, &spec.analysis.types, idx))
-                .map(Issue::from)
+                .chain(reference_errors(&spec.tree, &analysis.links, idx))
+                .chain(connection_entity_errors(owned))
+                .chain(connection_reference_errors(&spec.tree, analysis, idx))
+                .chain(expr_errors(&spec.tree, &analysis.types, idx))
                 .collect()
         })
         .collect()
@@ -76,8 +105,10 @@ pub fn expr_errors(
 
     for root in tree.entities[idx].variant.expressions() {
         for (expr, _) in tree.expressions.subtree(root) {
-            if let Err(typ) = &types[expr] {
-                issues.push(typ.into());
+            if let Err(typ) = &types[expr]
+                && !matches!(typ, typing::expression::Issue::Poison)
+            {
+                issues.push(Issue::Type(typ.clone(), expr));
             }
         }
     }
@@ -85,45 +116,40 @@ pub fn expr_errors(
     IssueIterator { issues }
 }
 
-pub fn connection_errors(neighbors: &Neighbors) -> IssueIterator {
-    let Neighbors {
-        inbound,
-        outbound,
-        parent,
-    } = neighbors;
-    let trace = &outbound.traceability;
-
-    let connections = parent
-        .iter()
-        .chain(&outbound.restriction)
-        .chain(&outbound.allocation)
-        .chain(&trace.specializations)
-        .chain(&trace.refinements)
-        .chain(&trace.derivations)
-        .flat_map(|c| &c.issues);
-
+pub fn connection_entity_errors(owned: &[connection::issue::entity::Issue]) -> IssueIterator {
     IssueIterator {
-        issues: connections
-            .chain(&inbound.issues)
-            .chain(&inbound.traceability.issues)
-            .chain(&outbound.issues)
-            .cloned()
-            .map(Issue::Connection)
-            .collect(),
+        issues: owned.iter().cloned().map(Issue::Owned).collect(),
     }
+}
+
+/// The issues of the references of the entity
+pub fn connection_reference_errors(tree: &Tree, analysis: &Analysis, idx: Idx) -> IssueIterator {
+    let issues = tree.entities[idx]
+        .variant
+        .references()
+        .flat_map(|reference| {
+            analysis.connection.reference[reference]
+                .iter()
+                .map(move |kind| Issue::Network(kind.clone(), reference))
+        })
+        .collect();
+
+    IssueIterator { issues }
 }
 
 pub fn reference_errors(tree: &Tree, links: &Links, idx: Idx) -> IssueIterator {
     let mut issues = Vec::new();
 
     let variant = &tree.entities[idx].variant;
-    let references = variant
-        .references()
-        .chain(variant.markups().flat_map(|markup| markup.references()));
+    let references = variant.references().chain(
+        variant
+            .markups()
+            .flat_map(|markup| tree.markups[markup].references()),
+    );
     issues.extend(
         references
             .filter(|r| links.references[*r].is_none())
-            .map(|_| Reference),
+            .map(Reference),
     );
 
     for root in variant.expressions() {
@@ -131,7 +157,7 @@ pub fn reference_errors(tree: &Tree, links: &Links, idx: Idx) -> IssueIterator {
             if let Variant::Identifier(ident) = &node.variant
                 && links.identifiers[ident.target].is_none()
             {
-                issues.push(Reference);
+                issues.push(Issue::Identifier(ident.target));
             }
         }
     }
@@ -150,11 +176,5 @@ impl Iterator for IssueIterator {
 
     fn next(&mut self) -> Option<Self::Item> {
         self.issues.pop()
-    }
-}
-
-impl From<&typing::expression::Issue> for Issue {
-    fn from(value: &typing::expression::Issue) -> Self {
-        Issue::Type(value.clone())
     }
 }

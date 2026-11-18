@@ -50,13 +50,15 @@ always   = @{ "always" ~ !WORD_CHAR }
 
 postfix = _{ fac | call }
 fac     =  { "!" }
-call    =  { "(" ~ expr? ~ ("," ~ expr)* ~ ")" }
+call    =  { "(" ~ (expr ~ ("," ~ expr)*)? ~ ")" }
 
 primary = _{
-    (num | bool | undefined | set | rng | intv | when | aggregation | ident | "(" ~ expr ~ ")")
+    (num | bool | undefined | set | rng | intv | when | aggregation | ident | paren)
 }
 
-when      =  { whe ~ ((case ~ ("," ~ case)? ~ "," ~ otherwise) | (case ~ ",")* ~ case) ~ end }
+paren = { "(" ~ expr ~ ")" }
+
+when      =  { whe ~ case ~ ("," ~ case)* ~ ("," ~ otherwise)? ~ end }
 whe       = @{ "when" ~ !WORD_CHAR }
 case      =  { expr ~ then ~ expr }
 otherwise =  { other ~ expr }
@@ -112,6 +114,5 @@ WHITESPACE = _{ " " | "\t" | NEWLINE }
 // parse tree, the parser skips them.
 WORD_CHAR = _{ ASCII_ALPHANUMERIC | "_" }
 
-// Keywords are reserved and cannot be used as a label, except for aggregators:
-// they only appear at the start of an expression and need an `end`.
-keyword = _{ and | or | xor | implies | iff | ins | tol | uni | inter | diff | comp | incl | since | not | previous | rise | fall | event | always | whe | then | end | such | that | in | for | tru | fals | undefined | other | infinity }
+// Keywords are reserved and cannot be used as a label.
+keyword = _{ and | or | xor | implies | iff | ins | tol | uni | inter | diff | comp | incl | since | not | previous | rise | fall | event | always | whe | then | end | such | that | in | for | tru | fals | undefined | other | infinity | all | any | one | max | min | argmax | argmin | sup | inf | sum | prod | count | choose }

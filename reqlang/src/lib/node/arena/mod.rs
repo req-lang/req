@@ -25,6 +25,10 @@ impl<T, M> Arena<T, M> {
         self.inner.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.inner.is_empty()
+    }
+
     pub fn last_idx(&self) -> Idx<M> {
         (self.inner.len() - 1).into()
     }
@@ -35,6 +39,10 @@ impl<T, M> Arena<T, M> {
 
     pub fn iter(&self) -> std::slice::Iter<'_, T> {
         self.inner.iter()
+    }
+
+    pub fn push(&mut self, value: T) {
+        self.inner.push(value)
     }
 
     pub fn enumerate(&self) -> impl DoubleEndedIterator<Item = (Idx<M>, &T)> {

@@ -1,0 +1,7 @@
+default_job = "build"
+
+# Rebuilds the language server (and the reqlang it depends on) on every change.
+# The binary at target/debug/reqlsp is what the VSCode extension runs.
+[jobs.build]
+command = ["cargo", "build", "-p", "reqlsp", "--color", "always"]
+need_stdout = false

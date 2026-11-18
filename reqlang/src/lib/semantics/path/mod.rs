@@ -8,7 +8,7 @@ pub use crate::node::path::Path;
 
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum Issue {
-    #[error("Two entities have the same name at the same location")]
+    #[error("two entities have the same name at the same location")]
     Duplicated,
 }
 

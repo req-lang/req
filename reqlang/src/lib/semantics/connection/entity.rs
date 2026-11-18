@@ -1,65 +1,35 @@
-use std::{
-    collections::HashSet,
-    ops::{Index, IndexMut},
-};
+use std::ops::{Index, IndexMut};
 
 use crate::{
     node::{
         entity::{Arena, Idx, TraceabilityKind},
         tree::Tree,
     },
-    semantics::{
-        connection::{
-            graph,
-            issue::{self, IssueKind},
-        },
-        link::Links,
-    },
+    semantics::{connection::graph, link::Links},
 };
 
+/// The entities an entity is connected to
 #[derive(Default, Debug, Clone)]
 pub struct Neighbors {
     pub inbound: Inbound,
     pub outbound: Outbound,
-    pub parent: Option<Connection>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Connection {
-    pub target: Idx,
-    pub issues: Vec<IssueKind>,
-}
-
-impl Connection {
-    pub fn new(target: Idx) -> Self {
-        Connection {
-            target,
-            issues: Vec::new(),
-        }
-    }
-}
-
-impl From<Idx> for Connection {
-    fn from(target: Idx) -> Self {
-        Connection::new(target)
-    }
+    pub parent: Option<Idx>,
 }
 
 #[derive(Default, Debug, Clone)]
 pub struct Traceability {
-    pub derivations: Vec<Connection>,
-    pub refinements: Vec<Connection>,
-    pub specializations: Vec<Connection>,
-    pub issues: Vec<IssueKind>,
+    pub derivations: Vec<Idx>,
+    pub refinements: Vec<Idx>,
+    pub specializations: Vec<Idx>,
 }
 
 impl Traceability {
-    pub fn iter(&self) -> impl Iterator<Item = (&Connection, TraceabilityKind)> {
+    pub fn iter(&self) -> impl Iterator<Item = (Idx, TraceabilityKind)> {
         use TraceabilityKind::*;
 
-        let derivations = self.derivations.iter().map(|c| (c, Derivation));
-        let refinements = self.refinements.iter().map(|c| (c, Refinement));
-        let specializations = self.specializations.iter().map(|c| (c, Specialization));
+        let derivations = self.derivations.iter().map(|c| (*c, Derivation));
+        let refinements = self.refinements.iter().map(|c| (*c, Refinement));
+        let specializations = self.specializations.iter().map(|c| (*c, Specialization));
 
         derivations.chain(refinements).chain(specializations)
     }
@@ -78,7 +48,7 @@ impl IndexMut<TraceabilityKind> for Traceability {
 }
 
 impl Index<TraceabilityKind> for Traceability {
-    type Output = Vec<Connection>;
+    type Output = Vec<Idx>;
 
     fn index(&self, index: TraceabilityKind) -> &Self::Output {
         use TraceabilityKind::*;
@@ -94,44 +64,21 @@ impl Index<TraceabilityKind> for Traceability {
 // Derived from outbound connections
 #[derive(Default, Debug, Clone)]
 pub struct Inbound {
-    pub usages: Vec<Connection>,
-    pub restrictions: Vec<Connection>,
-    pub allocations: Vec<Connection>,
+    pub usages: Vec<Idx>,
+    pub restrictions: Vec<Idx>,
+    pub allocations: Vec<Idx>,
     pub traceability: Traceability,
-    pub issues: Vec<IssueKind>,
 }
 
 // Explicitely defined in the syntax
 #[derive(Default, Debug, Clone)]
 pub struct Outbound {
-    pub usages: Vec<Connection>,
-    pub restriction: Option<Connection>,
-    pub allocation: Option<Connection>,
+    pub usages: Vec<Idx>,
+    pub restriction: Option<Idx>,
+    pub allocation: Option<Idx>,
     pub traceability: Traceability,
-    pub issues: Vec<IssueKind>,
 }
 
 pub fn neighbors(tree: &Tree, links: &Links, neighbors: &mut Arena<Neighbors>) {
     graph::collect_neighbors(tree, links, neighbors);
-}
-
-pub fn diagnostics(tree: &Tree, neighbors: &mut Arena<Neighbors>) {
-    let cycles: HashSet<Idx> = detect_traceability_cycles(neighbors)
-        .into_iter()
-        .flatten()
-        .collect();
-
-    for idx in neighbors.indices() {
-        issue::collect(&tree.entities, neighbors, &cycles, idx);
-    }
-}
-
-fn detect_traceability_cycles(arena: &Arena<Neighbors>) -> Vec<Vec<Idx>> {
-    arena.cycles(|node| {
-        node.inbound
-            .traceability
-            .iter()
-            .map(|(t, _)| t.target)
-            .collect::<Vec<_>>()
-    })
 }

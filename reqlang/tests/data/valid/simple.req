@@ -18,6 +18,5 @@ package A
     @@
     Some tests {B::x}
     @@
-
   requirement
 package

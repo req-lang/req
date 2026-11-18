@@ -1,4 +1,5 @@
 /target
+/release
 *.log
 *.json.gz
 *.tex
@@ -8,3 +9,4 @@
 *.aux
 *.pdf
 *.fdb_latexmk
+

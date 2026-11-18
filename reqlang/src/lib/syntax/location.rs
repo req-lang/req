@@ -1,13 +1,24 @@
 use std::{
     fmt::Display,
     ops::{Add, Range},
+    str::CharIndices,
 };
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
-#[error("Syntax error at: {start}")]
+#[error("syntax error at: {start}")]
 pub struct Span {
     pub start: Position,
     pub end: Position,
+}
+
+pub trait SpanLike {
+    fn span(&self) -> Span;
+}
+
+impl SpanLike for Span {
+    fn span(&self) -> Span {
+        *self
+    }
 }
 
 impl Span {
@@ -19,12 +30,26 @@ impl Span {
     pub fn range(&self) -> Range<usize> {
         self.start.index..self.end.index
     }
+}
 
-    #[inline]
-    pub fn merge(mut self, other: Self) -> Self {
-        self.end = other.end;
-        self
-    }
+/// Smallest span containing all of `spans`. The spans may be nested (a parent comes before its
+/// children and can end after the last of them), so the last one is not necessarily the one
+/// that ends last.
+pub fn hull(spans: impl Iterator<Item = Span>) -> Span {
+    spans
+        .reduce(|hull, span| Span {
+            start: if span.start.index < hull.start.index {
+                span.start
+            } else {
+                hull.start
+            },
+            end: if span.end.index > hull.end.index {
+                span.end
+            } else {
+                hull.end
+            },
+        })
+        .unwrap_or_default()
 }
 
 impl From<(pest::error::LineColLocation, pest::error::InputLocation)> for Span {
@@ -77,14 +102,6 @@ pub struct Position {
 }
 
 impl Position {
-    pub fn start() -> Self {
-        Self {
-            line: 1,
-            column: 1,
-            index: 0,
-        }
-    }
-
     pub fn new(line: usize, column: usize, index: usize) -> Self {
         Self {
             line,
@@ -106,20 +123,27 @@ impl From<((usize, usize), usize)> for Position {
     fn from(value: ((usize, usize), usize)) -> Self {
         let ((line, column), index) = value;
         Self {
-            line,
-            column,
+            line: line - 1,
+            column: column - 1,
             index,
         }
     }
 }
 
+/// Translates a position relative to the start of a text (`self`) by the position of that
+/// text in the file (`rhs`). Only the first line starts at the column of the text, the next
+/// ones start at the beginning of their line.
 impl Add for Position {
     type Output = Self;
 
     fn add(self, rhs: Self) -> Self::Output {
         Self {
-            line: self.line + rhs.line - 1,
-            column: self.column + rhs.column - 1,
+            line: self.line + rhs.line,
+            column: if self.line == 0 {
+                self.column + rhs.column
+            } else {
+                self.column
+            },
             index: self.index + rhs.index,
         }
     }
@@ -128,5 +152,61 @@ impl Add for Position {
 impl Display for Position {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}:{}", self.line, self.column)
+    }
+}
+
+pub struct PositionIterator<'a> {
+    chars: CharIndices<'a>,
+    position: Position,
+    input: &'a str,
+    offset: usize,
+}
+
+impl<'a> PositionIterator<'a> {
+    pub fn position(&self) -> Position {
+        self.position
+    }
+
+    pub fn input(&self) -> &'a str {
+        self.input
+    }
+}
+
+impl<'a> Iterator for PositionIterator<'a> {
+    type Item = (Position, char);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let (idx, c) = self.chars.next()?;
+        self.position.index = self.offset + idx;
+
+        let ret = (self.position, c);
+        self.position.index += c.len_utf8();
+        match c {
+            '\n' => {
+                self.position.line += 1;
+                self.position.column = 0;
+            }
+
+            _ => {
+                self.position.column += 1;
+            }
+        }
+
+        return Some(ret);
+    }
+}
+
+pub trait IntoPosition<'a> {
+    fn positioned(self) -> PositionIterator<'a>;
+}
+
+impl<'a> IntoPosition<'a> for CharIndices<'a> {
+    fn positioned(self) -> PositionIterator<'a> {
+        PositionIterator {
+            input: self.as_str(),
+            chars: self,
+            position: Position::default(),
+            offset: 0,
+        }
     }
 }

@@ -4,7 +4,10 @@ use crate::{
         expression,
         tree::Tree,
     },
-    semantics::{connection::entity::Neighbors, link::Links},
+    semantics::{
+        connection::{entity::Neighbors, issue::Issues},
+        link::Links,
+    },
 };
 
 pub mod connection;
@@ -18,6 +21,8 @@ pub struct Analysis {
     pub links: Links,
     pub types: expression::Arena<typing::Result>,
     pub neighbors: entity::Arena<Neighbors>,
+    /// The issues of the connections, see [Analysis::diagnose]
+    pub connection: Issues,
 }
 
 impl From<&Tree> for Analysis {
@@ -32,6 +37,7 @@ impl From<&Tree> for Analysis {
             links,
             types,
             neighbors,
+            connection: Issues::new(tree),
         }
     }
 }
@@ -39,6 +45,6 @@ impl From<&Tree> for Analysis {
 impl Analysis {
     pub(super) fn diagnose(&mut self, tree: &Tree) {
         path::duplicates(&mut self.paths);
-        connection::diagnostics(tree, &mut self.neighbors);
+        self.connection = Issues::diagnose(tree, &self.links, &self.neighbors);
     }
 }

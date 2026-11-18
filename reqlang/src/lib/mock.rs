@@ -1,10 +1,10 @@
 pub mod generator {
-    use super::entity::{add_child, add_root, formal, package, part, reference, requirement};
+    use super::entity::{add_child, add_root, formal, informal, package, part, reference};
     use super::expression::{binary, identifier, number};
     use crate::node::{
         expression::{Aggregator, BinaryOperator, Case, Comprehension, SetElement, Variant, When},
         markup::{Item, Markup},
-        tree::{Draft, Tree},
+        tree::Tree,
     };
 
     pub struct ExponentialSizeIterator {
@@ -52,7 +52,7 @@ pub mod generator {
 
     impl Generate for Simple {
         fn generate(&self) -> Tree {
-            let mut draft = Draft::default();
+            let mut draft = Tree::default();
             let root = add_root(&mut draft, package("root"));
 
             for p in 0..self.packages {
@@ -62,10 +62,10 @@ pub mod generator {
                 for d in 0..self.depth {
                     let curr = add_child(&mut draft, prev, package(format!("package_{p}_{d}")));
                     for r in 0..self.requirements {
-                        let mut req = requirement(format!("requirement_{p}_{d}_{r}"));
                         let content = repeat_words(self.words as usize);
-                        let informal = req.variant.requirement_mut().unwrap().informal_mut();
-                        *informal.unwrap() = Markup::from(vec![Item::Text(content)]);
+                        let text = Markup::from(vec![Item::Text(content)]);
+                        let label = format!("requirement_{p}_{d}_{r}");
+                        let req = informal(&mut draft, label, text);
                         add_child(&mut draft, curr, req);
                     }
                     prev = curr;
@@ -106,20 +106,18 @@ pub mod generator {
 
     impl Generate for ReferenceResolution {
         fn generate(&self) -> Tree {
-            let mut draft = Draft::default();
+            let mut draft = Tree::default();
             let root = add_root(&mut draft, package("root"));
             add_child(&mut draft, root, part("part"));
             add_child(&mut draft, root, part("other_part"));
 
             for i in 0..self.requirements {
-                let mut req = requirement(format!("req_{i}"));
                 let restriction = reference(&mut draft, "root::other_part");
                 let part = reference(&mut draft, "root::part");
                 let missing = reference(&mut draft, "root::not_existing");
-                let requirement = req.variant.requirement_mut().unwrap();
-                requirement.restriction = Some(restriction);
-                *requirement.informal_mut().unwrap() =
-                    Markup::from(vec![Item::Reference(part), Item::Reference(missing)]);
+                let text = Markup::from(vec![Item::Reference(part), Item::Reference(missing)]);
+                let mut req = informal(&mut draft, format!("req_{i}"), text);
+                req.variant.requirement_mut().unwrap().restriction = Some(restriction);
                 add_child(&mut draft, root, req);
             }
 
@@ -148,7 +146,7 @@ pub mod generator {
 
     impl Generate for ExpressionTyping {
         fn generate(&self) -> Tree {
-            let mut draft = Draft::default();
+            let mut draft = Tree::default();
             let root = add_root(&mut draft, package("root"));
             let attrs = add_child(&mut draft, root, part("attrs"));
             for (label, domain) in [
@@ -178,7 +176,7 @@ pub mod generator {
     }
 
     // attr_a + attr_b
-    fn make_addition(draft: &mut Draft, i: u64) -> crate::node::entity::Node {
+    fn make_addition(draft: &mut Tree, i: u64) -> crate::node::entity::Node {
         let left = identifier(draft, "root::attrs::attr_a");
         let right = identifier(draft, "root::attrs::attr_b");
         let root = binary(draft, BinaryOperator::Plus, left, right);
@@ -186,7 +184,7 @@ pub mod generator {
     }
 
     // all x > 0 for x in real end
-    fn make_all(draft: &mut Draft, i: u64) -> crate::node::entity::Node {
+    fn make_all(draft: &mut Tree, i: u64) -> crate::node::entity::Node {
         let domain = identifier(draft, "real");
         let x = identifier(draft, "x");
         let zero = number(draft, 0);
@@ -198,7 +196,7 @@ pub mod generator {
     }
 
     // when attr_bool then attr_a + 1
-    fn make_when(draft: &mut Draft, i: u64) -> crate::node::entity::Node {
+    fn make_when(draft: &mut Tree, i: u64) -> crate::node::entity::Node {
         let condition = identifier(draft, "root::attrs::attr_bool");
         let attr = identifier(draft, "root::attrs::attr_a");
         let one = number(draft, 1);
@@ -220,9 +218,10 @@ pub mod entity {
                 Attribute, Idx, Meta, Node, Package, Part, Requirement, RequirementVariant, Type,
                 Variant,
             },
+            markup::{self, Markup},
             path::Path,
             reference,
-            tree::{Draft, Tree},
+            tree::Tree,
         },
         utils::children::ChildrenMut,
     };
@@ -238,22 +237,36 @@ pub mod entity {
     }
 
     /// An attribute whose domain is the identifier `domain`, which is added to the draft
-    pub fn attribute<S: ToString>(draft: &mut Draft, label: S, domain: S) -> Node {
+    pub fn attribute<S: ToString>(draft: &mut Tree, label: S, domain: S) -> Node {
         let domain = expression::identifier(draft, domain);
         let variant = Variant::Attribute(Attribute::new(domain));
         Node::new(Meta::from(label.to_string()), variant)
     }
 
-    pub fn requirement<S: ToString>(label: S) -> Node {
-        let variant = RequirementVariant::default();
+    /// Adds a text to the markups of the draft
+    pub fn markup(draft: &mut Tree, text: Markup) -> markup::Idx {
+        let idx = draft.markups.len().into();
+        draft.markups.push(text);
+        idx
+    }
+
+    /// An informal requirement with no text, whose markup is added to the draft
+    pub fn requirement<S: ToString>(draft: &mut Tree, label: S) -> Node {
+        informal(draft, label, Markup::default())
+    }
+
+    /// An informal requirement with `text`, which is added to the draft
+    pub fn informal<S: ToString>(draft: &mut Tree, label: S, text: Markup) -> Node {
+        let text = markup(draft, text);
+        let variant = RequirementVariant::Informal(text);
         let variant = Variant::Requirement(Requirement::from(variant));
         Node::new(Meta::from(label.to_string()), variant)
     }
 
     pub fn formal(label: &str, root: crate::node::expression::Idx) -> Node {
-        let mut req = requirement(label);
-        req.variant.requirement_mut().unwrap().variant = RequirementVariant::Formal(root);
-        req
+        let variant = RequirementVariant::Formal(root);
+        let variant = Variant::Requirement(Requirement::from(variant));
+        Node::new(Meta::from(label.to_string()), variant)
     }
 
     pub fn typ<S: ToString>(label: S, members: &[S]) -> Node {
@@ -267,20 +280,20 @@ pub mod entity {
     }
 
     /// Adds a path to the references of the draft
-    pub fn reference<S: ToString>(draft: &mut Draft, path: S) -> reference::Idx {
+    pub fn reference<S: ToString>(draft: &mut Tree, path: S) -> reference::Idx {
         let idx = draft.references.len().into();
         draft.references.push(Path::from(path.to_string()));
         idx
     }
 
-    pub fn add(draft: &mut Draft, node: Node) -> Idx {
+    pub fn add(draft: &mut Tree, node: Node) -> Idx {
         let idx = draft.entities.len().into();
         draft.entities.push(node);
         idx
     }
 
     /// Stores `node` after its `children`, the order in which the parser stores entities
-    pub fn add_parent(draft: &mut Draft, mut node: Node, children: &[Idx]) -> Idx {
+    pub fn add_parent(draft: &mut Tree, mut node: Node, children: &[Idx]) -> Idx {
         node.variant
             .children_mut()
             .expect("node has no children")
@@ -288,13 +301,13 @@ pub mod entity {
         add(draft, node)
     }
 
-    pub fn add_root(draft: &mut Draft, node: Node) -> Idx {
+    pub fn add_root(draft: &mut Tree, node: Node) -> Idx {
         add(draft, node)
     }
 
-    pub fn add_child(draft: &mut Draft, parent: Idx, node: Node) -> Idx {
+    pub fn add_child(draft: &mut Tree, parent: Idx, node: Node) -> Idx {
         let idx = add_root(draft, node);
-        draft.entities[usize::from(parent)]
+        draft.entities[parent]
             .variant
             .children_mut()
             .expect("parent has no children")
@@ -322,22 +335,22 @@ pub mod expression {
         self,
         expression::{Identifier, Idx, Node, Variant},
         path::Path,
-        tree::Draft,
+        tree::Tree,
     };
 
-    pub fn insert(draft: &mut Draft, variant: Variant) -> Idx {
+    pub fn insert(draft: &mut Tree, variant: Variant) -> Idx {
         let idx = draft.expressions.len().into();
         draft.expressions.push(Node::new(variant));
         idx
     }
 
-    pub fn identifier<S: ToString>(draft: &mut Draft, location: S) -> Idx {
+    pub fn identifier<S: ToString>(draft: &mut Tree, location: S) -> Idx {
         let target = draft.identifiers.len().into();
         draft.identifiers.push(Path::from(location.to_string()));
         insert(draft, Variant::Identifier(Identifier::new(target)))
     }
 
-    pub fn number(draft: &mut Draft, n: i64) -> Idx {
+    pub fn number(draft: &mut Tree, n: i64) -> Idx {
         let num = node::expression::Number {
             kind: node::expression::NumberKind::Integer,
             value: n.to_string(),
@@ -345,12 +358,12 @@ pub mod expression {
         insert(draft, Variant::Number(num))
     }
 
-    pub fn boolean(draft: &mut Draft, b: bool) -> Idx {
+    pub fn boolean(draft: &mut Tree, b: bool) -> Idx {
         insert(draft, Variant::Boolean(node::expression::Boolean::from(b)))
     }
 
     pub fn binary(
-        draft: &mut Draft,
+        draft: &mut Tree,
         op: node::expression::BinaryOperator,
         left: Idx,
         right: Idx,

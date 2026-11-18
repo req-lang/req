@@ -19,7 +19,8 @@ pub fn format<W: std::io::Write>(
     let pd = pad(indent);
 
     if let Some(comment) = &node.meta.comment {
-        markup::format(tree, comment, indent, out)?;
+        markup::format(tree, *comment, indent, out)?;
+        writeln!(out)?;
     }
 
     for tag in &node.meta.tags {
@@ -81,7 +82,7 @@ pub fn format<W: std::io::Write>(
             use crate::node::entity::RequirementVariant::*;
             match &req.variant {
                 Formal(expr) => expression::format(tree, *expr, (indent + 1).into(), out)?,
-                Informal(text) => markup::format(tree, text, (indent + 1).into(), out)?,
+                Informal(text) => markup::format(tree, *text, (indent + 1).into(), out)?,
             }
 
             writeln!(out, "\n{}requirement", pd)

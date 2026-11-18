@@ -26,10 +26,10 @@ pub fn link(tree: &Tree, paths: &Arena<Location>, links: &mut Links) {
         let current = path.path.parent().unwrap_or_default();
         let ctx = FindCtx::new(&tree.entities, &nodes, &current, imports);
 
-        let references = node
-            .variant
-            .references()
-            .chain(node.markups().flat_map(|markup| markup.references()));
+        let references = node.variant.references().chain(
+            node.markups()
+                .flat_map(|markup| tree.markups[markup].references()),
+        );
         for reference in references {
             links.references[reference] = find(&ctx, &tree.references[reference]);
         }

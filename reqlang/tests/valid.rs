@@ -9,7 +9,8 @@ pub const PATH_ROOT: &str = "tests/data/valid";
 fn assert_valid_parsing_and_analysis(filename: &str) -> Specification {
     let path = std::path::PathBuf::from(PATH_ROOT).join(filename);
     let input = std::fs::read_to_string(path).unwrap();
-    let (tree, _, errors) = syntax::parser::parse(&input);
+    let (tree, info) = syntax::parser::parse(&input);
+    let errors = info.errors;
 
     assert!(errors.is_empty(), "syntax errors: {:?}", errors);
 
@@ -23,7 +24,7 @@ fn assert_valid_parsing_and_analysis(filename: &str) -> Specification {
     assert!(
         issues
             .into_iter()
-            .map(|issue| Severity::from(&issue))
+            .map(|issue| issue.severity())
             .filter(|sev| *sev == Severity::Critical)
             .next()
             .is_none()

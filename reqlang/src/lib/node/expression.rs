@@ -1,6 +1,6 @@
 use crate::{
     node::{arena, identifier},
-    utils::children::ChildrenIter,
+    utils::children::{ChildrenIter, ChildrenIterMut},
 };
 
 #[derive(Default, Debug, Copy, Clone, Eq, PartialEq, Hash, PartialOrd, Ord)]
@@ -113,6 +113,71 @@ impl ChildrenIter<Idx> for Variant {
     }
 }
 
+impl ChildrenIterMut<Idx> for Variant {
+    fn children_iter_mut<'a>(&'a mut self) -> impl Iterator<Item = &'a mut Idx>
+    where
+        Idx: 'a,
+    {
+        use Variant::*;
+
+        let mut children = Vec::new();
+        match self {
+            When(when) => {
+                for case in &mut when.cases {
+                    children.push(&mut case.condition);
+                    children.push(&mut case.consequence);
+                }
+                children.extend(when.otherwise.iter_mut());
+            }
+
+            Aggregation(aggregation) => children.extend(aggregation.expressions.iter_mut()),
+
+            Comprehension(comprehension) => {
+                children.push(&mut comprehension.set.domain);
+                children.extend(comprehension.set.filter.iter_mut());
+                children.push(&mut comprehension.expression);
+            }
+
+            UnaryOp(unary) => children.push(&mut unary.operand),
+
+            BinOp(binary) => {
+                children.push(&mut binary.left);
+                children.push(&mut binary.right);
+            }
+
+            Function(function) => {
+                children.push(&mut function.expression);
+                children.extend(function.arguments.iter_mut());
+            }
+
+            Set(set) => children.extend(set.elements.iter_mut()),
+
+            Interval(interval) => {
+                children.push(&mut interval.left.expression);
+                children.push(&mut interval.right.expression);
+            }
+
+            Range(range) => {
+                children.push(&mut range.left);
+                children.push(&mut range.right);
+            }
+
+            Identifier(_) | Number(_) | Boolean(_) | Undefined => {}
+        };
+
+        children.into_iter()
+    }
+}
+
+impl ChildrenIterMut<Idx> for Node {
+    fn children_iter_mut<'a>(&'a mut self) -> impl Iterator<Item = &'a mut Idx>
+    where
+        Idx: 'a,
+    {
+        self.variant.children_iter_mut()
+    }
+}
+
 impl Default for Variant {
     fn default() -> Self {
         Variant::Undefined
@@ -120,76 +185,6 @@ impl Default for Variant {
 }
 
 impl Variant {
-    /// Replaces every child index, which is needed when moving nodes from an arena to another
-    pub fn remap(self, mut f: impl FnMut(Idx) -> Idx) -> Variant {
-        match self {
-            Variant::When(when) => Variant::When(When {
-                cases: when
-                    .cases
-                    .into_iter()
-                    .map(|c| Case::new(f(c.condition), f(c.consequence)))
-                    .collect(),
-                otherwise: when.otherwise.map(&mut f),
-            }),
-
-            Variant::Aggregation(aggregation) => Variant::Aggregation(Aggregation {
-                aggregator: aggregation.aggregator,
-                expressions: aggregation.expressions.into_iter().map(&mut f).collect(),
-            }),
-
-            Variant::Comprehension(comprehension) => Variant::Comprehension(Comprehension {
-                aggregator: comprehension.aggregator,
-                set: SetElement {
-                    variable: comprehension.set.variable,
-                    domain: f(comprehension.set.domain),
-                    filter: comprehension.set.filter.map(&mut f),
-                },
-                expression: f(comprehension.expression),
-            }),
-
-            Variant::UnaryOp(unary) => Variant::UnaryOp(UnaryOp {
-                operator: unary.operator,
-                operand: f(unary.operand),
-            }),
-
-            Variant::BinOp(binary) => Variant::BinOp(BinOp {
-                operator: binary.operator,
-                left: f(binary.left),
-                right: f(binary.right),
-            }),
-
-            Variant::Function(function) => Variant::Function(Function {
-                expression: f(function.expression),
-                arguments: function.arguments.into_iter().map(&mut f).collect(),
-            }),
-
-            Variant::Set(set) => Variant::Set(Set {
-                elements: set.elements.into_iter().map(&mut f).collect(),
-            }),
-
-            Variant::Interval(interval) => Variant::Interval(Interval {
-                left: IntervalBound {
-                    expression: f(interval.left.expression),
-                    is_open: interval.left.is_open,
-                },
-                right: IntervalBound {
-                    expression: f(interval.right.expression),
-                    is_open: interval.right.is_open,
-                },
-            }),
-
-            Variant::Range(range) => Variant::Range(Range {
-                left: f(range.left),
-                right: f(range.right),
-            }),
-
-            variant @ (Variant::Identifier(_)
-            | Variant::Number(_)
-            | Variant::Boolean(_)
-            | Variant::Undefined) => variant,
-        }
-    }
-
     pub fn identifier(&self) -> Option<&Identifier> {
         match self {
             Variant::Identifier(id) => Some(id),
@@ -242,7 +237,7 @@ impl Variant {
         match self {
             Variant::BinOp(bin_op) => bin_op.operator.precedence(),
             Variant::UnaryOp(unary_op) => unary_op.operator.precedence(),
-            Variant::Function(_) => 160,
+            Variant::Function(_) => FUNCTION_PRECEDENCE,
             _ => 1000,
         }
     }
@@ -254,6 +249,8 @@ impl Variant {
         }
     }
 }
+
+pub const FUNCTION_PRECEDENCE: i32 = 160;
 
 #[derive(Default, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct When {

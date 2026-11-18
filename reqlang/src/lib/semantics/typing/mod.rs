@@ -35,7 +35,7 @@ mod tests {
                 Comprehension, SetElement,
                 Variant::{Comprehension as Comprehension_, Set},
             },
-            tree::{Draft, Tree},
+            tree::Tree,
         },
         semantics::{
             link::link,
@@ -47,8 +47,8 @@ mod tests {
         },
     };
 
-    fn typed(draft: Draft) -> (Tree, node::expression::Arena<Result>) {
-        let tree = Tree::from(draft);
+    fn typed(draft: Tree) -> (Tree, node::expression::Arena<Result>) {
+        let tree = draft;
         let links = link(&tree, &paths(&tree.entities));
         let types = evaluate(&tree, &links);
         (tree, types)
@@ -59,18 +59,18 @@ mod tests {
         types[root].clone()
     }
 
-    fn add_attribute(draft: &mut Draft, label: &str, domain: &str) -> Idx {
+    fn add_attribute(draft: &mut Tree, label: &str, domain: &str) -> Idx {
         let attr = attribute(draft, label, domain);
         add(draft, attr)
     }
 
-    fn add_formal(draft: &mut Draft, root: node::expression::Idx) -> Idx {
+    fn add_formal(draft: &mut Tree, root: node::expression::Idx) -> Idx {
         add(draft, formal("r", root))
     }
 
     #[test]
     fn attribute_with_real_domain_has_set_number_type() {
-        let mut draft = Draft::default();
+        let mut draft = Tree::default();
         let x = add_attribute(&mut draft, "x", "real");
         add_parent(&mut draft, package("p"), &[x]);
 
@@ -84,7 +84,7 @@ mod tests {
 
     #[test]
     fn attribute_with_boolean_domain_has_set_boolean_type() {
-        let mut draft = Draft::default();
+        let mut draft = Tree::default();
         let x = add_attribute(&mut draft, "x", "boolean");
         add_parent(&mut draft, package("p"), &[x]);
 
@@ -98,7 +98,7 @@ mod tests {
 
     #[test]
     fn attribute_with_enum_boolean_has_custom_type() {
-        let mut draft = Draft::default();
+        let mut draft = Tree::default();
         let t = add(&mut draft, typ("t", &["a", "b", "c"]));
         let x = add_attribute(&mut draft, "x", "t");
         add_parent(&mut draft, package("p"), &[t, x]);
@@ -111,7 +111,7 @@ mod tests {
     #[test]
     fn attribute_referencing_attribute_has_element_type() {
         // x: real => Set(Number); y: x => y's domain type is Number (element of x's set)
-        let mut draft = Draft::default();
+        let mut draft = Tree::default();
         let c0 = add_attribute(&mut draft, "x", "real");
         let y = add_attribute(&mut draft, "y", "x");
         add_parent(&mut draft, package("p"), &[c0, y]);
@@ -123,7 +123,7 @@ mod tests {
 
     #[test]
     fn formal_requirement_with_enum_has_enum_type() {
-        let mut draft = Draft::default();
+        let mut draft = Tree::default();
         let t = add(&mut draft, typ("t", &["a", "b", "c"]));
         let expr = identifier(&mut draft, "t::a");
         let r = add_formal(&mut draft, expr);
@@ -136,7 +136,7 @@ mod tests {
 
     #[test]
     fn formal_requirement_with_sum_has_number_type() {
-        let mut draft = Draft::default();
+        let mut draft = Tree::default();
         let (n1, n2) = (number(&mut draft, 1), number(&mut draft, 2));
         let expr = binary(&mut draft, Plus, n1, n2);
         let r = add_formal(&mut draft, expr);
@@ -149,7 +149,7 @@ mod tests {
 
     #[test]
     fn formal_requirement_with_comparison_has_boolean_type() {
-        let mut draft = Draft::default();
+        let mut draft = Tree::default();
         let (n1, n2) = (number(&mut draft, 1), number(&mut draft, 2));
         let expr = binary(&mut draft, GreaterThan, n1, n2);
         let r = add_formal(&mut draft, expr);
@@ -162,7 +162,7 @@ mod tests {
 
     #[test]
     fn formal_requirement_with_unknown_reference() {
-        let mut draft = Draft::default();
+        let mut draft = Tree::default();
         let (n1, n2) = (identifier(&mut draft, "x"), number(&mut draft, 10));
         let expr = binary(&mut draft, Plus, n1, n2);
         let r = add_formal(&mut draft, expr);
@@ -177,7 +177,7 @@ mod tests {
     #[test]
     fn formal_requirement_with_mismatched_operands_is_type_error() {
         // Number + Boolean is not valid; expect UnexpectedType on the rhs
-        let mut draft = Draft::default();
+        let mut draft = Tree::default();
         let (n1, n2) = (number(&mut draft, 1), boolean(&mut draft, true));
         let expr = binary(&mut draft, Plus, n1, n2);
         let r = add_formal(&mut draft, expr);
@@ -194,7 +194,7 @@ mod tests {
     #[test]
     fn all_over_builtin_domain_has_boolean_type() {
         // all true for x in real end — domain is builtin Set(Number), body is Boolean
-        let mut draft = Draft::default();
+        let mut draft = Tree::default();
 
         let domain = identifier(&mut draft, "real");
         let body = boolean(&mut draft, true);
@@ -212,7 +212,7 @@ mod tests {
     #[test]
     fn nested_all_variables_have_number_type() {
         // all (all y > 1 for y in {x} end) for x in real end
-        let mut draft = Draft::default();
+        let mut draft = Tree::default();
 
         let real = identifier(&mut draft, "real");
         let x_element = identifier(&mut draft, "x");
@@ -250,7 +250,7 @@ mod tests {
     #[test]
     fn all_with_non_boolean_body_is_type_error() {
         // all 1 for x in real end — body is Number, not Boolean
-        let mut draft = Draft::default();
+        let mut draft = Tree::default();
 
         let domain = identifier(&mut draft, "real");
         let body = number(&mut draft, 1);

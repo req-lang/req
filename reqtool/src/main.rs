@@ -30,6 +30,9 @@ enum Command {
     Check {
         /// Input file
         input: PathBuf,
+        /// Output the report as JSON on stdout
+        #[arg(long)]
+        json: bool,
     },
 }
 
@@ -39,7 +42,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     match cli.command {
         Command::Fmt { input, output } => {
             let source = std::fs::read_to_string(&input)?;
-            let (tree, _, errors) = parser::parse(&source);
+            let (tree, info) = parser::parse(&source);
+            let errors = info.errors;
 
             // The tree is incomplete when there are syntax errors, formatting it would lose code
             if !errors.is_empty() {
@@ -52,40 +56,88 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 None => formatter::format(&tree, &mut io::stdout()),
             }?;
         }
-        Command::Check { input } => {
+        Command::Check { input, json } => {
             let start = std::time::Instant::now();
             let source = std::fs::read_to_string(&input)?;
-            let (tree, spans, errors) = parser::parse(&source);
-            report_syntax_errors(&source, &errors);
+            let (tree, info) = parser::parse(&source);
+            let errors = &info.errors;
+            if !json {
+                report_syntax_errors(&source, errors);
+            }
             let mut spec = Specification::from(tree);
             spec.diagnose();
             let issues = issue::issues(&spec);
 
             let elapsed = start.elapsed();
             let mut count = errors.len();
+            let mut json_paths = Vec::new();
 
-            for ((issues, path), span) in issues
+            for ((idx, issues), path) in issues
+                .indices()
+                .zip(issues)
                 .into_iter()
                 .zip(spec.analysis.paths)
-                .zip(spans.entities)
             {
                 count += issues.len();
                 if issues.is_empty() {
                     continue;
                 }
 
-                let sp = format!("{}", span.start).bold();
-                let code = format!("{}", &source[span.start.index..span.end.index]).bold();
-                eprintln!("{:12} {} ---> {}", sp, path.path, code);
+                if !json {
+                    eprintln!("{}", path.path.to_string().bold());
+                }
 
-                for issue in issues.into_iter().map(Issue::from) {
-                    eprintln!("    {}", issue.colored_message());
+                let mut json_issues = Vec::new();
+
+                for issue in issues.into_iter() {
+                    let span = issue.span(idx, &info);
+                    let code = &source[span.range()];
+                    let issue = Issue::from(issue);
+                    if json {
+                        json_issues.push(serde_json::json!({
+                            "severity": issue.severity_name(),
+                            "message": issue.message,
+                            "span": span_json(&span),
+                            "code": code,
+                        }));
+                    } else {
+                        let sp = format!("{}", span.start).on_black();
+                        eprintln!("{:12} {}\n{}", sp, issue.colored_message(), code);
+                    }
+                }
+
+                if json {
+                    json_paths.push(serde_json::json!({
+                        "path": path.path.to_string(),
+                        "issues": json_issues,
+                    }));
                 }
             }
 
-            match count {
-                0 => println!("no issues ({:.2?})", elapsed),
-                c => eprintln!("found {} issue(s) ({:.2?})", c, elapsed),
+            if json {
+                let syntax_errors: Vec<_> = errors
+                    .iter()
+                    .map(|span| {
+                        let end = span.end.index.min(source.len());
+                        let start = span.start.index.min(end);
+                        serde_json::json!({
+                            "span": span_json(span),
+                            "code": &source[start..end],
+                        })
+                    })
+                    .collect();
+                let report = serde_json::json!({
+                    "syntax_errors": syntax_errors,
+                    "paths": json_paths,
+                    "issue_count": count,
+                    "elapsed_ms": elapsed.as_secs_f64() * 1000.0,
+                });
+                println!("{}", serde_json::to_string_pretty(&report)?);
+            } else {
+                match count {
+                    0 => println!("no issues ({:.2?})", elapsed),
+                    c => eprintln!("found {} issue(s) ({:.2?})", c, elapsed),
+                }
             }
         }
     }
@@ -98,11 +150,22 @@ fn report_syntax_errors(source: &str, errors: &[Span]) {
         let end = span.end.index.min(source.len());
         let start = span.start.index.min(end);
         let code = source[start..end].bold();
-        eprintln!("{:12} {}", format!("{}", span.start).bold(), "syntax error".red());
+        eprintln!(
+            "{:12} {}",
+            format!("{}", span.start).bold(),
+            "syntax error".red()
+        );
         if !code.is_empty() {
             eprintln!("    {}", code);
         }
     }
+}
+
+fn span_json(span: &Span) -> serde_json::Value {
+    serde_json::json!({
+        "start": { "line": span.start.line, "column": span.start.column, "index": span.start.index },
+        "end": { "line": span.end.line, "column": span.end.column, "index": span.end.index },
+    })
 }
 
 struct Issue {
@@ -111,6 +174,15 @@ struct Issue {
 }
 
 impl Issue {
+    pub fn severity_name(&self) -> &'static str {
+        match self.severity {
+            Severity::Critical => "critical",
+            Severity::Severe => "severe",
+            Severity::Moderate => "moderate",
+            Severity::Light => "light",
+        }
+    }
+
     pub fn colored_message(&self) -> colored::ColoredString {
         match self.severity {
             Severity::Critical => self.message.red(),
@@ -125,7 +197,7 @@ impl From<issue::Issue> for Issue {
     fn from(value: issue::Issue) -> Self {
         Self {
             message: value.to_string(),
-            severity: (&value).into(),
+            severity: value.severity(),
         }
     }
 }

@@ -3,7 +3,8 @@ use reqlang::*;
 pub const PATH_ROOT: &str = "tests/data/valid";
 
 fn parse_without_errors(input: &str) -> node::tree::Tree {
-    let (tree, _, errors) = syntax::parser::parse(input);
+    let (tree, info) = syntax::parser::parse(input);
+    let errors = info.errors;
     assert!(errors.is_empty(), "syntax errors: {:?}", errors);
     tree
 }

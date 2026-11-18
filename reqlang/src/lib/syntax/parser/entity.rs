@@ -2,360 +2,325 @@ use crate::{
     node::{
         self,
         entity::{
-            self, Attribute, Idx, Meta, Node, RequirementVariant, TraceabilityKind,
+            self, Attribute, Idx, IdxMarker, Meta, Node, RequirementVariant, Tag, TraceabilityKind,
             TraceabilityLink, Variant,
         },
-        path::Path,
         reference,
-        tree::{self},
     },
     syntax::{
         location::Span,
-        parser::{SpansDraft, expression, markup},
+        parser::Parser,
         tokenizer::entity::{Keyword, Token, TokenVariant},
     },
-    utils::cursor::Cursor,
 };
 
-impl<'b> From<&'b mut Draft<'_>> for expression::Draft<'b> {
-    fn from(value: &'b mut Draft<'_>) -> Self {
-        expression::Draft::new(
-            &mut value.tree.expressions,
-            &mut value.tree.identifiers,
-            &mut value.spans.expressions,
-        )
+pub type TokenArena = super::TokenArena<Token, IdxMarker>;
+pub type ParserArena = super::ParserArena<Token, Node, IdxMarker>;
+
+impl TokenArena {
+    pub fn name_of(&self, idx: entity::Idx) -> Option<Span> {
+        use TokenVariant::*;
+
+        self.tokens_of(idx)
+            .iter()
+            .find(|t| t.variant == Identifier)
+            .map(|t| t.span)
     }
 }
 
-pub(super) struct Draft<'a> {
-    tree: &'a mut tree::Draft,
-    spans: &'a mut SpansDraft,
-}
-
-impl<'a> Draft<'a> {
-    pub fn new(tree: &'a mut tree::Draft, spans: &'a mut SpansDraft) -> Self {
-        Self { tree, spans }
+impl Parser<'_> {
+    /// `stop` is the keyword that closes the entity this one is in, if any
+    pub fn entity(&mut self, stop: Option<&Keyword>) -> Option<Idx> {
+        let meta = self.parse_meta();
+        self.skip_to_next_entity(stop);
+        if stop.is_some_and(|stop| self.is_closing(stop)) {
+            return None;
+        }
+        self.parse_entity(meta)
     }
 
-    pub fn push_node(&mut self, node: Node, span: Span) -> Idx {
-        let idx = self.tree.entities.len();
-        self.tree.entities.push(node);
-        self.spans.entities.push(span);
-        idx.into()
-    }
+    pub fn skip_to_next_entity(&mut self, stop: Option<&Keyword>) {
+        use Keyword::*;
 
-    pub fn push_reference(&mut self, path: Path) -> reference::Idx {
-        let idx = self.tree.references.len();
-        self.tree.references.push(path);
-        idx.into()
-    }
-}
-
-pub(super) fn parse_tree(
-    tokens: &mut Cursor<Token>,
-    draft: &mut Draft,
-    errors: &mut Vec<Span>,
-) -> Option<Idx> {
-    let meta = parse_meta(tokens, draft);
-    skip_to_next_entity(tokens);
-    parse_entity(meta, tokens, draft, errors)
-}
-
-pub fn skip_to_next_entity(tokens: &mut Cursor<Token>) {
-    use Keyword::*;
-
-    while let Some(token) = tokens.peek() {
-        if let TokenVariant::Reserved(k) = &token.variant {
-            match k {
-                Part | Package | Requirement | Let | Type => return,
-                _ => {
-                    tokens.bump();
+        while let Some(token) = self.entities.tokens.peek() {
+            if stop.is_some_and(|stop| self.is_closing(stop)) {
+                return;
+            }
+            if let TokenVariant::Reserved(Part | Package | Requirement | Let | Type) = token.variant
+            {
+                if let Some(tok) = self.entities.tokens.peek_nth(1)
+                    && let TokenVariant::Identifier = tok.variant
+                {
+                    return;
                 }
+                self.errors.push(token.span);
             }
+            self.entities.tokens.bump();
         }
     }
-}
 
-fn parse_meta(tokens: &mut Cursor<Token>, draft: &mut Draft) -> Meta {
-    use TokenVariant::*;
+    fn parse_meta(&mut self) -> Meta {
+        use TokenVariant::*;
 
-    let mut meta = Meta::default();
+        let mut meta = Meta::default();
 
-    while let Some(tok) = tokens.peek() {
+        while let Some(tok) = self.entities.tokens.peek() {
+            match tok.variant {
+                Markup => {
+                    meta.comment = Some(self.markup(tok.span));
+                    self.entities.tokens.bump();
+                }
+
+                Tag => {
+                    meta.tags.push(self.parse_tag(&tok));
+                    self.entities.tokens.bump();
+                }
+
+                _ => break,
+            }
+        }
+
+        meta
+    }
+
+    fn parse_tag(&self, token: &Token) -> Tag {
+        let text = token.text(self.source);
+        let (id, value) = match text.split_once(char::is_whitespace) {
+            Some((id, value)) => (id, Some(value.trim_start())),
+            None => (text, None),
+        };
+        entity::Tag::new(id.to_string(), value.map(String::from))
+    }
+
+    fn parse_entity(&mut self, mut meta: Meta) -> Option<Idx> {
+        use Keyword::*;
+        use TokenVariant::*;
+
+        let source = self.source;
+        let start = self.entities.tokens.position();
+        let tok = self.entities.tokens.bump()?;
         match tok.variant {
-            Markup(comment) => {
-                let markup = markup::parse(&comment.to_string(), &mut draft.tree.references);
-                meta.comment = Some(markup);
-                tokens.bump();
+            Reserved(Part) => {
+                let mut prt = node::entity::Part::default();
+
+                meta.label = self.parse_label()?;
+                prt.imports = self.parse_imports();
+                prt.children = self.parse_children(&Part);
+                let node = Node::new(meta, Variant::Part(prt));
+                Some(self.entities.push_from(node, start))
             }
 
-            Tag(id, value) => {
-                let tag = entity::Tag::new(id.to_string(), value.map(String::from));
-                meta.tags.push(tag);
-                tokens.bump();
+            Reserved(Package) => {
+                let mut pkg = node::entity::Package::default();
+
+                meta.label = self.parse_label()?;
+                pkg.imports = self.parse_imports();
+                pkg.children = self.parse_children(&Package);
+                let node = Node::new(meta, Variant::Package(pkg));
+                Some(self.entities.push_from(node, start))
             }
 
-            _ => break,
-        }
-    }
+            Reserved(Let) => {
+                let label = self.parse_label()?;
+                self.expect(Reserved(In), tok.span)?;
+                let token = self.expect(Expression, tok.span)?;
+                let domain = self.expression(token.span)?;
 
-    meta
-}
+                let mut atr = Attribute::new(domain);
 
-fn parse_entity(
-    mut meta: Meta,
-    tokens: &mut Cursor<Token>,
-    draft: &mut Draft,
-    errors: &mut Vec<Span>,
-) -> Option<Idx> {
-    use Keyword::*;
-    use TokenVariant::*;
+                meta.label = label;
+                atr.unit = match self.entities.tokens.peek() {
+                    Some(token) if token.variant == TokenVariant::Unit => {
+                        self.entities.tokens.bump();
+                        Some(token.text(source).to_string())
+                    }
 
-    let tok = tokens.bump()?;
-    match tok.variant {
-        Reserved(Part) => {
-            let mut prt = node::entity::Part::default();
+                    _ => None,
+                };
 
-            meta.label = parse_label(tokens, errors)?;
-            prt.imports = parse_imports(tokens, draft);
-            prt.children = parse_children(tokens, &Part, draft, errors);
-            let node = Node::new(meta, Variant::Part(prt));
-            let idx = draft.push_node(node, tok.span);
-            return Some(idx.into());
-        }
+                let node = Node::new(meta, Variant::Attribute(atr));
+                Some(self.entities.push_from(node, start))
+            }
 
-        Reserved(Package) => {
-            let mut pkg = node::entity::Package::default();
+            Reserved(Keyword::Type) => {
+                let mut typ = node::entity::Type::default();
+                meta.label = self.parse_label()?;
+                self.expect(Reserved(Has), tok.span)?;
+                let members = self.expect(TokenVariant::Type, tok.span)?;
+                typ.members = parse_type(members.text(source));
+                self.expect(Reserved(Keyword::Type), tok.span)?;
 
-            meta.label = parse_label(tokens, errors)?;
-            pkg.imports = parse_imports(tokens, draft);
-            pkg.children = parse_children(tokens, &Package, draft, errors);
-            let node = Node::new(meta, Variant::Package(pkg));
-            let idx = draft.push_node(node, tok.span);
-            return Some(idx.into());
-        }
+                let node = Node::new(meta, Variant::Type(typ));
+                Some(self.entities.push_from(node, start))
+            }
 
-        Reserved(Let) => {
-            let label = parse_label(tokens, errors)?;
-            let token = tokens.bump()?;
-            let domain = match token.variant {
-                TokenVariant::Reserved(Keyword::In) => {
-                    let token = tokens.bump()?;
-
+            Reserved(Requirement) => {
+                // The variant is only known after the header
+                let mut restriction = None;
+                let mut allocation = None;
+                let mut traceability = Vec::new();
+                let mut inhibitor = node::entity::TraceabilityInhibitor::default();
+                meta.label = self.parse_label()?;
+                while let Some(token) = self.entities.tokens.bump() {
                     match token.variant {
-                        TokenVariant::Expression(expr) => {
-                            let draft = expression::Draft::from(&mut *draft);
-                            expression::parse(expr, &token.span.start, draft).ok()?
+                        Reserved(Keyword::Is) => {
+                            break;
                         }
 
-                        _ => return None,
-                    }
+                        Reserved(Keyword::Top) => inhibitor.top = true,
+
+                        Reserved(Keyword::Bottom) => inhibitor.bottom = true,
+
+                        Reserved(Keyword::On) if let Some((_, span)) = self.parse_ident() => {
+                            restriction = Some(self.reference(span));
+                        }
+
+                        Reserved(Keyword::Via) if let Some((_, span)) = self.parse_ident() => {
+                            allocation = Some(self.reference(span));
+                        }
+
+                        Reserved(ref k)
+                            if let Ok(kind) = TraceabilityKind::try_from(k)
+                                && let Some((_, span)) = self.parse_ident() =>
+                        {
+                            let link = TraceabilityLink::new(kind, self.reference(span));
+                            traceability.push(link);
+                        }
+
+                        _ => {
+                            self.errors.push(token.span);
+                            return None;
+                        }
+                    };
                 }
-                _ => return None,
-            };
 
-            let mut atr = Attribute::new(domain);
+                let token = self.entities.tokens.bump()?;
 
-            meta.label = label;
-            let token = tokens.peek()?;
-            let span = token.span.clone();
-            atr.unit = match token.variant {
-                TokenVariant::Unit(expr) => {
-                    tokens.bump();
-                    Some(expr.to_string())
-                }
-
-                _ => None,
-            };
-
-            let node = Node::new(meta, Variant::Attribute(atr));
-            let idx = draft.push_node(node, span);
-
-            return Some(idx);
-        }
-
-        Reserved(Keyword::Type) => {
-            use TokenVariant::*;
-            let mut typ = node::entity::Type::default();
-            meta.label = parse_label(tokens, errors)?;
-            match tokens.bump() {
-                None => return None,
-                Some(tok) if let Reserved(Has) = tok.variant => {}
-                _ => return None,
-            }
-
-            typ.members = match tokens.bump() {
-                None => return None,
-                Some(tok) if let Type(expr) = tok.variant => parse_type(expr),
-                _ => return None,
-            };
-
-            tokens.bump()?;
-
-            let node = Node::new(meta, Variant::Type(typ));
-            let idx = draft.push_node(node, tok.span);
-            return Some(idx);
-        }
-
-        Reserved(Requirement) => {
-            use TokenVariant::*;
-            let mut req = node::entity::Requirement::default();
-            meta.label = parse_label(tokens, errors)?;
-            while let Some(token) = tokens.bump() {
-                match token.variant {
-                    Reserved(Keyword::Is) => {
-                        break;
+                use RequirementVariant::*;
+                let variant = match token.variant {
+                    Markup => Informal(self.markup(token.span)),
+                    Expression => match self.expression(token.span) {
+                        Some(expression) => Formal(expression),
+                        None => {
+                            self.entities.tokens.bump();
+                            return None;
+                        }
+                    },
+                    _ => {
+                        self.errors.push(token.span);
+                        return None;
                     }
-
-                    Reserved(Keyword::Top) => req.inhibitor.top = true,
-
-                    Reserved(Keyword::Bottom) => req.inhibitor.bottom = true,
-
-                    Reserved(Keyword::On) if let Some(ident) = parse_ident(tokens, errors) => {
-                        req.restriction = Some(draft.push_reference(ident.into()));
-                    }
-
-                    Reserved(Keyword::Via) if let Some(ident) = parse_ident(tokens, errors) => {
-                        req.allocation = Some(draft.push_reference(ident.into()));
-                    }
-
-                    Reserved(ref k)
-                        if let Ok(kind) = TraceabilityKind::try_from(k)
-                            && let Some(ident) = parse_ident(tokens, errors) =>
-                    {
-                        let link = TraceabilityLink::new(kind, draft.push_reference(ident.into()));
-                        req.traceability.push(link);
-                    }
-
-                    _ => return None,
                 };
+
+                self.entities.tokens.bump()?;
+
+                let req = node::entity::Requirement {
+                    restriction,
+                    allocation,
+                    traceability,
+                    inhibitor,
+                    variant,
+                };
+                let node = Node::new(meta, Variant::Requirement(req));
+                Some(self.entities.push_from(node, start))
             }
 
-            let token = tokens.bump()?;
-
-            use RequirementVariant::*;
-            req.variant = match token.variant {
-                Markup(expr) => {
-                    Informal(markup::parse(&expr.to_string(), &mut draft.tree.references))
-                }
-                Expression(expr) => {
-                    let draft = expression::Draft::from(&mut *draft);
-                    Formal(expression::parse(expr, &token.span.start, draft).ok()?)
-                }
-                _ => return None,
-            };
-
-            tokens.bump()?;
-
-            let node = Node::new(meta, Variant::Requirement(req));
-            let idx = draft.push_node(node, token.span);
-            return Some(idx);
+            _ => None,
         }
+    }
 
-        _ => return None,
-    };
-}
+    fn is_closing(&self, stop: &Keyword) -> bool {
+        use TokenVariant::*;
 
-fn is_closing(tokens: &mut Cursor<Token>, stop: &Keyword) -> bool {
-    use TokenVariant::*;
+        match self.entities.tokens.peek().map(|t| t.variant) {
+            Some(Reserved(keyword)) if keyword == *stop => match self.entities.tokens.peek_nth(1) {
+                Some(token) => token.variant != Identifier,
+                None => true,
+            },
+            _ => false,
+        }
+    }
 
-    let ret = match tokens.peek().map(|t| &t.variant) {
-        Some(Reserved(keyword)) if keyword == stop => {
-            match tokens.peek_nth(1).map(|t| &t.variant) {
-                Some(Identifier(_)) => false,
-                _ => true,
+    fn parse_children(&mut self, stop: &Keyword) -> Vec<Idx> {
+        let mut children = Vec::new();
+
+        while self.entities.tokens.peek().is_some() && !self.is_closing(stop) {
+            if let Some(node) = self.entity(Some(stop)) {
+                children.push(node);
             }
         }
-        _ => false,
-    };
-    ret
+        self.entities.tokens.bump();
+
+        children
+    }
+
+    fn parse_ident(&mut self) -> Option<(String, Span)> {
+        let source = self.source;
+        let tok = self.entities.tokens.bump()?;
+        match tok.variant {
+            TokenVariant::Identifier => Some((tok.text(source).to_string(), tok.span)),
+            _ => {
+                self.errors.push(tok.span);
+                None
+            }
+        }
+    }
+
+    /// Consumes the next token if it is a `variant`, else records it as an error and leaves it
+    /// to what follows. At the end of the input, the error is on `entity`, the span of the keyword
+    /// of the entity that expects it.
+    fn expect(&mut self, variant: TokenVariant, entity: Span) -> Option<Token> {
+        self.entities
+            .tokens
+            .expect(variant)
+            .map_err(|span| self.errors.push(span.unwrap_or(entity)))
+            .ok()
+    }
+
+    fn parse_label(&mut self) -> Option<String> {
+        let source = self.source;
+        let tok = self.entities.tokens.bump()?;
+        match tok.variant {
+            TokenVariant::Identifier => {
+                let label = tok.text(source);
+                if label.contains("::") {
+                    self.errors.push(tok.span);
+                }
+                Some(label.to_string())
+            }
+            _ => {
+                self.errors.push(tok.span);
+                None
+            }
+        }
+    }
+
+    fn is_import(&self) -> bool {
+        use Keyword::*;
+        use TokenVariant::*;
+
+        match self.entities.tokens.peek().map(|t| t.variant) {
+            Some(Reserved(Import)) => {
+                matches!(self.entities.tokens.peek_nth(1), Some(t) if t.variant == Identifier)
+            }
+            _ => false,
+        }
+    }
+
+    fn parse_imports(&mut self) -> Vec<reference::Idx> {
+        let mut imports = Vec::new();
+        while self.is_import() {
+            self.entities.tokens.bump();
+            let id = self.entities.tokens.bump().unwrap();
+            imports.push(self.reference(id.span));
+        }
+
+        imports
+    }
 }
 
 fn parse_type(expr: &str) -> Vec<String> {
     expr.split('|').map(|m| m.trim().to_string()).collect()
-}
-
-fn parse_children(
-    tokens: &mut Cursor<Token>,
-    stop: &Keyword,
-    draft: &mut Draft,
-    errors: &mut Vec<Span>,
-) -> Vec<Idx> {
-    let mut children = Vec::new();
-
-    while !is_closing(tokens, stop) {
-        if let Some(node) = parse_tree(tokens, draft, errors) {
-            children.push(node);
-        }
-    }
-    tokens.bump();
-
-    children
-}
-
-fn parse_ident(tokens: &mut Cursor<Token>, errors: &mut Vec<Span>) -> Option<String> {
-    use TokenVariant::*;
-
-    match tokens.bump() {
-        Some(tok) => match tok.variant {
-            Identifier(identifier) => Some(identifier.into()),
-            _ => {
-                errors.push(tok.span);
-                None
-            }
-        },
-        None => None,
-    }
-}
-
-fn parse_label(tokens: &mut Cursor<Token>, errors: &mut Vec<Span>) -> Option<String> {
-    use TokenVariant::*;
-
-    match tokens.bump() {
-        Some(tok) => match tok.variant {
-            Identifier(label) if label.contains("::") => {
-                errors.push(tok.span);
-                Some(label.to_string())
-            }
-            Identifier(label) => Some(label.to_string()),
-            _ => {
-                errors.push(tok.span);
-                None
-            }
-        },
-        None => None,
-    }
-}
-
-fn is_import(tokens: &mut Cursor<Token>) -> bool {
-    use Keyword::*;
-    use TokenVariant::*;
-
-    let ret = match tokens.peek().map(|t| &t.variant) {
-        Some(Reserved(Import)) => match tokens.peek_nth(1).map(|t| &t.variant) {
-            Some(Identifier(_)) => true,
-            _ => false,
-        },
-        _ => false,
-    };
-
-    ret
-}
-
-fn parse_imports(tokens: &mut Cursor<Token>, draft: &mut Draft<'_>) -> Vec<reference::Idx> {
-    use TokenVariant::*;
-
-    let mut imports = Vec::new();
-    while is_import(tokens) {
-        let _ = tokens.bump().unwrap();
-        let id = tokens.bump().unwrap();
-        match id.variant {
-            Identifier(ident) => imports.push(draft.push_reference(ident.into())),
-            _ => unreachable!(),
-        }
-    }
-
-    return imports;
 }
 
 impl<'a> TryFrom<&'a Keyword> for TraceabilityKind {

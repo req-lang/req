@@ -18,14 +18,6 @@ pub fn link(tree: &Tree, paths: &node::entity::Arena<Location>) -> Links {
     links
 }
 
-#[derive(Debug, Clone, thiserror::Error)]
-pub enum Issue {
-    #[error("Reference target does not exist")]
-    NotFound,
-    #[error("Reference target can points to several, diverging locations")]
-    Ambiguous,
-}
-
 /// What each path points to, `None` when it does not resolve
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub struct Links {
@@ -133,15 +125,16 @@ mod tests {
         mock::{
             self,
             entity::{
-                add, add_parent, attribute, find, package, part, reference, requirement, typ,
+                add, add_parent, attribute, find, formal, markup, package, part, reference,
+                requirement, typ,
             },
             expression::{binary, identifier, insert},
         },
         node::{
             self,
-            entity::{Attribute, Idx, Meta, RequirementVariant, Variant},
+            entity::{Attribute, Idx, Meta, Variant},
             markup::{Item, Markup},
-            tree::{Draft, Tree},
+            tree::Tree,
         },
         semantics::{
             link::{Links, Target, link},
@@ -149,20 +142,20 @@ mod tests {
         },
     };
 
-    fn resolved(draft: Draft) -> (Tree, Links) {
-        let tree = Tree::from(draft);
+    fn resolved(draft: Tree) -> (Tree, Links) {
+        let tree = draft;
         let links = link(&tree, &paths(&tree.entities));
         (tree, links)
     }
 
-    fn with_restriction(draft: &mut Draft, label: &str, target: &str) -> Idx {
-        let mut req = requirement(label);
+    fn with_restriction(draft: &mut Tree, label: &str, target: &str) -> Idx {
+        let mut req = requirement(draft, label);
         let target = reference(draft, target);
         req.variant.requirement_mut().unwrap().restriction = Some(target);
         add(draft, req)
     }
 
-    fn add_attribute(draft: &mut Draft, label: &str, domain: &str) -> Idx {
+    fn add_attribute(draft: &mut Tree, label: &str, domain: &str) -> Idx {
         let attr = attribute(draft, label, domain);
         add(draft, attr)
     }
@@ -177,7 +170,7 @@ mod tests {
 
     #[test]
     fn resolves_complete_path() {
-        let mut draft = Draft::default();
+        let mut draft = Tree::default();
         let x = add_attribute(&mut draft, "x", "real");
         let r1 = with_restriction(&mut draft, "r1", "p::x");
         add_parent(&mut draft, package("p"), &[x, r1]);
@@ -189,7 +182,7 @@ mod tests {
 
     #[test]
     fn resolves_parent_path() {
-        let mut draft = Draft::default();
+        let mut draft = Tree::default();
         let x = add_attribute(&mut draft, "x", "real");
         let r1 = with_restriction(&mut draft, "r1", "x");
         add_parent(&mut draft, package("p"), &[x, r1]);
@@ -201,7 +194,7 @@ mod tests {
 
     #[test]
     fn resolves_parent_subpath() {
-        let mut draft = Draft::default();
+        let mut draft = Tree::default();
         let x = add_attribute(&mut draft, "x", "real");
         let y = add_parent(&mut draft, part("y"), &[x]);
         let r1 = with_restriction(&mut draft, "r1", "y::x");
@@ -214,7 +207,7 @@ mod tests {
 
     #[test]
     fn resolves_import_subpath() {
-        let mut draft = Draft::default();
+        let mut draft = Tree::default();
         let x = add_attribute(&mut draft, "x", "real");
         let y = add_parent(&mut draft, part("y"), &[x]);
         let mut q = package("q");
@@ -232,7 +225,7 @@ mod tests {
 
     #[test]
     fn resolves_attribute_domain_to_entity() {
-        let mut draft = Draft::default();
+        let mut draft = Tree::default();
         let y = add_attribute(&mut draft, "y", "real");
         let x = add_attribute(&mut draft, "x", "p::y");
         add_parent(&mut draft, package("p"), &[y, x]);
@@ -253,7 +246,7 @@ mod tests {
 
     #[test]
     fn resolves_attribute_domain_to_builtin() {
-        let mut draft = Draft::default();
+        let mut draft = Tree::default();
         let x = add_attribute(&mut draft, "x", "real");
         add_parent(&mut draft, package("p"), &[x]);
 
@@ -273,7 +266,7 @@ mod tests {
 
     #[test]
     fn resolves_type_enum() {
-        let mut draft = Draft::default();
+        let mut draft = Tree::default();
         let t = add(&mut draft, typ("t", &["a", "b", "c"]));
         let x = add_attribute(&mut draft, "x", "t");
 
@@ -285,8 +278,7 @@ mod tests {
             lhs,
             rhs,
         );
-        let mut r1 = requirement("r1");
-        r1.variant.requirement_mut().unwrap().variant = RequirementVariant::Formal(bin);
+        let r1 = formal("r1", bin);
         let r1 = add(&mut draft, r1);
         add_parent(&mut draft, package("p"), &[t, x, r1]);
 
@@ -301,7 +293,7 @@ mod tests {
 
     #[test]
     fn resolves_comprehension_body_to_local_variable() {
-        let mut draft = Draft::default();
+        let mut draft = Tree::default();
         let domain = identifier(&mut draft, "S");
         let body = identifier(&mut draft, "x");
         let set = node::expression::SetElement::new("x".to_string(), domain);
@@ -332,10 +324,10 @@ mod tests {
 
     #[test]
     fn resolves_markup_reference() {
-        let mut draft = Draft::default();
+        let mut draft = Tree::default();
         let mut p = mock::entity::package("p");
         let rf = reference(&mut draft, "p");
-        p.meta.comment = Some(Markup::from(vec![Item::Reference(rf)]));
+        p.meta.comment = Some(markup(&mut draft, Markup::from(vec![Item::Reference(rf)])));
         add(&mut draft, p);
 
         let (_, links) = resolved(draft);

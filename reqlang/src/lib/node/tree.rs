@@ -1,4 +1,4 @@
-use crate::node::{entity, expression, identifier, path::Path, reference};
+use crate::node::{entity, expression, identifier, markup, path::Path, reference};
 
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub struct Tree {
@@ -6,25 +6,7 @@ pub struct Tree {
     pub expressions: expression::Arena<expression::Node>,
     pub references: reference::Arena<Path>,
     pub identifiers: identifier::Arena<Path>,
-}
-
-#[derive(Default, Debug, Clone)]
-pub struct Draft {
-    pub entities: Vec<entity::Node>,
-    pub expressions: Vec<expression::Node>,
-    pub references: Vec<Path>,
-    pub identifiers: Vec<Path>,
-}
-
-impl From<Draft> for Tree {
-    fn from(draft: Draft) -> Self {
-        Tree {
-            entities: draft.entities.into(),
-            expressions: draft.expressions.into(),
-            references: draft.references.into(),
-            identifiers: draft.identifiers.into(),
-        }
-    }
+    pub markups: markup::Arena<markup::Markup>,
 }
 
 impl Tree {

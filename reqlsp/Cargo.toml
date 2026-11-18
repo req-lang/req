@@ -1,0 +1,19 @@
+[package]
+name = "reqlsp"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+itertools = "0.15.0"
+reqlang = { path = "../reqlang/" }
+tokio = { version = "1.54.1", features = ["full"] }
+tower-lsp = "0.20.0"
+
+[lib]
+name = "reqlsp"
+path = "src/lib/mod.rs"
+crate-type = ["lib"]
+
+[[bin]]
+name = "reqlsp"
+path = "src/main.rs"

@@ -15,11 +15,11 @@ pest_derive = "2.7.9"
 pretty_assertions = "1.4.1"
 thiserror = "2.0.18"
 unicode-normalization = "0.1.25"
-unindent = "0.2.4"
 
 [dev-dependencies]
 criterion = { version = "0.6", features = ["html_reports"] }
 pretty_assertions = "1.4.1"
+unindent = "0.2.4"
 
 [[bench]]
 name = "analysis"
