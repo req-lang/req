@@ -1,7 +1,7 @@
-//! The req checker and formatter for the browser.
+//! The req checker, formatter and HTML export for the browser.
 //!
-//! `check` and `format` do what `reqtool check` and `reqtool fmt` do, on a string instead of a
-//! file. The analysis below is copied from `reqtool/src/main.rs` (`Command::Check`) and kept in sync
+//! `check`, `format` and `exportHtml` do what `reqtool check`, `reqtool fmt` and `reqtool export` do, on
+//! a string instead of a file. Only the checker's analysis is a copy: the export is `reqlang`'s own. The analysis below is copied from `reqtool/src/main.rs` (`Command::Check`) and kept in sync
 //! by hand: the documentation repository (`lang-doc`, `scripts/playground_parity.mjs`) compares this
 //! build with `reqtool check --json` on every example, so a difference shows up there.
 //!
@@ -9,7 +9,7 @@
 //! Positions are the ones of `reqlang`: `index` is a byte offset into the UTF-8 source.
 
 use reqlang::{
-    Specification, issue,
+    Specification, exporter, issue,
     renderer::formatter,
     syntax::{location::Position, parser},
 };
@@ -112,6 +112,13 @@ pub fn format_source(source: &str) -> Result<String, String> {
     Ok(formatter::format_string(&tree, 0))
 }
 
+/// The specification as an HTML fragment, `reqtool export`'s output. A source with syntax errors is
+/// exported as far as the parser understood it, so a specification being typed still shows.
+pub fn export_source(source: &str) -> String {
+    let (tree, _) = parser::parse(source);
+    exporter::html::render_string(&Specification::from(tree))
+}
+
 #[wasm_bindgen(start)]
 pub fn start() {
     console_error_panic_hook::set_once();
@@ -131,6 +138,12 @@ pub fn check(source: &str) -> Result<JsValue, JsValue> {
 #[wasm_bindgen]
 pub fn format(source: &str) -> Result<String, JsValue> {
     format_source(source).map_err(|e| JsValue::from_str(&e))
+}
+
+/// The HTML fragment of `source` (headings, text, code), which links its references to `#pv-<n>` anchors
+#[wasm_bindgen(js_name = exportHtml)]
+pub fn export_html(source: &str) -> String {
+    export_source(source)
 }
 
 #[cfg(test)]
@@ -210,5 +223,25 @@ package
     fn formatting_a_valid_source_keeps_it_valid() {
         let formatted = format_source(TYPE_MISMATCH).unwrap();
         assert!(diagnostics(&formatted).len() == diagnostics(TYPE_MISMATCH).len());
+    }
+
+    #[test]
+    fn exports_the_references_as_links() {
+        let html = export_source(TYPE_MISMATCH);
+        assert!(
+            html.contains(r##"The <a href="#pv-1">Wheel</a> shall decelerate within 3s."##),
+            "{html}"
+        );
+        assert!(html.contains(r#"<h3 id="pv-1">Wheel</h3>"#), "{html}");
+    }
+
+    #[test]
+    fn exports_a_source_with_syntax_errors_as_far_as_it_was_understood() {
+        assert!(export_source(SYNTAX_ERROR).contains("<h2 id="));
+    }
+
+    #[test]
+    fn exports_nothing_for_an_empty_source() {
+        assert_eq!(export_source(""), "");
     }
 }

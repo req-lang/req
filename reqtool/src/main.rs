@@ -3,7 +3,7 @@ use std::{fs, io, path::PathBuf};
 use clap::Parser;
 use colored::Colorize;
 use reqlang::{
-    Specification,
+    Specification, exporter,
     issue::{self, IssueCode, Kind, Severity, code::codes},
     renderer::formatter,
     syntax::{location::Span, parser},
@@ -34,6 +34,14 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// Export a req source file as an HTML fragment, to put in a page
+    Export {
+        /// Input file
+        input: PathBuf,
+        /// Output file (stdout by default)
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+    },
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -55,6 +63,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Some(p) => formatter::format(&tree, &mut fs::File::create(p)?),
                 None => formatter::format(&tree, &mut io::stdout()),
             }?;
+        }
+        Command::Export { input, output } => {
+            let source = std::fs::read_to_string(&input)?;
+            let (tree, info) = parser::parse(&source);
+            let errors = info.errors;
+            report_syntax_errors(&source, &errors);
+
+            // What the parser recovered is exported, so a specification being written still shows
+            let spec = Specification::from(tree);
+            match output {
+                Some(p) => exporter::html::render(&spec, &mut fs::File::create(p)?),
+                None => exporter::html::render(&spec, &mut io::stdout()),
+            }?;
+
+            if !errors.is_empty() {
+                std::process::exit(1);
+            }
         }
         Command::Check { input, json } => {
             let start = std::time::Instant::now();

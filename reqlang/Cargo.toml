@@ -10,6 +10,7 @@ copyright = "© 2025-2026. All rights reserved. Sami Dahoux"
 
 [dependencies]
 itertools = "0.14.0"
+markdown = "1.0.0"
 pest = "2.7.9"
 pest_derive = "2.7.9"
 pretty_assertions = "1.4.1"
