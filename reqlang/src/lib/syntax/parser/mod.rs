@@ -271,6 +271,7 @@ mod tests {
             entity::{self, Requirement, TraceabilityKind},
             tree::Tree,
         },
+        renderer,
         syntax::parser::parse,
         utils::children::ChildrenMut,
     };
@@ -637,6 +638,24 @@ mod tests {
         generator.words = 2;
         let tree = generator.generate();
         assert_eq!(tree.entities.len(), generator.size() as usize);
+    }
+
+    #[test]
+    fn parses_reference_text_generated_input() {
+        let mut generator = mock::generator::ReferenceText::new();
+        generator.requirements = 2;
+        generator.lines = 3;
+        generator.per_line = 2;
+        generator.words = 0;
+        generator.segments = 4;
+        let text = renderer::formatter::format_string(&generator.generate(), 0);
+
+        let (tree, info) = parse(&text);
+
+        assert!(info.errors.is_empty());
+        assert_eq!(tree.entities.len(), generator.size() as usize);
+        assert_eq!(tree.references.len() as u64, generator.references());
+        assert_eq!(tree.references[0.into()].as_str(), "s0_0::s0_1::s0_2::s0_3");
     }
 
     #[test]

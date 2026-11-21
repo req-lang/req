@@ -29,6 +29,10 @@ harness = false
 name = "parsing"
 harness = false
 
+[[bench]]
+name = "references"
+harness = false
+
 [lib]
 name = "reqlang"
 path = "src/lib/mod.rs"

@@ -1,5 +1,7 @@
 pub mod generator {
-    use super::entity::{add_child, add_root, formal, informal, package, part, reference};
+    use super::entity::{
+        add, add_child, add_parent, add_root, formal, informal, package, part, reference,
+    };
     use super::expression::{binary, identifier, number};
     use crate::node::{
         expression::{Aggregator, BinaryOperator, Case, Comprehension, SetElement, Variant, When},
@@ -126,6 +128,70 @@ pub mod generator {
 
         fn size(&self) -> u64 {
             3 + self.requirements
+        }
+    }
+
+    /// Flat draft: one root package and `requirements` informal requirements. Each text is `lines`
+    /// lines of `per_line` references, `words` words before each one, and a path has `segments`
+    /// segments. The paths resolve to nothing: meant for tokenizing and parsing the references.
+    pub struct ReferenceText {
+        pub requirements: u64,
+        pub lines: u64,
+        pub per_line: u64,
+        pub words: u64,
+        pub segments: u64,
+    }
+
+    impl ReferenceText {
+        pub fn new() -> Self {
+            Self {
+                requirements: 10,
+                lines: 5,
+                per_line: 4,
+                words: 8,
+                segments: 3,
+            }
+        }
+
+        pub fn references(&self) -> u64 {
+            self.requirements * self.lines * self.per_line
+        }
+    }
+
+    impl Generate for ReferenceText {
+        fn generate(&self) -> Tree {
+            let mut draft = Tree::default();
+
+            let mut children = Vec::new();
+            let mut ordinal = 0;
+            for r in 0..self.requirements {
+                let mut items = Vec::new();
+                for line in 0..self.lines {
+                    if line > 0 {
+                        items.push(Item::Newline);
+                    }
+                    for _ in 0..self.per_line {
+                        let words = repeat_words(self.words as usize);
+                        items.push(Item::Text(format!("{words} ")));
+                        let path = (0..self.segments)
+                            .map(|segment| format!("s{ordinal}_{segment}"))
+                            .collect::<Vec<_>>()
+                            .join("::");
+                        items.push(Item::Reference(reference(&mut draft, path)));
+                        ordinal += 1;
+                    }
+                }
+                let text = Markup::from(items);
+                let req = informal(&mut draft, format!("requirement_{r}"), text);
+                children.push(add(&mut draft, req));
+            }
+            add_parent(&mut draft, package("root"), &children);
+
+            draft.into()
+        }
+
+        fn size(&self) -> u64 {
+            1 + self.requirements
         }
     }
 
