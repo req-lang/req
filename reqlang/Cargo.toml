@@ -1,6 +1,6 @@
 [package]
 name = "reqlang"
-version = "1.0.0"
+version.workspace = true
 description = "req language official core library"
 edition = "2024"
 

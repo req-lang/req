@@ -948,7 +948,7 @@ checksum = "dc897dd8d9e8bd1ed8cdad82b5966c3e0ecae09fb1907d58efaa013543185d0a"
 
 [[package]]
 name = "reqlang"
-version = "1.0.0"
+version = "0.9.0"
 dependencies = [
  "criterion",
  "itertools 0.14.0",
@@ -962,7 +962,7 @@ dependencies = [
 
 [[package]]
 name = "reqlsp"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "itertools 0.15.0",
  "reqlang",
@@ -973,7 +973,7 @@ dependencies = [
 
 [[package]]
 name = "reqtool"
-version = "1.0.0"
+version = "0.9.0"
 dependencies = [
  "clap",
  "colored",

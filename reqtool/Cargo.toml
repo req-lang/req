@@ -1,6 +1,6 @@
 [package]
 name = "reqtool"
-version = "1.0.0"
+version.workspace = true
 description = "req language official's compiler"
 edition = "2024"
 

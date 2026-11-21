@@ -3,6 +3,9 @@
 members = ["reqlang", "reqtool", "reqlsp"]
 resolver = "2"
 
+[workspace.package]
+version = "0.9.0"
+
 [profile.profiling]
 inherits = "release"
 debug = true
