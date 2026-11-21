@@ -109,14 +109,6 @@ impl Position {
             index,
         }
     }
-
-    pub fn next(pos: Position) -> Self {
-        Self {
-            line: pos.line,
-            column: pos.column + 1,
-            index: pos.index + 1,
-        }
-    }
 }
 
 impl From<((usize, usize), usize)> for Position {
@@ -188,7 +180,7 @@ impl<'a> Iterator for PositionIterator<'a> {
             }
 
             _ => {
-                self.current.column += 1;
+                self.current.column += c.len_utf16();
             }
         }
 
@@ -208,5 +200,38 @@ impl<'a> IntoPosition<'a> for CharIndices<'a> {
             current: Position::default(),
             offset: 0,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn index_counts_bytes_and_column_counts_utf16_units() {
+        let positions: Vec<_> = "é😀a\nb😀c"
+            .char_indices()
+            .positioned()
+            .map(|(p, _)| (p.line, p.column, p.index))
+            .collect();
+        assert_eq!(
+            positions,
+            [
+                (0, 0, 0),
+                (0, 1, 2),
+                (0, 3, 6),
+                (0, 4, 7),
+                (1, 0, 8),
+                (1, 1, 9),
+                (1, 3, 13)
+            ]
+        );
+    }
+
+    #[test]
+    fn current_is_after_the_last_char() {
+        let mut positions = "😀".char_indices().positioned();
+        positions.next();
+        assert_eq!(positions.current(), Position::new(0, 2, 4));
     }
 }

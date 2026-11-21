@@ -282,7 +282,7 @@ mod tests {
         let index = marked.rfind('|').unwrap();
         let before = &marked[..index];
         let line = before.matches('\n').count() as u32;
-        let column = before.rsplit('\n').next().unwrap().chars().count() as u32;
+        let column = before.rsplit('\n').next().unwrap().encode_utf16().count() as u32;
         let uri = Url::parse("file:///a.req").unwrap();
         let mut text = marked.to_string();
         text.remove(index);

@@ -173,7 +173,7 @@ impl Document {
         let last_line = text.rsplit('\n').next().unwrap_or_default();
         let end = Position::new(
             text.matches('\n').count() as u32,
-            last_line.chars().count() as u32,
+            last_line.encode_utf16().count() as u32,
         );
         Self {
             uri,
@@ -389,6 +389,19 @@ package
             location.range,
             Range::new(start, Position::new(start.line, start.character + 1))
         );
+    }
+
+    #[test]
+    fn columns_are_utf16_units() {
+        let source = "package A\n  part B\n    let x in real\n  part\n  requirement R\n  is\n    @@\n    😀 [[B]]\n    @@\n  requirement\npackage";
+        let doc = Document::new(uri(), source, 0);
+        let location = doc.definition(Position::new(7, 9)).unwrap();
+        let start = at(1, "B", 0);
+        assert_eq!(
+            location.range,
+            Range::new(start, Position::new(start.line, start.character + 1))
+        );
+        assert_eq!(Document::new(uri(), "a😀", 0).end, Position::new(0, 3));
     }
 
     #[test]

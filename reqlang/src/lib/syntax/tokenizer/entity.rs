@@ -1,7 +1,7 @@
 use Keyword::*;
 
 use crate::{
-    syntax::location::{IntoPosition, Position, PositionIterator, Span, SpanLike},
+    syntax::location::{IntoPosition, PositionIterator, Span, SpanLike},
     utils::cursor::Kinded,
 };
 
@@ -201,8 +201,7 @@ impl<'a> Iterator for LexemeIterator<'a> {
             loop {
                 let (pos, c) = position;
                 if is_reserved(c) {
-                    let end = Position::next(pos);
-                    let span = Span::new(pos, end);
+                    let span = Span::new(pos, self.positions.current());
                     let ret = (span, Punctation(c));
                     if !has_word {
                         return Some(ret);
@@ -226,7 +225,7 @@ impl<'a> Iterator for LexemeIterator<'a> {
                     }
 
                     None => {
-                        let span = Span::new(start, Position::next(pos));
+                        let span = Span::new(start, self.positions.current());
                         let range = span.range();
                         return Some((span, Word(&self.input[range])));
                     }
@@ -655,6 +654,14 @@ mod tests {
                 kw(Package)
             ]
         );
+    }
+
+    #[test]
+    fn ends_a_word_after_its_last_char() {
+        let input = "package café";
+        assert_eq!(lex(input), [kw(Package), id("café")]);
+        let last = tokenize(input).last().unwrap();
+        assert_eq!(last.span.end, Position::new(0, 12, 13));
     }
 
     #[test]
