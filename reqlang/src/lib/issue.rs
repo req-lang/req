@@ -17,6 +17,10 @@ use crate::{
     syntax::{location::Span, parser::Info},
 };
 
+pub mod code;
+
+pub use code::{IssueCode, Kind};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Severity {
     Light,
@@ -70,6 +74,22 @@ impl Issue {
             Issue::Network(kind, _) => kind.into(),
             Issue::Path(_) => Severity::Critical,
         }
+    }
+
+    /// The code that identifies the kind of the issue
+    pub fn code(&self) -> IssueCode {
+        match self {
+            Issue::Reference(_) | Issue::Identifier(_) => code::codes::UNRESOLVED_REFERENCE,
+            Issue::Type(issue, _) => issue.code(),
+            Issue::Owned(issue) => issue.code(),
+            Issue::Network(issue, _) => issue.code(),
+            Issue::Path(issue) => issue.code(),
+        }
+    }
+
+    /// What the issue is about, the kind of its code
+    pub fn kind(&self) -> Kind {
+        self.code().kind()
     }
 }
 

@@ -1,6 +1,9 @@
 use std::collections::HashMap;
 
-use crate::node::entity::{Arena, Idx, Node};
+use crate::{
+    issue::code::{IssueCode, codes},
+    node::entity::{Arena, Idx, Node},
+};
 
 pub mod entity;
 
@@ -10,6 +13,14 @@ pub use crate::node::path::Path;
 pub enum Issue {
     #[error("two entities have the same name at the same location")]
     Duplicated,
+}
+
+impl Issue {
+    pub fn code(&self) -> IssueCode {
+        match self {
+            Issue::Duplicated => codes::DUPLICATED_ENTITY,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

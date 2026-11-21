@@ -1,5 +1,8 @@
 use crate::{
-    issue::Severity,
+    issue::{
+        Severity,
+        code::{IssueCode, codes},
+    },
     node::{
         self,
         entity::{Arena, Idx},
@@ -26,6 +29,21 @@ pub enum Issue {
     UnrestrictedSubject,
     #[error("this entity is not used by any requirement")]
     UnusedSubject,
+}
+
+impl Issue {
+    pub fn code(&self) -> IssueCode {
+        match self {
+            Issue::MissingRequirementBinding => codes::MISSING_REQUIREMENT_BINDING,
+            Issue::MissingUpwardTrace => codes::MISSING_UPWARD_TRACE,
+            Issue::MissingDownwardTrace => codes::MISSING_DOWNWARD_TRACE,
+            Issue::InvalidRequirementParent => codes::INVALID_REQUIREMENT_PARENT,
+            Issue::InvalidPackageParent => codes::INVALID_PACKAGE_PARENT,
+            Issue::InvalidAttributeParent => codes::INVALID_ATTRIBUTE_PARENT,
+            Issue::UnrestrictedSubject => codes::UNRESTRICTED_SUBJECT,
+            Issue::UnusedSubject => codes::UNUSED_SUBJECT,
+        }
+    }
 }
 
 impl From<&Issue> for Severity {

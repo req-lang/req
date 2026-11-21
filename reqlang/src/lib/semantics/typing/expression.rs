@@ -1,7 +1,10 @@
 use std::fmt::Display;
 
 use crate::{
-    issue::Severity,
+    issue::{
+        Severity,
+        code::{IssueCode, codes},
+    },
     node::{
         self,
         expression::{Arena, Idx, Variant},
@@ -49,6 +52,17 @@ pub enum Issue {
     UnexpectedType(TypeKind, TypeKind),
     #[error("this expression points to an entity that has no type")]
     NotEvaluable,
+}
+
+impl Issue {
+    pub fn code(&self) -> IssueCode {
+        match self {
+            Issue::Poison => codes::PROPAGATED_TYPE_ERROR,
+            Issue::NotASet(_) => codes::NOT_A_SET,
+            Issue::UnexpectedType(..) => codes::UNEXPECTED_TYPE,
+            Issue::NotEvaluable => codes::NOT_EVALUABLE,
+        }
+    }
 }
 
 impl From<&Issue> for Severity {

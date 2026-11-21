@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 itertools = "0.15.0"
 reqlang = { path = "../reqlang/" }
+serde_json = "1"
 tokio = { version = "1.54.1", features = ["full"] }
 tower-lsp = "0.20.0"
 

@@ -1,7 +1,10 @@
 use std::collections::HashSet;
 
 use crate::{
-    issue::Severity,
+    issue::{
+        Severity,
+        code::{IssueCode, codes},
+    },
     node::{
         self,
         entity::{Arena, Idx, TraceabilityKind},
@@ -45,6 +48,29 @@ pub enum Issue {
     UnrelatedRestriction,
     #[error("allocation and restriction should be on different subjects")]
     SameAllocationAndRestriction,
+}
+
+impl Issue {
+    pub fn code(&self) -> IssueCode {
+        match self {
+            Issue::NotAPartOrAttribute => codes::NOT_A_PART_OR_ATTRIBUTE,
+            Issue::NotARequirement => codes::NOT_A_REQUIREMENT,
+            Issue::InhibitorForbidDerives => codes::INHIBITOR_FORBID_DERIVES,
+            Issue::MissingDerivation => codes::MISSING_DERIVATION,
+            Issue::DuplicatedTrace => codes::DUPLICATED_TRACE,
+            Issue::ConflictingTrace => codes::CONFLICTING_TRACE,
+            Issue::SpecializationMismatch => codes::SPECIALIZATION_MISMATCH,
+            Issue::CyclicTrace => codes::CYCLIC_TRACE,
+            Issue::ForbiddenUpwardTrace => codes::FORBIDDEN_UPWARD_TRACE,
+            Issue::ForbiddenDownwardTrace => codes::FORBIDDEN_DOWNWARD_TRACE,
+            Issue::RefinementMismatch => codes::REFINEMENT_MISMATCH,
+            Issue::NoDerivedAllocation => codes::NO_DERIVED_ALLOCATION,
+            Issue::DerivationMismatch => codes::DERIVATION_MISMATCH,
+            Issue::UnrelatedDerivation => codes::UNRELATED_DERIVATION,
+            Issue::UnrelatedRestriction => codes::UNRELATED_RESTRICTION,
+            Issue::SameAllocationAndRestriction => codes::SAME_ALLOCATION_AND_RESTRICTION,
+        }
+    }
 }
 
 impl From<&Issue> for Severity {
@@ -186,7 +212,9 @@ impl<'a> Diagnoser<'a> {
 
             if let Some(restr) = self.neighbors[idx].outbound.restriction {
                 match kind {
-                    TraceabilityKind::Specialization if restr != target => {
+                    TraceabilityKind::Specialization
+                        if self.is_specialization_mismatch(restr, target) =>
+                    {
                         issues.push(Issue::SpecializationMismatch);
                     }
                     TraceabilityKind::Refinement if self.is_refinement_mismatch(restr, target) => {
@@ -227,7 +255,7 @@ impl<'a> Diagnoser<'a> {
             _ => {}
         }
 
-        if !self.neighbors[idx].outbound.usages.contains(&restr) {
+        if self.is_unrelated_derivation(idx, target) {
             issues.push(Issue::UnrelatedDerivation);
         }
     }
@@ -251,6 +279,25 @@ impl<'a> Diagnoser<'a> {
             .any(|derivation| {
                 allocation
                     .is_some_and(|alloc| neighbors[*derivation].outbound.restriction == Some(alloc))
+            })
+    }
+
+    /// The specialized requirement restricts something else than what this one restricts
+    fn is_specialization_mismatch(&self, restr: Idx, target: Idx) -> bool {
+        self.neighbors[target]
+            .outbound
+            .restriction
+            .is_some_and(|target_restr| target_restr != restr)
+    }
+
+    /// The requirement does not use what the requirement it derives from restricts
+    // TODO: subject to change, see the Journal note "Derivation and the restriction of the parent"
+    fn is_unrelated_derivation(&self, idx: Idx, target: Idx) -> bool {
+        self.neighbors[target]
+            .outbound
+            .restriction
+            .is_some_and(|target_restr| {
+                !self.neighbors[idx].outbound.usages.contains(&target_restr)
             })
     }
 
@@ -294,4 +341,133 @@ fn cyclic_links(neighbors: &Arena<Neighbors>) -> HashSet<(Idx, Idx)> {
                 .map(|(traced, tracing)| (*tracing, *traced))
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{Specification, syntax::parser::parse};
+
+    /// The issues of every reference of the input, in no particular order
+    fn issues_of(input: &str) -> Vec<Issue> {
+        let (tree, info) = parse(input);
+        assert!(info.errors.is_empty(), "syntax errors: {:?}", info.errors);
+
+        let mut spec = Specification::from(tree);
+        spec.diagnose();
+        spec.analysis
+            .connection
+            .reference
+            .into_iter()
+            .flatten()
+            .collect()
+    }
+
+    /// The wheel stops thanks to the brake, which derives the requirement of the wheel. No issue.
+    fn deriving(brake_text: &str) -> String {
+        format!(
+            "package System
+  part Wheel
+  part
+
+  part Brake
+  part
+
+  requirement Wheel_stop top
+    on Wheel
+    via Brake
+  is
+    @@
+      The [[Wheel]] shall stop.
+    @@
+  requirement
+
+  requirement Brake_stops_wheel bottom
+    on Brake
+    derives Wheel_stop
+  is
+    @@
+      {brake_text}
+    @@
+  requirement
+package
+"
+        )
+    }
+
+    /// A requirement on the wheel, and a specialization of it on `subject`
+    fn specializing(subject: &str) -> String {
+        format!(
+            "package System
+  part Wheel
+  part
+
+  part Brake
+  part
+
+  requirement Wheel_stop top bottom
+    on Wheel
+  is
+    @@
+      The [[Wheel]] shall stop.
+    @@
+  requirement
+
+  requirement Specific_stop top bottom
+    on {subject}
+    specializes Wheel_stop
+  is
+    @@
+      The [[{subject}]] shall stop on a wet road.
+    @@
+  requirement
+package
+"
+        )
+    }
+
+    #[test]
+    fn a_specialization_of_the_same_subject_is_valid() {
+        let issues = issues_of(&specializing("Wheel"));
+
+        assert!(
+            !issues.contains(&Issue::SpecializationMismatch),
+            "{issues:?}"
+        );
+    }
+
+    #[test]
+    fn a_specialization_of_another_subject_is_a_mismatch() {
+        let issues = issues_of(&specializing("Brake"));
+
+        assert_eq!(
+            issues
+                .iter()
+                .filter(|i| **i == Issue::SpecializationMismatch)
+                .count(),
+            1,
+            "{issues:?}"
+        );
+    }
+
+    #[test]
+    fn a_derivation_using_the_restriction_of_its_parent_is_related() {
+        let issues = issues_of(&deriving("The [[Brake]] shall stop the [[Wheel]]."));
+
+        assert_eq!(issues, vec![]);
+    }
+
+    #[test]
+    fn a_derivation_ignoring_the_restriction_of_its_parent_is_unrelated() {
+        let issues = issues_of(&deriving("The [[Brake]] shall act."));
+
+        assert_eq!(issues, vec![Issue::UnrelatedDerivation]);
+    }
+
+    #[test]
+    fn a_derivation_ignoring_its_own_restriction_is_an_unrelated_restriction_only() {
+        let issues = issues_of(&deriving("The wheel shall stop thanks to the [[Wheel]]."));
+
+        assert_eq!(issues, vec![Issue::UnrelatedRestriction]);
+    }
 }

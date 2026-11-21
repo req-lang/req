@@ -966,6 +966,7 @@ version = "0.1.0"
 dependencies = [
  "itertools 0.15.0",
  "reqlang",
+ "serde_json",
  "tokio",
  "tower-lsp",
 ]

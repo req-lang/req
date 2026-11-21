@@ -4,7 +4,7 @@ use clap::Parser;
 use colored::Colorize;
 use reqlang::{
     Specification,
-    issue::{self, Severity},
+    issue::{self, IssueCode, Kind, Severity, code::codes},
     renderer::formatter,
     syntax::{location::Span, parser},
 };
@@ -91,18 +91,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 for issue in issues.into_iter() {
                     let span = issue.span(idx, &info);
-                    let code = &source[span.range()];
+                    let snippet = &source[span.range()];
                     let issue = Issue::from(issue);
                     if json {
                         json_issues.push(serde_json::json!({
+                            "code": issue.code.to_string(),
+                            "kind": issue.kind.as_str(),
                             "severity": issue.severity_name(),
                             "message": issue.message,
                             "span": span_json(&span),
-                            "code": code,
+                            "snippet": snippet,
                         }));
                     } else {
                         let sp = format!("{}", span.start).on_black();
-                        eprintln!("{:12} {}\n{}", sp, issue.colored_message(), code);
+                        eprintln!(
+                            "{:12} {} {}\n{}",
+                            sp,
+                            issue.code.to_string().dimmed(),
+                            issue.colored_message(),
+                            snippet
+                        );
                     }
                 }
 
@@ -121,8 +129,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         let end = span.end.index.min(source.len());
                         let start = span.start.index.min(end);
                         serde_json::json!({
+                            "code": codes::SYNTAX_ERROR.to_string(),
+                            "kind": Kind::Syntax.as_str(),
+                            "message": SYNTAX_ERROR_MESSAGE,
                             "span": span_json(span),
-                            "code": &source[start..end],
+                            "snippet": &source[start..end],
                         })
                     })
                     .collect();
@@ -145,18 +156,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+const SYNTAX_ERROR_MESSAGE: &str = "syntax error";
+
 fn report_syntax_errors(source: &str, errors: &[Span]) {
     for span in errors {
         let end = span.end.index.min(source.len());
         let start = span.start.index.min(end);
-        let code = source[start..end].bold();
+        let snippet = source[start..end].bold();
         eprintln!(
-            "{:12} {}",
+            "{:12} {} {}",
             format!("{}", span.start).bold(),
-            "syntax error".red()
+            codes::SYNTAX_ERROR.to_string().dimmed(),
+            SYNTAX_ERROR_MESSAGE.red()
         );
-        if !code.is_empty() {
-            eprintln!("    {}", code);
+        if !snippet.is_empty() {
+            eprintln!("    {}", snippet);
         }
     }
 }
@@ -169,6 +183,8 @@ fn span_json(span: &Span) -> serde_json::Value {
 }
 
 struct Issue {
+    code: IssueCode,
+    kind: Kind,
     message: String,
     severity: Severity,
 }
@@ -196,6 +212,8 @@ impl Issue {
 impl From<issue::Issue> for Issue {
     fn from(value: issue::Issue) -> Self {
         Self {
+            code: value.code(),
+            kind: value.kind(),
             message: value.to_string(),
             severity: value.severity(),
         }
