@@ -48,7 +48,7 @@ package A
     refines R2
   is
     @@
-    Some tests on {X::X1::X2::x}
+    Some tests on [[X::X1::X2::x]]
     @@
   requirement
 package

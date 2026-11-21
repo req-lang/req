@@ -39,7 +39,7 @@ impl LanguageServer for Backend {
                 references_provider: Some(OneOf::Left(true)),
                 document_formatting_provider: Some(OneOf::Left(true)),
                 completion_provider: Some(CompletionOptions {
-                    trigger_characters: Some(vec![" ".into(), "{".into(), ":".into()]),
+                    trigger_characters: Some(vec![" ".into(), "[".into(), ":".into()]),
                     ..Default::default()
                 }),
                 semantic_tokens_provider: Some(

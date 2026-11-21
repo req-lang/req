@@ -16,40 +16,29 @@ impl Parser<'_> {
         let input = &self.source[span.range()];
         let tokens = tokenize(input);
 
-        let errs = errors(&tokens).into_iter().map(|err| err + span.start);
         let markup = markup(input, &tokens, &mut self.references);
         self.markups.tokens.extend(tokens.into_iter());
 
         self.relocate(mark, span.start);
-        self.errors.extend(errs);
         self.markups.push_from(markup, mark.markup)
     }
 }
 
-fn errors(tokens: &Vec<Token>) -> Vec<Span> {
-    let mut errs = Vec::new();
-
-    for (idx, tok) in tokens.iter().enumerate() {
-        let end = tokens.get(idx + 2);
-        if tok.kind == Kind::ReferenceStart && end.map(|i| i.kind) != Some(Kind::ReferenceEnd) {
-            errs.push(tok.span);
+fn markup(text: &str, tokens: &Vec<Token>, refs: &mut reference::ParserArena) -> Markup {
+    let mut items: Vec<Item> = Vec::new();
+    for tok in tokens {
+        let item = match tok.kind {
+            Kind::Text | Kind::UnfinishedReference => Item::Text(tok.text(text).to_string()),
+            Kind::Indent => Item::Indent(tok.text(text).to_string()),
+            Kind::Newline => Item::Newline,
+            Kind::Reference => Item::Reference(reference(tok, text, refs)),
+            Kind::ReferenceStart | Kind::ReferenceEnd => continue,
+        };
+        match (items.last_mut(), item) {
+            (Some(Item::Text(last)), Item::Text(text)) => last.push_str(&text),
+            (_, item) => items.push(item),
         }
     }
-
-    errs
-}
-
-fn markup(text: &str, tokens: &Vec<Token>, refs: &mut reference::ParserArena) -> Markup {
-    let items: Vec<_> = tokens
-        .iter()
-        .filter_map(|tok| match tok.kind {
-            Kind::Text => Some(Item::Text(tok.text(text).to_string())),
-            Kind::Indent => Some(Item::Indent(tok.text(text).to_string())),
-            Kind::Newline => Some(Item::Newline),
-            Kind::Reference => Some(Item::Reference(reference(tok, text, refs))),
-            _ => None,
-        })
-        .collect();
     Markup::from(items)
 }
 
@@ -65,12 +54,9 @@ fn reference(
     refs.push(path, range)
 }
 
-pub fn parse(text: &str, refs: &mut reference::ParserArena) -> (Markup, Vec<Span>) {
+pub fn parse(text: &str, refs: &mut reference::ParserArena) -> Markup {
     let tokens = tokenize(text);
-
-    let errs = errors(&tokens).into_iter().map(|err| err).collect();
-    let markup = markup(text, &tokens, refs);
-    (markup, errs)
+    markup(text, &tokens, refs)
 }
 
 #[cfg(test)]
@@ -79,52 +65,46 @@ mod tests {
     use crate::node::{path::Path, reference as node_reference};
 
     fn parse_alone(text: &str) -> (Markup, node_reference::Arena<Path>, Vec<Span>) {
-        let (markup, paths, spans, _, _) = parse_with_tokens(text);
+        let (markup, paths, spans, _) = parse_with_tokens(text);
         (markup, paths, spans)
     }
 
     fn parse_with_tokens(
         text: &str,
-    ) -> (
-        Markup,
-        node_reference::Arena<Path>,
-        Vec<Span>,
-        Vec<Token>,
-        Vec<Span>,
-    ) {
+    ) -> (Markup, node_reference::Arena<Path>, Vec<Span>, Vec<Token>) {
         let mut references = reference::ParserArena::default();
-        let (markup, errors) = parse(text, &mut references);
+        let markup = parse(text, &mut references);
         let (paths, ref_tokens) = references.finish();
-        (markup, paths, ref_tokens.spans(), tokenize(text), errors)
+        (markup, paths, ref_tokens.spans(), tokenize(text))
     }
 
     #[test]
     fn keeps_every_token() {
-        let text = "see {a} and {b";
-        let (_, _, _, tokens, _) = parse_with_tokens(text);
+        let text = "see [[a]] and [[b";
+        let (_, _, _, tokens) = parse_with_tokens(text);
         let rebuilt: String = tokens.iter().map(|t| t.text(text)).collect();
         assert_eq!(rebuilt, text);
     }
 
     #[test]
-    fn unclosed_reference_is_a_reference_and_an_error() {
-        let text = "see {a} and {b";
-        let (markup, paths, _, _, errors) = parse_with_tokens(text);
+    fn what_is_not_a_reference_is_text() {
+        let text = "see [[a]] and [[b and [[]] and [[c d]] and {e} \\frac{f}{g}";
+        let (markup, paths, _) = parse_alone(text);
 
-        // The reference is kept, the missing brace is reported at the `{`
-        assert_eq!(paths.len(), 2);
-        assert_eq!(render(markup.items.into_iter(), &paths), "see {a} and {b}");
-        assert_eq!(errors.len(), 1);
-        assert_eq!(&text[errors[0].range()], "{");
-        assert_eq!(errors[0].start.column, 12);
+        assert_eq!(paths.len(), 1);
+        assert_eq!(markup.items.len(), 3);
+        assert_eq!(
+            render(markup.items.into_iter(), &paths),
+            "see [[a]] and [[b and [[]] and [[c d]] and {e} \\frac{f}{g}"
+        );
     }
 
     #[test]
-    fn empty_reference_is_a_reference() {
-        let (markup, paths, spans) = parse_alone("see {}");
-        assert_eq!(markup.references().count(), 1);
-        assert_eq!(paths[markup.references().next().unwrap()].as_str(), "");
-        assert_eq!(spans.len(), 1);
+    fn references_next_to_each_other_are_two_references() {
+        let (markup, paths, spans) = parse_alone("[[a]][[b]]");
+        let found: Vec<_> = markup.references().map(|r| paths[r].as_str()).collect();
+        assert_eq!(found, ["a", "b"]);
+        assert_eq!(spans.len(), 2);
     }
 
     fn render(items: impl Iterator<Item = Item>, paths: &node_reference::Arena<Path>) -> String {
@@ -132,14 +112,14 @@ mod tests {
             .map(|item| match item {
                 Item::Text(text) | Item::Indent(text) => text,
                 Item::Newline => "\n".to_string(),
-                Item::Reference(r) => format!("{{{}}}", paths[r].as_str()),
+                Item::Reference(r) => format!("[[{}]]", paths[r].as_str()),
             })
             .collect()
     }
 
     #[test]
     fn items_are_the_text_as_it_is_written() {
-        let text = "\n  a {r}\n\t b\n";
+        let text = "\n  a [[r]]\n\t b\n";
         let (markup, paths, _) = parse_alone(text);
         assert_eq!(render(markup.items.into_iter(), &paths), text);
     }
@@ -153,10 +133,10 @@ mod tests {
             "a\n    b\n  c",
             "  a\n\n  b\n",
             "x\n\t a\n\t b\n   ",
-            "é\n  é {r}\n  z",
-            "\n    some {ref}\n      more {other}\n  ",
+            "é\n  é [[r]]\n  z",
+            "\n    some [[ref]]\n      more [[other]]\n  ",
             "first\n  \n    third\n",
-            "\n  \n    a\n  {r} b\n",
+            "\n  \n    a\n  [[r]] b\n",
         ] {
             let (markup, paths, _) = parse_alone(text);
             assert_eq!(
@@ -169,13 +149,13 @@ mod tests {
 
     #[test]
     fn references_are_relative_to_the_text() {
-        let text = "\n    some {first}\n      more {second}\n  ";
+        let text = "\n    some [[first]]\n      more [[second]]\n  ";
         let (_, _, spans) = parse_alone(text);
 
         let found: Vec<_> = spans.iter().map(|s| &text[s.range()]).collect();
         assert_eq!(found, ["first", "second"]);
         // The first line of the text is empty, then the references are on lines 1 and 2
-        assert_eq!((spans[0].start.line, spans[0].start.column), (1, 10));
-        assert_eq!((spans[1].start.line, spans[1].start.column), (2, 12));
+        assert_eq!((spans[0].start.line, spans[0].start.column), (1, 11));
+        assert_eq!((spans[1].start.line, spans[1].start.column), (2, 13));
     }
 }

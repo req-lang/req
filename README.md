@@ -25,7 +25,7 @@ package System
       on System::Model
     is
       @@
-        The {System::Model} shall keep its temperature under control.
+        The [[System::Model]] shall keep its temperature under control.
       @@
     requirement
 

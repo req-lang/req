@@ -157,14 +157,14 @@ impl Display for Position {
 
 pub struct PositionIterator<'a> {
     chars: CharIndices<'a>,
-    position: Position,
+    current: Position,
     input: &'a str,
     offset: usize,
 }
 
 impl<'a> PositionIterator<'a> {
-    pub fn position(&self) -> Position {
-        self.position
+    pub fn current(&self) -> Position {
+        self.current
     }
 
     pub fn input(&self) -> &'a str {
@@ -177,18 +177,18 @@ impl<'a> Iterator for PositionIterator<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         let (idx, c) = self.chars.next()?;
-        self.position.index = self.offset + idx;
+        self.current.index = self.offset + idx;
 
-        let ret = (self.position, c);
-        self.position.index += c.len_utf8();
+        let ret = (self.current, c);
+        self.current.index += c.len_utf8();
         match c {
             '\n' => {
-                self.position.line += 1;
-                self.position.column = 0;
+                self.current.line += 1;
+                self.current.column = 0;
             }
 
             _ => {
-                self.position.column += 1;
+                self.current.column += 1;
             }
         }
 
@@ -205,7 +205,7 @@ impl<'a> IntoPosition<'a> for CharIndices<'a> {
         PositionIterator {
             input: self.as_str(),
             chars: self,
-            position: Position::default(),
+            current: Position::default(),
             offset: 0,
         }
     }

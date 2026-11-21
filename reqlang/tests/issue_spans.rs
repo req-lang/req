@@ -66,7 +66,7 @@ fn unresolved_identifiers_are_underlined_on_the_identifier() {
 
 #[test]
 fn unresolved_references_are_underlined_on_the_reference() {
-    let input = "package p\n  requirement r refines nope is\n    @@\n      see {gone}\n    @@\n  requirement\npackage";
+    let input = "package p\n  requirement r refines nope is\n    @@\n      see [[gone]]\n    @@\n  requirement\npackage";
     let found = underlined(input, |i| matches!(i, Issue::Reference(_)));
     assert_same_items(found, &["gone", "nope"]);
 }

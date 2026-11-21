@@ -168,7 +168,7 @@ impl Token {
 
     fn markup(token: &tokenizer::markup::Token) -> Option<Token> {
         let kind = match token.kind {
-            markup::Kind::Text => Some(Kind::String),
+            markup::Kind::Text | markup::Kind::UnfinishedReference => Some(Kind::String),
             _ => None,
         }?;
         Some(Token::new(kind, token.span.into()))
@@ -547,17 +547,17 @@ package";
 
     #[test]
     fn the_text_of_a_requirement_is_a_string_and_its_references_are_paths() {
-        let source = "package A\n  requirement R\n  is\n    @@\n    see {R} and {B::x}\n    @@\n  requirement\npackage";
-        // The braces are left out
+        let source = "package A\n  requirement R\n  is\n    @@\n    see [[R]] and [[B::x]]\n    @@\n  requirement\npackage";
+        // The brackets are left out
         assert_eq!(
             on_line(source, 4),
             [
                 (4, 4, 4, STRING, 0),
-                (4, 9, 1, FUNCTION, 0),
-                (4, 11, 5, STRING, 0),
-                (4, 17, 1, VARIABLE, 0),
-                (4, 18, 2, OPERATOR, 0),
+                (4, 10, 1, FUNCTION, 0),
+                (4, 13, 5, STRING, 0),
                 (4, 20, 1, VARIABLE, 0),
+                (4, 21, 2, OPERATOR, 0),
+                (4, 23, 1, VARIABLE, 0),
             ]
         );
     }

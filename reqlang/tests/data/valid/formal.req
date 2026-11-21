@@ -13,7 +13,7 @@ package A
     let y in boolean
   part
   @@
-  Comment {A::B::x}
+  Comment [[A::B::x]]
   @@
   # tag tag has a value #
   requirement R1 

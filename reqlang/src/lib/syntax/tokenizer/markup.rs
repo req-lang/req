@@ -10,6 +10,7 @@ pub enum Kind {
     ReferenceStart,
     Reference,
     ReferenceEnd,
+    UnfinishedReference,
     Newline,
     Indent,
 }
@@ -37,10 +38,47 @@ impl Token {
     pub fn text<'s>(&self, source: &'s str) -> &'s str {
         &source[self.span.range()]
     }
+
+    pub fn name(&self) -> Option<Span> {
+        match self.kind {
+            Kind::Reference => Some(self.span),
+            Kind::UnfinishedReference => {
+                let skip = REFERENCE_SYMBOL_LEN;
+                let start = self.span.start;
+                let start = Position::new(start.line, start.column + skip, start.index + skip);
+                Some(Span::new(start, self.span.end))
+            }
+            _ => None,
+        }
+    }
 }
 
-pub const REFERENCE_START: char = '{';
-pub const REFERENCE_END: char = '}';
+pub const REFERENCE_START: &str = "[[";
+pub const REFERENCE_END: &str = "]]";
+pub const REFERENCE_SYMBOL_LEN: usize = 2;
+
+fn is_identifier(c: char) -> bool {
+    c.is_alphanumeric() || matches!(c, '_' | '-' | ':')
+}
+
+enum Opening {
+    Reference,
+    Unfinished(usize),
+}
+
+impl Opening {
+    fn of(rest: &str) -> Option<Self> {
+        let rest = rest.strip_prefix(REFERENCE_START)?;
+        if rest.starts_with('[') {
+            return None;
+        }
+        let name = rest.find(|c| !is_identifier(c)).unwrap_or(rest.len());
+        if name > 0 && rest[name..].starts_with(REFERENCE_END) {
+            return Some(Self::Reference);
+        }
+        Some(Self::Unfinished(rest[..name].chars().count()))
+    }
+}
 
 pub struct TokenIterator<'a> {
     positions: PositionIterator<'a>,
@@ -58,7 +96,7 @@ pub trait IntoTokens<'a> {
 impl<'a> IntoTokens<'a> for PositionIterator<'a> {
     fn tokens(self) -> TokenIterator<'a> {
         TokenIterator {
-            start: self.position(),
+            start: self.current(),
             positions: self,
             in_reference: false,
             at_line_start: false,
@@ -71,7 +109,7 @@ impl<'a> IntoTokens<'a> for PositionIterator<'a> {
 impl TokenIterator<'_> {
     fn push(&mut self, kind: Kind, end: Position) {
         let token = Token::new(kind, self.start, end);
-        if kind == Kind::Reference || !token.span.range().is_empty() {
+        if !token.span.range().is_empty() {
             match self.ready {
                 None => self.ready = Some(token),
                 Some(_) => self.after = Some(token),
@@ -87,20 +125,17 @@ impl Iterator for TokenIterator<'_> {
     fn next(&mut self) -> Option<Self::Item> {
         while self.ready.is_none() {
             let Some((position, c)) = self.positions.next() else {
-                let end = self.positions.position();
+                let end = self.positions.current();
                 let kind = if self.at_line_start {
                     Kind::Indent
-                } else if self.in_reference {
-                    Kind::Reference
                 } else {
                     Kind::Text
                 };
                 self.push(kind, end);
                 self.at_line_start = false;
-                self.in_reference = false;
                 break;
             };
-            let next = self.positions.position();
+            let next = self.positions.current();
 
             if self.at_line_start && !matches!(c, ' ' | '\t') {
                 self.push(Kind::Indent, position);
@@ -108,19 +143,29 @@ impl Iterator for TokenIterator<'_> {
             }
 
             match c {
-                '\n' if !self.in_reference => {
+                '\n' => {
                     self.push(Kind::Text, position);
                     self.push(Kind::Newline, next);
                     self.at_line_start = true;
                 }
-                REFERENCE_START if !self.in_reference => {
-                    self.push(Kind::Text, position);
-                    self.push(Kind::ReferenceStart, next);
-                    self.in_reference = true;
-                }
-                REFERENCE_END if self.in_reference => {
+                '[' => match Opening::of(&self.positions.input()[position.index..]) {
+                    Some(Opening::Reference) => {
+                        self.push(Kind::Text, position);
+                        self.positions.next();
+                        self.push(Kind::ReferenceStart, self.positions.current());
+                        self.in_reference = true;
+                    }
+                    Some(Opening::Unfinished(name)) => {
+                        self.push(Kind::Text, position);
+                        self.positions.nth(name);
+                        self.push(Kind::UnfinishedReference, self.positions.current());
+                    }
+                    None => {}
+                },
+                ']' if self.in_reference => {
                     self.push(Kind::Reference, position);
-                    self.push(Kind::ReferenceEnd, next);
+                    self.positions.next();
+                    self.push(Kind::ReferenceEnd, self.positions.current());
                     self.in_reference = false;
                 }
                 _ => {}
@@ -143,9 +188,17 @@ mod tests {
         tokens.map(|t| (t.kind, t.text(input))).collect()
     }
 
+    fn references(input: &str) -> Vec<&str> {
+        lex(input)
+            .into_iter()
+            .filter(|(kind, _)| *kind == Reference)
+            .map(|(_, text)| text)
+            .collect()
+    }
+
     #[test]
     fn tokenizes_the_indentation_of_each_line_but_the_first() {
-        let input = "  first\n  \t second {r}\n\n    last";
+        let input = "  first\n  \t second [[r]]\n\n    last";
         assert_eq!(
             lex(input),
             [
@@ -153,9 +206,9 @@ mod tests {
                 (Newline, "\n"),
                 (Indent, "  \t "),
                 (Text, "second "),
-                (ReferenceStart, "{"),
+                (ReferenceStart, "[["),
                 (Reference, "r"),
-                (ReferenceEnd, "}"),
+                (ReferenceEnd, "]]"),
                 (Newline, "\n"),
                 (Newline, "\n"),
                 (Indent, "    "),
@@ -167,14 +220,16 @@ mod tests {
     #[test]
     fn tokens_cover_the_whole_input() {
         for input in [
-            "\n   a {b}\n \r\n\t\n  é",
-            "{}",
-            "a {",
-            "a {b",
-            "a {b\n  c",
-            "a } b",
-            "  {a{b}}",
-            "{a}{b}",
+            "\n   a [[b]]\n \r\n\t\n  é",
+            "[[]]",
+            "a [[",
+            "a [[b",
+            "a [[b\n  c",
+            "a ]] b",
+            "  [[a[[b]]]]",
+            "[[a]][[b]]",
+            "\\frac{a}{b} x^{2} A{Choix}",
+            "[[a b]] [[a\nb]]",
         ] {
             let text: String = lex(input).iter().map(|(_, text)| *text).collect();
             assert_eq!(text, input);
@@ -183,7 +238,7 @@ mod tests {
 
     #[test]
     fn positions_the_tokens_in_the_text() {
-        let text = "ab\n  c {é}";
+        let text = "ab\n  c [[é]]";
         let tokens = text
             .char_indices()
             .positioned()
@@ -199,25 +254,25 @@ mod tests {
         );
         // The reference, on the second line: columns restart at the line, and the index counts
         // the bytes of `é`
-        // The path, between the braces
+        // The identifier, between the brackets
         let (kind, span) = tokens.iter().find(|(k, _)| *k == Reference).unwrap();
         assert_eq!(*kind, Reference);
         assert_eq!(
             (span.start, span.end),
-            (Position::new(1, 5, 8), Position::new(1, 6, 10))
+            (Position::new(1, 6, 9), Position::new(1, 7, 11))
         );
     }
 
     #[test]
     fn tokenizes_simple_input() {
-        let input = "some text {a reference} some text";
+        let input = "some text [[a_reference]] some text";
         assert_eq!(
             lex(input),
             [
                 (Text, "some text "),
-                (ReferenceStart, "{"),
-                (Reference, "a reference"),
-                (ReferenceEnd, "}"),
+                (ReferenceStart, "[["),
+                (Reference, "a_reference"),
+                (ReferenceEnd, "]]"),
                 (Text, " some text")
             ]
         );
@@ -225,13 +280,13 @@ mod tests {
 
     #[test]
     fn tokenizes_reference_at_the_start() {
-        let input = "{a reference} some text";
+        let input = "[[a_reference]] some text";
         assert_eq!(
             lex(input),
             [
-                (ReferenceStart, "{"),
-                (Reference, "a reference"),
-                (ReferenceEnd, "}"),
+                (ReferenceStart, "[["),
+                (Reference, "a_reference"),
+                (ReferenceEnd, "]]"),
                 (Text, " some text")
             ]
         );
@@ -239,45 +294,45 @@ mod tests {
 
     #[test]
     fn tokenizes_reference_at_the_end() {
-        let input = "some text {a reference}";
+        let input = "some text [[a_reference]]";
         assert_eq!(
             lex(input),
             [
                 (Text, "some text "),
-                (ReferenceStart, "{"),
-                (Reference, "a reference"),
-                (ReferenceEnd, "}"),
+                (ReferenceStart, "[["),
+                (Reference, "a_reference"),
+                (ReferenceEnd, "]]"),
             ]
         );
     }
 
     #[test]
     fn tokenizes_reference_at_start_of_line() {
-        let input = "some text\n{a reference}";
+        let input = "some text\n[[a_reference]]";
         assert_eq!(
             lex(input),
             [
                 (Text, "some text"),
                 (Newline, "\n"),
-                (ReferenceStart, "{"),
-                (Reference, "a reference"),
-                (ReferenceEnd, "}"),
+                (ReferenceStart, "[["),
+                (Reference, "a_reference"),
+                (ReferenceEnd, "]]"),
             ]
         );
     }
 
     #[test]
     fn tokenizes_reference_after_indentation() {
-        let input = "a\n  {r}";
+        let input = "a\n  [[r]]";
         assert_eq!(
             lex(input),
             [
                 (Text, "a"),
                 (Newline, "\n"),
                 (Indent, "  "),
-                (ReferenceStart, "{"),
+                (ReferenceStart, "[["),
                 (Reference, "r"),
-                (ReferenceEnd, "}"),
+                (ReferenceEnd, "]]"),
             ]
         );
     }
@@ -285,7 +340,16 @@ mod tests {
     #[test]
     fn the_tokens_end_with_the_text() {
         // Bounded, so that an iterator that never ends fails instead of filling the memory
-        for input in ["", "a", "a {", "a {b", "{", "{}", "a\n  ", "a {b\n  c"] {
+        for input in [
+            "",
+            "a",
+            "a [[",
+            "a [[b",
+            "[[",
+            "[[]]",
+            "a\n  ",
+            "a [[b\n  c",
+        ] {
             let tokens = input
                 .char_indices()
                 .positioned()
@@ -297,60 +361,165 @@ mod tests {
     }
 
     #[test]
-    fn tokenizes_empty_reference() {
-        let input = "see {}";
+    fn an_identifier_is_made_of_letters_digits_and_a_few_signs() {
+        assert_eq!(references("[[A::b_c-d:e9]]"), ["A::b_c-d:e9"]);
+        assert_eq!(references("[[é]]"), ["é"]);
         assert_eq!(
-            lex(input),
+            lex("[[a b]]"),
+            [(UnfinishedReference, "[[a"), (Text, " b]]")]
+        );
+        assert_eq!(
+            lex("[[a.b]]"),
+            [(UnfinishedReference, "[[a"), (Text, ".b]]")]
+        );
+        assert_eq!(
+            lex("[[a|b]]"),
+            [(UnfinishedReference, "[[a"), (Text, "|b]]")]
+        );
+    }
+
+    #[test]
+    fn an_empty_reference_is_unfinished() {
+        assert_eq!(
+            lex("see [[]]"),
+            [(Text, "see "), (UnfinishedReference, "[["), (Text, "]]")]
+        );
+    }
+
+    #[test]
+    fn a_reference_that_is_not_closed_is_unfinished() {
+        assert_eq!(lex("see [["), [(Text, "see "), (UnfinishedReference, "[[")]);
+        assert_eq!(
+            lex("see [[B::"),
+            [(Text, "see "), (UnfinishedReference, "[[B::")]
+        );
+        assert_eq!(
+            lex("see [[B]"),
+            [(Text, "see "), (UnfinishedReference, "[[B"), (Text, "]")]
+        );
+        assert_eq!(
+            lex("see [[é a"),
+            [(Text, "see "), (UnfinishedReference, "[[é"), (Text, " a")]
+        );
+    }
+
+    #[test]
+    fn a_single_bracket_is_text() {
+        assert_eq!(lex("see [B]] [ ["), [(Text, "see [B]] [ [")]);
+    }
+
+    #[test]
+    fn a_reference_is_on_one_line() {
+        assert_eq!(
+            lex("a [[b\nc]]"),
             [
-                (Text, "see "),
-                (ReferenceStart, "{"),
-                (Reference, ""),
-                (ReferenceEnd, "}"),
+                (Text, "a "),
+                (UnfinishedReference, "[[b"),
+                (Newline, "\n"),
+                (Text, "c]]")
+            ]
+        );
+        assert_eq!(
+            lex("a [[\nb]]"),
+            [
+                (Text, "a "),
+                (UnfinishedReference, "[["),
+                (Newline, "\n"),
+                (Text, "b]]")
             ]
         );
     }
 
     #[test]
-    fn tokenizes_unclosed_reference() {
-        // The path is there, there is no end
+    fn what_follows_a_reference_that_is_not_closed_is_still_read() {
         assert_eq!(
-            lex("see {"),
-            [(Text, "see "), (ReferenceStart, "{"), (Reference, "")]
-        );
-        assert_eq!(
-            lex("see {B::"),
-            [(Text, "see "), (ReferenceStart, "{"), (Reference, "B::")]
+            lex("[[a [[b]]"),
+            [
+                (UnfinishedReference, "[[a"),
+                (Text, " "),
+                (ReferenceStart, "[["),
+                (Reference, "b"),
+                (ReferenceEnd, "]]"),
+            ]
         );
     }
 
     #[test]
-    fn tokenizes_the_empty_path_where_the_cursor_goes() {
-        let input = "see {}";
-        let tokens = input
+    fn the_last_two_brackets_of_a_run_open_the_reference() {
+        assert_eq!(
+            lex("[[[ [[[b"),
+            [
+                (Text, "["),
+                (UnfinishedReference, "[["),
+                (Text, " ["),
+                (UnfinishedReference, "[[b"),
+            ]
+        );
+    }
+
+    #[test]
+    fn the_name_of_a_reference_is_what_is_typed_after_the_brackets() {
+        let input = "ab [[é]] [[c [[d\n  [[";
+        let names = input
             .char_indices()
             .positioned()
             .tokens()
+            .filter_map(|token| token.name())
+            .map(|name| {
+                let (start, end) = (name.start, name.end);
+                (&input[name.range()], start.line, start.column, end.column)
+            })
             .collect::<Vec<_>>();
-        let path = tokens.iter().find(|t| t.kind == Reference).unwrap();
-        assert_eq!(path.span.start, Position::new(0, 5, 5));
-        assert_eq!(path.span.end, path.span.start);
-    }
-
-    #[test]
-    fn a_closing_brace_alone_is_text() {
-        assert_eq!(lex("a } b"), [(Text, "a } b")]);
-    }
-
-    #[test]
-    fn an_opening_brace_in_a_reference_is_part_of_its_path() {
         assert_eq!(
-            lex("{a{b}"),
+            names,
             [
-                (ReferenceStart, "{"),
-                (Reference, "a{b"),
-                (ReferenceEnd, "}")
+                ("é", 0, 5, 6),
+                ("c", 0, 11, 12),
+                ("d", 0, 15, 16),
+                ("", 1, 4, 4)
             ]
         );
+    }
+
+    #[test]
+    fn two_references_next_to_each_other_are_two_references() {
+        assert_eq!(
+            lex("[[a]][[b]]"),
+            [
+                (ReferenceStart, "[["),
+                (Reference, "a"),
+                (ReferenceEnd, "]]"),
+                (ReferenceStart, "[["),
+                (Reference, "b"),
+                (ReferenceEnd, "]]"),
+            ]
+        );
+    }
+
+    #[test]
+    fn extra_brackets_around_a_reference_are_text() {
+        assert_eq!(
+            lex("[[[a]]]"),
+            [
+                (Text, "["),
+                (ReferenceStart, "[["),
+                (Reference, "a"),
+                (ReferenceEnd, "]]"),
+                (Text, "]"),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_closing_bracket_alone_is_text() {
+        assert_eq!(lex("a ]] b"), [(Text, "a ]] b")]);
+    }
+
+    #[test]
+    fn braces_are_text() {
+        for input in ["\\frac{a}{b}", "x^{2}", "A{Choix}", "{a}", "{", "}", "{}"] {
+            assert_eq!(lex(input), [(Text, input)], "{input:?}");
+        }
     }
 
     #[test]

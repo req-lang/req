@@ -1,6 +1,7 @@
 use crate::{
     node::{markup::Idx, tree::Tree},
     renderer::formatter::padding::pad,
+    syntax::tokenizer::markup::{REFERENCE_END, REFERENCE_START},
 };
 
 pub fn format<W: std::io::Write>(
@@ -18,7 +19,11 @@ pub fn format<W: std::io::Write>(
     for item in node.unindented() {
         match item {
             Text(text) => write!(out, "{}", text)?,
-            Reference(reference) => write!(out, "{{{}}}", tree.references[reference])?,
+            Reference(reference) => write!(
+                out,
+                "{REFERENCE_START}{}{REFERENCE_END}",
+                tree.references[reference]
+            )?,
             Newline => write!(out, "\n{}", pad(indent))?,
             Indent(indent) => write!(out, "{}", indent)?,
         }

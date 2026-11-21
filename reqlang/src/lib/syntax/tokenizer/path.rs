@@ -95,7 +95,7 @@ impl TokenIterator<'_> {
     // Where the next char is, which is where the token that was just read ends
     fn here(&self) -> Position {
         self.peek()
-            .map_or_else(|| self.positions.position(), |(position, _)| position)
+            .map_or_else(|| self.positions.current(), |(position, _)| position)
     }
 }
 

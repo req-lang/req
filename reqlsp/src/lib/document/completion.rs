@@ -211,12 +211,14 @@ fn span(
             }
         }
         TokenVariant::Markup if inside => {
-            let span = info.markups.tokens().iter().find(|tok| {
-                let span = location::Span::from(tok.span);
-                tok.kind == markup::Kind::Reference && outer.contains(span) && span.includes(pos)
-            })?;
-            let span = location::Span::from(span.span);
-            Some(span.at_line_before(pos))
+            let name = info
+                .markups
+                .tokens()
+                .iter()
+                .filter_map(markup::Token::name)
+                .map(location::Span::from)
+                .find(|name| outer.contains(*name) && name.includes(pos))?;
+            Some(name.at_line_before(pos))
         }
         TokenVariant::Identifier if inside => match previous.map(|p| p.variant) {
             Some(TokenVariant::Reserved(keyword)) if takes_reference(keyword) => {
@@ -435,51 +437,95 @@ package";
     }
 
     #[test]
-    fn a_reference_is_expected_between_the_braces_of_a_text() {
+    fn a_reference_is_expected_between_the_brackets_of_a_text() {
         let marked = "package A
   part B
   part
   requirement R
   is
     @@
-    see {|}
+    see [[|]]
     @@
   requirement
 package";
         let items = complete(marked).unwrap();
         assert_eq!(labels(&items), ["A", "B", "R"]);
-        let at = Position::new(6, 9);
+        let at = Position::new(6, 10);
         assert!(items.iter().all(|item| range(item) == Range::new(at, at)));
     }
 
     #[test]
-    fn a_reference_that_is_not_closed_is_completed_too() {
-        let marked = "package A
+    fn a_reference_that_is_being_typed_in_a_text_is_replaced_up_to_the_cursor() {
+        for (typed, start, end) in [
+            ("see [[B|]]", 10, 11),
+            ("see [[|B]]", 10, 10),
+            ("see [[B]] and [[A::|B]]", 20, 23),
+        ] {
+            let marked = format!(
+                "package A
   part B
   part
   requirement R
   is
     @@
-    see {B|
+    {typed}
     @@
   requirement
-package";
-        let items = complete(marked).unwrap();
-        assert!(labels(&items).contains(&"B"));
-        let expected = Range::new(Position::new(6, 9), Position::new(6, 10));
-        assert!(items.iter().all(|item| range(item) == expected));
+package"
+            );
+            let items = complete(&marked).unwrap();
+            assert!(labels(&items).contains(&"B"), "{typed}");
+            let expected = Range::new(Position::new(6, start), Position::new(6, end));
+            assert!(items.iter().all(|item| range(item) == expected), "{typed}");
+        }
+    }
+
+    #[test]
+    fn a_reference_that_is_not_closed_is_completed_too() {
+        for (typed, column) in [("see [[|", 10), ("see [[B|", 10), ("see [[a [[|", 14)] {
+            let marked = format!(
+                "package A
+  part B
+  part
+  requirement R
+  is
+    @@
+    {typed}
+    @@
+  requirement
+package"
+            );
+            let items = complete(&marked).unwrap();
+            assert!(labels(&items).contains(&"B"), "{typed}");
+            let start = items.first().map(|item| range(item).start.character);
+            assert_eq!(start, Some(column), "{typed}");
+        }
     }
 
     #[test]
     fn nothing_is_expected_in_the_text_around_the_references() {
-        let marked = "package A
-  requirement R
-  is
-    @@
-    see| {B}
-    @@
-  requirement
-package";
+        for line in [
+            "see| [[B]]",
+            "see [|[B]]",
+            "see [[B]]|",
+            "see [[B]] and|",
+            "see [|",
+            "see [[a |b]]",
+            "see [[a.|b]]",
+            "see {|}",
+            "see {B|",
+            "x^{|2}",
+        ] {
+            let marked = format!(
+                "package A\n  requirement R\n  is\n    @@\n    {line}\n    @@\n  requirement\npackage"
+            );
+            assert!(complete(&marked).is_none(), "{line}");
+        }
+    }
+
+    #[test]
+    fn a_reference_is_on_one_line() {
+        let marked = "package A\n  requirement R\n  is\n    @@\n    see [[\n    B|\n    @@\n  requirement\npackage";
         assert!(complete(marked).is_none());
     }
 
@@ -489,6 +535,8 @@ package";
             "|",
             "pack|",
             "package A\n  requirement R on |",
+            "[[|",
+            "@@ [[|",
             "{|",
             "@@ {|",
         ] {

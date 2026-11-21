@@ -435,7 +435,7 @@ mod tests {
     fn relocates_what_is_parsed_in_the_middle_of_the_file() {
         // Multi-line expression with identifiers, a markup with references, and then an
         // expression that fails
-        let input = "package p\n  requirement r is\n    aa +\n    (bb * cc)\n  requirement\n  requirement q is\n    @@\n      see {dd}\n    @@\n  requirement\n  requirement s is\n    ee +\n  requirement\npackage";
+        let input = "package p\n  requirement r is\n    aa +\n    (bb * cc)\n  requirement\n  requirement q is\n    @@\n      see [[dd]]\n    @@\n  requirement\n  requirement s is\n    ee +\n  requirement\npackage";
         let (_, info) = parse(input);
 
         let text = |s: &crate::syntax::location::Span| &input[s.range()];
@@ -454,7 +454,7 @@ mod tests {
         assert_eq!(references.iter().map(text).collect::<Vec<_>>(), ["dd"]);
         assert_eq!(
             (references[0].start.line, references[0].start.column),
-            (7, 11)
+            (7, 12)
         );
 
         // The error is in the failing expression, on its line
@@ -532,10 +532,10 @@ mod tests {
     fn references_and_identifiers_are_made_of_names_and_separators() {
         use crate::syntax::tokenizer::path::Kind::{Segment, Separator};
 
-        let input = "package p\n  requirement r refines A::b is\n    @@\n      see {C::d::} and {}\n    @@\n  requirement\n  requirement s is\n    x::y + z\n  requirement\npackage";
+        let input = "package p\n  requirement r refines A::b is\n    @@\n      see [[C::d::]] and [[]]\n    @@\n  requirement\n  requirement s is\n    x::y + z\n  requirement\npackage";
         let (tree, info) = parse(input);
         assert!(info.errors.len() <= 1);
-        assert_eq!(tree.references.len(), 3);
+        assert_eq!(tree.references.len(), 2);
         assert_eq!(tree.identifiers.len(), 2);
 
         fn tokens<'a, M>(
@@ -567,14 +567,12 @@ mod tests {
         assert_eq!(
             tokens(&info.references, 1, input),
             [
-                (Segment, "C", 3, 11),
-                (Separator, "::", 3, 12),
-                (Segment, "d", 3, 14),
-                (Separator, "::", 3, 15),
+                (Segment, "C", 3, 12),
+                (Separator, "::", 3, 13),
+                (Segment, "d", 3, 15),
+                (Separator, "::", 3, 16),
             ]
         );
-        // The path with no name has a token with no length, where the braces are
-        assert_eq!(tokens(&info.references, 2, input), [(Segment, "", 3, 24)]);
 
         assert_eq!(
             tokens(&info.identifiers, 0, input),
@@ -589,7 +587,7 @@ mod tests {
 
     #[test]
     fn locates_references_and_identifiers() {
-        let input = "package p\n  requirement r refines a is\n    @@\n      see {b}\n    @@\n  requirement\n  requirement s is\n    xx + (yy)\n  requirement\npackage";
+        let input = "package p\n  requirement r refines a is\n    @@\n      see [[b]]\n    @@\n  requirement\n  requirement s is\n    xx + (yy)\n  requirement\npackage";
         let (tree, info) = parse(input);
         assert!(info.errors.is_empty());
 
@@ -598,7 +596,7 @@ mod tests {
         let references: Vec<_> = spans.iter().map(text).collect();
         assert_eq!(references, ["a", "b"]);
         assert_eq!(spans.len(), tree.references.len());
-        assert_eq!((spans[1].start.line, spans[1].start.column), (3, 11));
+        assert_eq!((spans[1].start.line, spans[1].start.column), (3, 12));
 
         let spans = info.identifiers.spans();
         let identifiers: Vec<_> = spans.iter().map(text).collect();
