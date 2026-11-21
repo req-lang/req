@@ -69,7 +69,7 @@ fn entity_issues(tree: &Tree, neighbors: &Arena<Neighbors>, idx: Idx) -> Vec<Iss
             if let Some(parent) = nd.parent
                 && !matches!(entities[parent].variant, Part(_))
             {
-                issues.push(Issue::InvalidPackageParent);
+                issues.push(Issue::InvalidAttributeParent);
             }
 
             subject_issues(nd, &mut issues);
