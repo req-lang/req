@@ -9,7 +9,8 @@
 //! Positions are the ones of `reqlang`: `index` is a byte offset into the UTF-8 source.
 
 use reqlang::{
-    Specification, exporter, issue,
+    Specification, exporter,
+    issue::{self, code::codes},
     renderer::formatter,
     syntax::{location::Position, parser},
 };
@@ -37,13 +38,17 @@ impl From<Position> for Pos {
 pub struct Diagnostic {
     /// `syntax`, or the severity of an issue: `light`, `moderate`, `severe`, `critical`
     pub severity: &'static str,
+    /// The code of the issue, `E04010`
+    pub code: String,
+    /// What the issue is about: `syntax`, `path`, `reference`, `typing` or `connection`
+    pub kind: &'static str,
     pub message: String,
     /// The entity the issue is about (`System::Deceleration_bound`), none for a syntax error
     pub path: Option<String>,
     pub start: Pos,
     pub end: Pos,
     /// The source the diagnostic points at
-    pub code: String,
+    pub snippet: String,
 }
 
 fn severity_name(severity: issue::Severity) -> &'static str {
@@ -67,11 +72,13 @@ pub fn diagnostics(source: &str) -> Vec<Diagnostic> {
             let start = span.start.index.min(end);
             Diagnostic {
                 severity: "syntax",
+                code: codes::SYNTAX_ERROR.to_string(),
+                kind: codes::SYNTAX_ERROR.kind().as_str(),
                 message: "syntax error".to_string(),
                 path: None,
                 start: span.start.into(),
                 end: span.end.into(),
-                code: source[start..end].to_string(),
+                snippet: source[start..end].to_string(),
             }
         })
         .collect();
@@ -90,11 +97,13 @@ pub fn diagnostics(source: &str) -> Vec<Diagnostic> {
             let span = issue.span(idx, &info);
             found.push(Diagnostic {
                 severity: severity_name(issue.severity()),
+                code: issue.code().to_string(),
+                kind: issue.kind().as_str(),
                 message: issue.to_string(),
                 path: Some(path.path.to_string()),
                 start: span.start.into(),
                 end: span.end.into(),
-                code: source[span.range()].to_string(),
+                snippet: source[span.range()].to_string(),
             });
         }
     }
@@ -125,7 +134,7 @@ pub fn start() {
 }
 
 /// The diagnostics of `source`, as an array of plain objects
-/// `{ severity, message, path, start: {line, column, index}, end, code }`
+/// `{ severity, code, kind, message, path, start: {line, column, index}, end, snippet }`
 #[wasm_bindgen]
 pub fn check(source: &str) -> Result<JsValue, JsValue> {
     let serializer = serde_wasm_bindgen::Serializer::new().serialize_missing_as_null(true);
@@ -161,7 +170,7 @@ package System
     on Wheel
   is
     @@
-      The {Wheel} shall decelerate within 3s.
+      The [[Wheel]] shall decelerate within 3s.
     @@
   requirement
 
@@ -181,11 +190,21 @@ package
             found,
             vec![Diagnostic {
                 severity: "critical",
+                code: "E03010".to_string(),
+                kind: "typing",
                 message: "expected type Number got Boolean".to_string(),
                 path: Some("System::Deceleration_bound".to_string()),
-                start: Pos { line: 17, column: 4, index: 326 },
-                end: Pos { line: 17, column: 40, index: 362 },
-                code: "Wheel::deceleration_duration < false".to_string(),
+                start: Pos {
+                    line: 17,
+                    column: 4,
+                    index: 328
+                },
+                end: Pos {
+                    line: 17,
+                    column: 40,
+                    index: 364
+                },
+                snippet: "Wheel::deceleration_duration < false".to_string(),
             }]
         );
     }
@@ -205,11 +224,21 @@ package
             diagnostics(SYNTAX_ERROR),
             vec![Diagnostic {
                 severity: "syntax",
+                code: "E00010".to_string(),
+                kind: "syntax",
                 message: "syntax error".to_string(),
                 path: None,
-                start: Pos { line: 1, column: 2, index: 17 },
-                end: Pos { line: 1, column: 6, index: 21 },
-                code: "part".to_string(),
+                start: Pos {
+                    line: 1,
+                    column: 2,
+                    index: 17
+                },
+                end: Pos {
+                    line: 1,
+                    column: 6,
+                    index: 21
+                },
+                snippet: "part".to_string(),
             }]
         );
     }
