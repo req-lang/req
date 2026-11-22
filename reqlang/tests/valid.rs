@@ -1,6 +1,6 @@
 use reqlang::{
     Specification,
-    issue::{self, Severity},
+    issue::{self},
     syntax::{self},
 };
 
@@ -17,18 +17,8 @@ fn assert_valid_parsing_and_analysis(filename: &str) -> Specification {
     let mut spec = Specification::from(tree);
     spec.diagnose();
     let issues: Vec<_> = issue::issues(&spec).into_iter().flatten().collect();
-    for issue in &issues {
-        eprintln!("{:?}", issue);
-    }
 
-    assert!(
-        issues
-            .into_iter()
-            .map(|issue| issue.severity())
-            .filter(|sev| *sev == Severity::Critical)
-            .next()
-            .is_none()
-    );
+    assert!(issues.is_empty(), "issues: {:?}", issues);
 
     spec
 }

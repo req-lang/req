@@ -1,8 +1,4 @@
 use crate::{
-    issue::{
-        Severity,
-        code::{IssueCode, codes},
-    },
     node::{
         self,
         entity::{Arena, Idx},
@@ -11,60 +7,16 @@ use crate::{
     semantics::connection::entity::{Neighbors, Traceability},
 };
 
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Issue {
-    #[error("requirement is missing a constraint")]
     MissingRequirementBinding,
-    #[error("missing upward traceability")]
     MissingUpwardTrace,
-    #[error("missing downward traceability")]
     MissingDownwardTrace,
-    #[error("requirements are expected to be contained in packages")]
     InvalidRequirementParent,
-    #[error("packages are expected to be contained in packages")]
     InvalidPackageParent,
-    #[error("attributes are expected to be contained in parts")]
     InvalidAttributeParent,
-    #[error("this entity is not restricted by any requirement")]
     UnrestrictedSubject,
-    #[error("this entity is not used by any requirement")]
     UnusedSubject,
-}
-
-impl Issue {
-    pub fn code(&self) -> IssueCode {
-        match self {
-            Issue::MissingRequirementBinding => codes::MISSING_REQUIREMENT_BINDING,
-            Issue::MissingUpwardTrace => codes::MISSING_UPWARD_TRACE,
-            Issue::MissingDownwardTrace => codes::MISSING_DOWNWARD_TRACE,
-            Issue::InvalidRequirementParent => codes::INVALID_REQUIREMENT_PARENT,
-            Issue::InvalidPackageParent => codes::INVALID_PACKAGE_PARENT,
-            Issue::InvalidAttributeParent => codes::INVALID_ATTRIBUTE_PARENT,
-            Issue::UnrestrictedSubject => codes::UNRESTRICTED_SUBJECT,
-            Issue::UnusedSubject => codes::UNUSED_SUBJECT,
-        }
-    }
-}
-
-impl From<&Issue> for Severity {
-    fn from(issue: &Issue) -> Self {
-        use Issue::*;
-        use Severity::*;
-
-        match issue {
-            InvalidRequirementParent => Critical,
-            InvalidPackageParent => Critical,
-            InvalidAttributeParent => Critical,
-
-            MissingRequirementBinding => Severe,
-
-            UnrestrictedSubject => Moderate,
-
-            UnusedSubject => Light,
-            MissingUpwardTrace => Light,
-            MissingDownwardTrace => Light,
-        }
-    }
 }
 
 pub fn diagnostics(tree: &Tree, neighbors: &Arena<Neighbors>) -> Arena<Vec<Issue>> {

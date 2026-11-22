@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use reqlang::{
     Specification,
-    issue::{self, Issue, IssueCode, code::codes},
+    issue::{self, Issue},
     node::path::Path,
     semantics::{
         connection::issue::{entity, reference},
@@ -11,6 +11,12 @@ use reqlang::{
     syntax::{self},
 };
 use serde::Serialize;
+
+mod code;
+mod severity;
+
+pub use code::{DiagnosticCode, IssueCode, Kind, codes};
+pub use severity::Severity;
 
 #[derive(Default, Debug, Clone, Serialize)]
 pub struct Position {
@@ -50,47 +56,43 @@ impl From<syntax::location::Span> for Span {
     }
 }
 
-#[derive(Default, Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Diagnostic {
     pub code: String,
     pub path: Option<String>,
     pub span: Span,
     pub message: String,
-    pub severity: &'static str,
-    pub kind: &'static str,
+    pub severity: Severity,
+    pub kind: Option<Kind>,
     pub snippet: String,
 }
 
-pub trait DiagnosticString {
-    fn to_diag(&self) -> String;
+pub trait Message {
+    fn as_msg(&self) -> String;
 }
 
-pub trait DiagnosticStr {
-    fn as_diag(&self) -> &'static str;
-}
-
-impl DiagnosticString for IssueCode {
-    fn to_diag(&self) -> String {
+impl Message for IssueCode {
+    fn as_msg(&self) -> String {
         self.to_string()
     }
 }
 
-impl DiagnosticString for Issue {
-    fn to_diag(&self) -> String {
+impl Message for Issue {
+    fn as_msg(&self) -> String {
         match self {
             Issue::Reference(_) | Issue::Identifier(_) => {
                 "reference target not found in scope".to_string()
             }
-            Issue::Type(issue, _) => issue.to_diag(),
-            Issue::Owned(issue) => issue.to_diag(),
-            Issue::Network(issue, _) => issue.to_diag(),
-            Issue::Path(issue) => issue.to_diag(),
+            Issue::Type(issue, _) => issue.as_msg(),
+            Issue::Owned(issue) => issue.as_msg(),
+            Issue::Network(issue, _) => issue.as_msg(),
+            Issue::Path(issue) => issue.as_msg(),
         }
     }
 }
 
-impl DiagnosticString for path::Issue {
-    fn to_diag(&self) -> String {
+impl Message for path::Issue {
+    fn as_msg(&self) -> String {
         match self {
             path::Issue::Duplicated => "two entities have the same name at the same location",
         }
@@ -98,8 +100,8 @@ impl DiagnosticString for path::Issue {
     }
 }
 
-impl DiagnosticString for typing::expression::Issue {
-    fn to_diag(&self) -> String {
+impl Message for typing::expression::Issue {
+    fn as_msg(&self) -> String {
         use typing::expression::Issue::*;
 
         match self {
@@ -111,8 +113,8 @@ impl DiagnosticString for typing::expression::Issue {
     }
 }
 
-impl DiagnosticString for entity::Issue {
-    fn to_diag(&self) -> String {
+impl Message for entity::Issue {
+    fn as_msg(&self) -> String {
         use entity::Issue::*;
 
         match self {
@@ -129,8 +131,8 @@ impl DiagnosticString for entity::Issue {
     }
 }
 
-impl DiagnosticString for reference::Issue {
-    fn to_diag(&self) -> String {
+impl Message for reference::Issue {
+    fn as_msg(&self) -> String {
         use reference::Issue::*;
 
         match self {
@@ -163,42 +165,16 @@ impl DiagnosticString for reference::Issue {
     }
 }
 
-impl DiagnosticStr for issue::code::Kind {
-    fn as_diag(&self) -> &'static str {
-        use issue::code::Kind::*;
-
-        match self {
-            Syntax => "syntax",
-            Path => "path",
-            Reference => "reference",
-            Typing => "typing",
-            Connection => "connection",
-        }
-    }
-}
-
-impl DiagnosticStr for issue::Severity {
-    fn as_diag(&self) -> &'static str {
-        use issue::Severity::*;
-
-        match self {
-            Critical => "critical",
-            Severe => "severe",
-            Moderate => "moderate",
-            Light => "light",
-        }
-    }
-}
-
 impl Diagnostic {
     fn semantic(issue: Issue, path: &Path, span: syntax::location::Span, source: &str) -> Self {
+        let code = issue.code();
         Self {
-            code: issue.code().to_diag(),
+            code: code.as_msg(),
             path: Some(path.to_string()),
             span: span.into(),
-            message: issue.to_diag(),
-            kind: issue.kind().as_diag(),
-            severity: issue.severity().as_diag(),
+            message: issue.as_msg(),
+            kind: Some(code.kind()),
+            severity: Severity::from(&issue),
             snippet: source[span.range()].to_string(),
         }
     }
@@ -206,12 +182,12 @@ impl Diagnostic {
     fn syntax(span: syntax::location::Span, source: &str) -> Self {
         let code = codes::SYNTAX_ERROR;
         Self {
-            severity: issue::Severity::Critical.as_diag(),
-            code: code.to_diag(),
+            severity: Severity::Critical,
+            code: code.as_msg(),
             path: None,
             span: span.into(),
             message: "syntax error".into(),
-            kind: code.kind().as_diag(),
+            kind: Some(code.kind()),
             snippet: source[span.range()].to_string(),
         }
     }

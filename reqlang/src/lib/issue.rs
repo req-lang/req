@@ -17,49 +17,14 @@ use crate::{
     syntax::{location::Span, parser::Info},
 };
 
-pub mod code;
-
-pub use code::{IssueCode, Kind};
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Severity {
-    Light,
-    Moderate,
-    Severe,
-    Critical,
-}
-
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug)]
 pub enum Issue {
-    #[error("reference target not found in scope")]
     Reference(reference::Idx),
-    #[error("reference target not found in scope")]
     Identifier(identifier::Idx),
-    #[error("{0}")]
     Type(typing::expression::Issue, expression::Idx),
-    #[error("{0}")]
     Owned(connection::issue::entity::Issue),
-    #[error("{0}")]
     Network(connection::issue::reference::Issue, reference::Idx),
-    #[error("{0}")]
     Path(path::Issue),
-}
-
-impl From<&Issue> for Severity {
-    fn from(value: &Issue) -> Self {
-        value.severity()
-    }
-}
-
-impl Severity {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Severity::Critical => "critical",
-            Severity::Severe => "severe",
-            Severity::Moderate => "moderate",
-            Severity::Light => "light",
-        }
-    }
 }
 
 impl Issue {
@@ -75,32 +40,6 @@ impl Issue {
                 info.entities.tokens_of(entity).first().unwrap().span
             }
         }
-    }
-
-    pub fn severity(&self) -> Severity {
-        match self {
-            Issue::Reference(_) | Issue::Identifier(_) => Severity::Critical,
-            Issue::Type(issue, _) => issue.into(),
-            Issue::Owned(kind) => kind.into(),
-            Issue::Network(kind, _) => kind.into(),
-            Issue::Path(_) => Severity::Critical,
-        }
-    }
-
-    /// The code that identifies the kind of the issue
-    pub fn code(&self) -> IssueCode {
-        match self {
-            Issue::Reference(_) | Issue::Identifier(_) => code::codes::UNRESOLVED_REFERENCE,
-            Issue::Type(issue, _) => issue.code(),
-            Issue::Owned(issue) => issue.code(),
-            Issue::Network(issue, _) => issue.code(),
-            Issue::Path(issue) => issue.code(),
-        }
-    }
-
-    /// What the issue is about, the kind of its code
-    pub fn kind(&self) -> Kind {
-        self.code().kind()
     }
 }
 

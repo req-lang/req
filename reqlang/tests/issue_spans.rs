@@ -1,6 +1,9 @@
 use reqlang::{
     Specification,
     issue::{self, Issue},
+    semantics::connection::issue::reference::Issue::{
+        NotAPartOrAttribute, SameAllocationAndRestriction,
+    },
     syntax,
 };
 
@@ -33,11 +36,11 @@ fn assert_same_items(found: Vec<&str>, expected: &[&str]) {
     }
 }
 
-/// The message and the range of each wanted issue of the input
+/// Each wanted issue of the input and its range
 fn underlined_ranges(
     input: &str,
     wanted: impl Fn(&Issue) -> bool,
-) -> Vec<(String, std::ops::Range<usize>)> {
+) -> Vec<(Issue, std::ops::Range<usize>)> {
     let (tree, info) = syntax::parser::parse(input);
     assert!(info.errors.is_empty(), "syntax errors: {:?}", info.errors);
 
@@ -51,7 +54,10 @@ fn underlined_ranges(
             issues
                 .into_iter()
                 .filter(|issue| wanted(issue))
-                .map(|issue| (issue.to_string(), issue.span(entity, &info).range()))
+                .map(|issue| {
+                    let range = issue.span(entity, &info).range();
+                    (issue, range)
+                })
                 .collect::<Vec<_>>()
         })
         .collect()
@@ -80,22 +86,19 @@ fn connection_issues_are_underlined_on_what_creates_the_connection() {
     let allocation = input.find("via q").unwrap() + 4;
 
     let found = underlined_ranges(input, |i| matches!(i, Issue::Network(..)));
-    for (message, start) in [
-        ("part or attribute expected", restriction),
-        ("part or attribute expected", allocation),
-        (
-            "allocation and restriction should be on different subjects",
-            restriction,
-        ),
-        (
-            "allocation and restriction should be on different subjects",
-            allocation,
-        ),
+    for (expected, start) in [
+        (NotAPartOrAttribute, restriction),
+        (NotAPartOrAttribute, allocation),
+        (SameAllocationAndRestriction, restriction),
+        (SameAllocationAndRestriction, allocation),
     ] {
         let range = start..start + 1;
         assert!(
-            found.iter().any(|(m, r)| m == message && *r == range),
-            "{message} at {start}: {found:?}"
+            found.iter().any(
+                |(issue, r)| matches!(issue, Issue::Network(got, _) if *got == expected)
+                    && *r == range
+            ),
+            "{expected:?} at {start}: {found:?}"
         );
     }
 }

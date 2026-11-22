@@ -1,4 +1,4 @@
-use reqdiag::Diagnostic;
+use reqdiag::{Diagnostic, Severity};
 use tower_lsp::lsp_types;
 
 pub fn from_reqdiag_diagnostic(value: Diagnostic) -> lsp_types::Diagnostic {
@@ -17,15 +17,14 @@ pub fn from_reqdiag_diagnostic(value: Diagnostic) -> lsp_types::Diagnostic {
 /// What the diagnostics say they come from
 const SOURCE: &str = "req";
 
-fn from_semantic_severity(value: &str) -> lsp_types::DiagnosticSeverity {
+fn from_semantic_severity(value: Severity) -> lsp_types::DiagnosticSeverity {
     use lsp_types::DiagnosticSeverity;
 
     match value {
-        "light" => DiagnosticSeverity::HINT,
-        "moderate" => DiagnosticSeverity::INFORMATION,
-        "severe" => DiagnosticSeverity::WARNING,
-        "critical" => DiagnosticSeverity::ERROR,
-        _ => unreachable!(),
+        Severity::Light => DiagnosticSeverity::HINT,
+        Severity::Moderate => DiagnosticSeverity::INFORMATION,
+        Severity::Severe => DiagnosticSeverity::WARNING,
+        Severity::Critical => DiagnosticSeverity::ERROR,
     }
 }
 

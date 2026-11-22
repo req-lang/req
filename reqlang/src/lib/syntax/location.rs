@@ -4,8 +4,7 @@ use std::{
     str::CharIndices,
 };
 
-#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
-#[error("syntax error at: {start}")]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Span {
     pub start: Position,
     pub end: Position,
@@ -52,28 +51,6 @@ pub fn hull(spans: impl Iterator<Item = Span>) -> Span {
         .unwrap_or_default()
 }
 
-impl From<(pest::error::LineColLocation, pest::error::InputLocation)> for Span {
-    fn from(value: (pest::error::LineColLocation, pest::error::InputLocation)) -> Self {
-        use pest::error::InputLocation;
-        use pest::error::LineColLocation;
-
-        let (line_col, location) = value;
-        match (line_col, location) {
-            (LineColLocation::Pos(p), InputLocation::Pos(index)) => Self {
-                start: (p, index).into(),
-                end: (p, index).into(),
-            },
-
-            (LineColLocation::Span(s, e), InputLocation::Span((sidx, eidx))) => Self {
-                start: (s, sidx).into(),
-                end: (e, eidx).into(),
-            },
-
-            (_, _) => unreachable!(),
-        }
-    }
-}
-
 impl Add<Position> for Span {
     type Output = Self;
 
@@ -81,15 +58,6 @@ impl Add<Position> for Span {
         Self {
             start: self.start + rhs,
             end: self.end + rhs,
-        }
-    }
-}
-
-impl From<pest::Span<'_>> for Span {
-    fn from(value: pest::Span<'_>) -> Self {
-        Self {
-            start: (value.start_pos().line_col(), value.start()).into(),
-            end: (value.end_pos().line_col(), value.end()).into(),
         }
     }
 }

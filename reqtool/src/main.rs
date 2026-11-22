@@ -3,7 +3,7 @@ use std::{fs, io, path::PathBuf};
 use clap::Parser;
 use colored::Colorize;
 use itertools::Itertools;
-use reqdiag::Diagnostic;
+use reqdiag::{Diagnostic, Severity};
 use reqlang::{
     Specification, exporter,
     renderer::formatter,
@@ -74,11 +74,10 @@ fn pretty_diagnostic(diagnostic: Diagnostic) -> String {
     let sp = diagnostic.span.start.to_string().on_black();
     let code = diagnostic.code.dimmed();
     let msg = match diagnostic.severity {
-        "critical" => diagnostic.message.on_red(),
-        "severe" => diagnostic.message.red(),
-        "moderate" => diagnostic.message.yellow(),
-        "light" => diagnostic.message.white(),
-        _ => unreachable!(),
+        Severity::Critical => diagnostic.message.on_red(),
+        Severity::Severe => diagnostic.message.red(),
+        Severity::Moderate => diagnostic.message.yellow(),
+        Severity::Light => diagnostic.message.white(),
     };
     let snp = diagnostic.snippet;
 

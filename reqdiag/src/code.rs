@@ -1,32 +1,24 @@
 use std::fmt;
 
+use reqlang::{
+    issue::Issue,
+    semantics::{
+        connection::issue::{entity, reference},
+        path, typing,
+    },
+};
+use serde::Serialize;
+
 const BLOCK: u16 = 1000;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Kind {
     Syntax = 0,
     Path = 1,
     Reference = 2,
     Typing = 3,
     Connection = 4,
-}
-
-impl Kind {
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Kind::Syntax => "syntax",
-            Kind::Path => "path",
-            Kind::Reference => "reference",
-            Kind::Typing => "typing",
-            Kind::Connection => "connection",
-        }
-    }
-}
-
-impl fmt::Display for Kind {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.as_str())
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -125,20 +117,95 @@ pub mod codes {
     }
 }
 
+pub trait DiagnosticCode {
+    fn code(&self) -> IssueCode;
+}
+
+impl DiagnosticCode for Issue {
+    fn code(&self) -> IssueCode {
+        match self {
+            Issue::Reference(_) | Issue::Identifier(_) => codes::UNRESOLVED_REFERENCE,
+            Issue::Type(issue, _) => issue.code(),
+            Issue::Owned(issue) => issue.code(),
+            Issue::Network(issue, _) => issue.code(),
+            Issue::Path(issue) => issue.code(),
+        }
+    }
+}
+
+impl DiagnosticCode for path::Issue {
+    fn code(&self) -> IssueCode {
+        match self {
+            path::Issue::Duplicated => codes::DUPLICATED_ENTITY,
+        }
+    }
+}
+
+impl DiagnosticCode for typing::expression::Issue {
+    fn code(&self) -> IssueCode {
+        use typing::expression::Issue::*;
+
+        match self {
+            Poison => codes::PROPAGATED_TYPE_ERROR,
+            NotASet(_) => codes::NOT_A_SET,
+            UnexpectedType(..) => codes::UNEXPECTED_TYPE,
+            NotEvaluable => codes::NOT_EVALUABLE,
+        }
+    }
+}
+
+impl DiagnosticCode for entity::Issue {
+    fn code(&self) -> IssueCode {
+        use entity::Issue::*;
+
+        match self {
+            MissingRequirementBinding => codes::MISSING_REQUIREMENT_BINDING,
+            MissingUpwardTrace => codes::MISSING_UPWARD_TRACE,
+            MissingDownwardTrace => codes::MISSING_DOWNWARD_TRACE,
+            InvalidRequirementParent => codes::INVALID_REQUIREMENT_PARENT,
+            InvalidPackageParent => codes::INVALID_PACKAGE_PARENT,
+            InvalidAttributeParent => codes::INVALID_ATTRIBUTE_PARENT,
+            UnrestrictedSubject => codes::UNRESTRICTED_SUBJECT,
+            UnusedSubject => codes::UNUSED_SUBJECT,
+        }
+    }
+}
+
+impl DiagnosticCode for reference::Issue {
+    fn code(&self) -> IssueCode {
+        use reference::Issue::*;
+
+        match self {
+            NotAPartOrAttribute => codes::NOT_A_PART_OR_ATTRIBUTE,
+            NotARequirement => codes::NOT_A_REQUIREMENT,
+            InhibitorForbidDerives => codes::INHIBITOR_FORBID_DERIVES,
+            MissingDerivation => codes::MISSING_DERIVATION,
+            DuplicatedTrace => codes::DUPLICATED_TRACE,
+            ConflictingTrace => codes::CONFLICTING_TRACE,
+            SpecializationMismatch => codes::SPECIALIZATION_MISMATCH,
+            CyclicTrace => codes::CYCLIC_TRACE,
+            ForbiddenUpwardTrace => codes::FORBIDDEN_UPWARD_TRACE,
+            ForbiddenDownwardTrace => codes::FORBIDDEN_DOWNWARD_TRACE,
+            RefinementMismatch => codes::REFINEMENT_MISMATCH,
+            NoDerivedAllocation => codes::NO_DERIVED_ALLOCATION,
+            DerivationMismatch => codes::DERIVATION_MISMATCH,
+            UnrelatedDerivation => codes::UNRELATED_DERIVATION,
+            UnrelatedRestriction => codes::UNRELATED_RESTRICTION,
+            SameAllocationAndRestriction => codes::SAME_ALLOCATION_AND_RESTRICTION,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeSet;
 
-    use super::*;
-    use crate::{
-        issue::Issue,
-        node::{expression, reference},
-        semantics::{
-            connection::issue::{entity, reference as connection},
-            path,
-            typing::expression::{Issue as TypeIssue, TypeKind},
-        },
+    use reqlang::{
+        node::{expression, reference as target},
+        semantics::typing::expression::{Issue as TypeIssue, TypeKind},
     };
+
+    use super::*;
 
     #[test]
     fn a_code_is_written_with_its_block_and_four_digits() {
@@ -156,6 +223,15 @@ mod tests {
         assert_eq!(codes::UNRESOLVED_REFERENCE.kind(), Kind::Reference);
         assert_eq!(codes::NOT_A_SET.kind(), Kind::Typing);
         assert_eq!(codes::CYCLIC_TRACE.kind(), Kind::Connection);
+    }
+
+    #[test]
+    fn a_kind_is_serialized_in_lowercase() {
+        assert_eq!(serde_json::to_string(&Kind::Syntax).unwrap(), "\"syntax\"");
+        assert_eq!(
+            serde_json::to_string(&Kind::Connection).unwrap(),
+            "\"connection\""
+        );
     }
 
     #[test]
@@ -186,7 +262,7 @@ mod tests {
     /// The codes of the issues of each family, as the analysis reports them
     fn reported() -> BTreeSet<IssueCode> {
         use TypeKind::{Boolean, Number};
-        use connection::Issue as Net;
+        use reference::Issue as Net;
         use entity::Issue as Own;
 
         let own = [
@@ -235,7 +311,7 @@ mod tests {
         own.chain(net)
             .chain(typing)
             .chain([path::Issue::Duplicated.code()])
-            .chain([Issue::Reference(reference::Idx::default()).code()])
+            .chain([Issue::Reference(target::Idx::default()).code()])
             .chain([codes::SYNTAX_ERROR])
             .collect()
     }
@@ -249,7 +325,7 @@ mod tests {
 
     #[test]
     fn two_unresolved_targets_share_a_code() {
-        let reference = Issue::Reference(reference::Idx::default());
+        let reference = Issue::Reference(target::Idx::default());
         let identifier = Issue::Identifier(Default::default());
 
         assert_eq!(reference.code(), codes::UNRESOLVED_REFERENCE);
@@ -260,13 +336,13 @@ mod tests {
     fn an_issue_has_the_kind_of_its_code() {
         let typing = Issue::Type(TypeIssue::NotEvaluable, expression::Idx::default());
         let owned = Issue::Owned(entity::Issue::UnusedSubject);
-        let network = Issue::Network(connection::Issue::CyclicTrace, reference::Idx::default());
+        let network = Issue::Network(reference::Issue::CyclicTrace, target::Idx::default());
         let duplicated = Issue::Path(path::Issue::Duplicated);
 
-        assert_eq!(typing.kind(), Kind::Typing);
-        assert_eq!(owned.kind(), Kind::Connection);
-        assert_eq!(network.kind(), Kind::Connection);
-        assert_eq!(duplicated.kind(), Kind::Path);
+        assert_eq!(typing.code().kind(), Kind::Typing);
+        assert_eq!(owned.code().kind(), Kind::Connection);
+        assert_eq!(network.code().kind(), Kind::Connection);
+        assert_eq!(duplicated.code().kind(), Kind::Path);
         assert_eq!(typing.code(), codes::NOT_EVALUABLE);
         assert_eq!(network.code(), codes::CYCLIC_TRACE);
     }

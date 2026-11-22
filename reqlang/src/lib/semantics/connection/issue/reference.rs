@@ -1,10 +1,6 @@
 use std::collections::HashSet;
 
 use crate::{
-    issue::{
-        Severity,
-        code::{IssueCode, codes},
-    },
     node::{
         self,
         entity::{Arena, Idx, TraceabilityKind},
@@ -14,92 +10,24 @@ use crate::{
     semantics::{connection::entity::Neighbors, link::Links},
 };
 
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Issue {
-    #[error("part or attribute expected")]
     NotAPartOrAttribute,
-    #[error("requirement expected")]
     NotARequirement,
-    #[error("the requirement is allocated but the inhibitor forbids derivation")]
     InhibitorForbidDerives,
-    #[error("allocation of an entity without a deriving requirement")]
     MissingDerivation,
-    #[error("traceability link is duplicated")]
     DuplicatedTrace,
-    #[error("traceability link is in conflict")]
     ConflictingTrace,
-    #[error("specialization with different restricted subjects")]
     SpecializationMismatch,
-    #[error("traceability link is part of a cycle")]
     CyclicTrace,
-    #[error("the requirement is inhibited upward but traces to another requirement")]
     ForbiddenUpwardTrace,
-    #[error("the traced requirement is inhibited downward")]
     ForbiddenDownwardTrace,
-    #[error("refinement does not restrict a child of the refined restriction")]
     RefinementMismatch,
-    #[error("this requirement does not derive a requirement that allocates")]
     NoDerivedAllocation,
-    #[error("derived requirement is not allocated to the restriction of this requirement")]
     DerivationMismatch,
-    #[error("derived requirement is not using its parent restriction")]
     UnrelatedDerivation,
-    #[error("requirement does not use its restriction in its expression")]
     UnrelatedRestriction,
-    #[error("allocation and restriction should be on different subjects")]
     SameAllocationAndRestriction,
-}
-
-impl Issue {
-    pub fn code(&self) -> IssueCode {
-        match self {
-            Issue::NotAPartOrAttribute => codes::NOT_A_PART_OR_ATTRIBUTE,
-            Issue::NotARequirement => codes::NOT_A_REQUIREMENT,
-            Issue::InhibitorForbidDerives => codes::INHIBITOR_FORBID_DERIVES,
-            Issue::MissingDerivation => codes::MISSING_DERIVATION,
-            Issue::DuplicatedTrace => codes::DUPLICATED_TRACE,
-            Issue::ConflictingTrace => codes::CONFLICTING_TRACE,
-            Issue::SpecializationMismatch => codes::SPECIALIZATION_MISMATCH,
-            Issue::CyclicTrace => codes::CYCLIC_TRACE,
-            Issue::ForbiddenUpwardTrace => codes::FORBIDDEN_UPWARD_TRACE,
-            Issue::ForbiddenDownwardTrace => codes::FORBIDDEN_DOWNWARD_TRACE,
-            Issue::RefinementMismatch => codes::REFINEMENT_MISMATCH,
-            Issue::NoDerivedAllocation => codes::NO_DERIVED_ALLOCATION,
-            Issue::DerivationMismatch => codes::DERIVATION_MISMATCH,
-            Issue::UnrelatedDerivation => codes::UNRELATED_DERIVATION,
-            Issue::UnrelatedRestriction => codes::UNRELATED_RESTRICTION,
-            Issue::SameAllocationAndRestriction => codes::SAME_ALLOCATION_AND_RESTRICTION,
-        }
-    }
-}
-
-impl From<&Issue> for Severity {
-    fn from(issue: &Issue) -> Self {
-        use Issue::*;
-        use Severity::*;
-
-        match issue {
-            NotARequirement => Critical,
-            InhibitorForbidDerives => Critical,
-            NotAPartOrAttribute => Critical,
-
-            ConflictingTrace => Severe,
-            CyclicTrace => Severe,
-            SpecializationMismatch => Severe,
-            RefinementMismatch => Severe,
-            DerivationMismatch => Severe,
-
-            UnrelatedRestriction => Moderate,
-            UnrelatedDerivation => Moderate,
-            SameAllocationAndRestriction => Moderate,
-            DuplicatedTrace => Moderate,
-            ForbiddenUpwardTrace => Moderate,
-            ForbiddenDownwardTrace => Moderate,
-            NoDerivedAllocation => Moderate,
-
-            MissingDerivation => Light,
-        }
-    }
 }
 
 type Issues = reference::Arena<Vec<Issue>>;
