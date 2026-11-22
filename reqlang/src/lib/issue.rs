@@ -51,6 +51,17 @@ impl From<&Issue> for Severity {
     }
 }
 
+impl Severity {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Severity::Critical => "critical",
+            Severity::Severe => "severe",
+            Severity::Moderate => "moderate",
+            Severity::Light => "light",
+        }
+    }
+}
+
 impl Issue {
     /// Where the issue is in the source: the most precise span the issue knows, `entity` (the
     /// span of the entity it was reported on) otherwise

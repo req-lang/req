@@ -1,35 +1,13 @@
-//! The codes of the issues
-//!
-//! A code identifies a kind of issue for good. `reqtool` and the language server show it, and the
-//! reference documents each code. A code is never renumbered nor reused, even when the issue is no
-//! longer reported.
-//!
-//! A code is written `E0`, the block of its [`Kind`] (one digit) and a number of three digits, like
-//! `E04010`. The numbers of a block go in steps of ten, so that an issue that gets split in two can
-//! take the codes next to its own.
-//!
-//! Adding an issue means adding its code to the registry below, and documenting it in the reference
-//! (`lang-doc`, `source/reference/diagnostics.rst`).
-
 use std::fmt;
 
-/// How many codes a [`Kind`] can have
 const BLOCK: u16 = 1000;
 
-/// What an issue is about, the stage of the analysis that finds it
-///
-/// The discriminant is the block of the codes of the kind.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Kind {
-    /// The source does not follow the grammar
     Syntax = 0,
-    /// The name of an entity, `Path`s that are not unique
     Path = 1,
-    /// A reference that points at nothing
     Reference = 2,
-    /// The type of an expression
     Typing = 3,
-    /// Where an entity is, and how requirements are linked to the entities and to each other
     Connection = 4,
 }
 
@@ -51,7 +29,6 @@ impl fmt::Display for Kind {
     }
 }
 
-/// The code of an issue, `E04010` for example
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct IssueCode(u16);
 

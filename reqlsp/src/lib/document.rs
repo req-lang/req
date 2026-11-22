@@ -12,7 +12,7 @@ use crate::{
     description::kind_name,
     location::{self, Contains, Target},
 };
-use crate::{diagnostics::collect_diagnostics, document::completion::completion_kind};
+use crate::{diagnostics::from_reqdiag_diagnostic, document::completion::completion_kind};
 
 mod completion;
 pub mod semantic_tokens;
@@ -20,6 +20,7 @@ pub mod semantic_tokens;
 #[derive(Debug)]
 struct Document {
     uri: Url,
+    source: String,
     spec: Specification,
     syntax: syntax::parser::Info,
     version: i32,
@@ -160,9 +161,9 @@ impl Document {
     }
 
     pub fn diagnostics(&self) -> Vec<Diagnostic> {
-        collect_diagnostics(&self.spec, &self.syntax)
+        reqdiag::Diagnostic::collect(&self.spec, &self.syntax, &self.source)
             .into_iter()
-            .map(|v| v.into())
+            .map(from_reqdiag_diagnostic)
             .collect()
     }
 
@@ -178,6 +179,7 @@ impl Document {
         Self {
             uri,
             spec,
+            source: text.to_string(),
             version,
             syntax,
             end,

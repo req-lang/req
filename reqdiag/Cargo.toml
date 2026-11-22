@@ -1,0 +1,15 @@
+[package]
+name = "reqdiag"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+
+reqlang = { path = "../reqlang/" }
+serde = { version = "1.0.229", features = ["derive"] }
+
+[lib]
+name = "reqdiag"
+path = "src/lib.rs"
+crate-type = ["lib"]
+
