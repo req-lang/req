@@ -12,9 +12,23 @@ package A
     @@
     let y in { 2, 3, 4 } intersection { 55, 56, 57 } difference { 123 }
   part
-  requirement R1 
-    on B
+  requirement R1 top bottom 
+    on B::x
   is
     B::x + B::y > 0 and B::x in { 10, 20, 30 } or { B::x } includes { 0, 1, 2 }
+  requirement
+  requirement R2 top bottom 
+    on B::y
+  is
+    @@
+    Some tests [[B::y]]
+    @@
+  requirement
+  requirement R3 top bottom 
+    on B
+  is
+    @@
+    Some tests [[B]]
+    @@
   requirement
 package

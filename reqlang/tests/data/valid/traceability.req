@@ -18,11 +18,11 @@ package A
       part
     part
   part
-  requirement R0 
+  requirement R0 top 
     on X
   is
     @@
-    very broad requirement
+    very broad requirement on [[X]]
     @@
   requirement
   requirement R1 
@@ -30,7 +30,7 @@ package A
     refines R0
   is
     @@
-    Some tests 1
+    Some tests 1 on [[X::X1]]
     @@
   requirement
   requirement R2 
@@ -39,10 +39,10 @@ package A
     refines R0
   is
     @@
-    Some tests 2
+    Some tests 2 on [[X::X1::X2]]
     @@
   requirement
-  requirement R3 
+  requirement R3 bottom 
     on X::X1::X2::x
     refines R1
     refines R2

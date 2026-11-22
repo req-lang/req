@@ -8,39 +8,46 @@ package A
     @@
     let ending in integer
   part
-  requirement R1 
-    on B
+  requirement R1 top bottom 
+    on B::ending
   is
     all
       notable < B::ending
       for notable in real such that notable > 0
     end
   requirement
-  requirement R2 
-    on B
+  requirement R2 top bottom 
+    on B::ending
   is
     all
       any
         trueValue > infinityLoop
         for trueValue in integer
       end
-      for infinityLoop in integer such that infinityLoop > 0
+      for infinityLoop in integer such that infinityLoop > B::ending
     end
   requirement
-  requirement R3 
-    on B
+  requirement R3 top bottom 
+    on B::ending
   is
     any
       eventuallyDone > B::ending
       for eventuallyDone in integer
     end
   requirement
-  requirement R4 
-    on B
+  requirement R4 top bottom 
+    on B::ending
   is
     all
-      always_ or not always_
+      always_ or not always_ or B::ending > 0
       for always_ in boolean
     end
+  requirement
+  requirement R5 top bottom 
+    on B
+  is
+    @@
+    Some tests [[B]]
+    @@
   requirement
 package

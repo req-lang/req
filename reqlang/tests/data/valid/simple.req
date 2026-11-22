@@ -12,11 +12,18 @@ package A
   Comment [[A::B::x]]
   @@
   # tag tag has a value #
-  requirement R1 
-    on B
+  requirement R1 top bottom 
+    on B::x
   is
     @@
     Some tests [[B::x]]
+    @@
+  requirement
+  requirement R2 top bottom 
+    on B
+  is
+    @@
+    Some tests [[B]]
     @@
   requirement
 package

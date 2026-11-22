@@ -12,36 +12,43 @@ package A
     @@
     let y in integer \ W \
   part
-  requirement R1 
-    on B
+  requirement R1 top bottom 
+    on B::x
   is
     when
       B::x > 0 then B::y > 0
     end
   requirement
-  requirement R2 
-    on B
+  requirement R2 top bottom 
+    on B::y
   is
     when
       B::x > 0 then B::y > 0,
       B::y > 0 then B::x > 0
     end
   requirement
-  requirement R3 
-    on B
+  requirement R3 top bottom 
+    on B::x
   is
     when
       B::x > 0 then B::y > 0,
       otherwise B::x > 0
     end
   requirement
-  requirement R4 
-    on B
+  requirement R4 top bottom 
+    on B::y
   is
     when
       B::x > 0 then B::y > 0,
       B::y > 0 then B::x > 0,
       otherwise B::x > 0
     end
+  requirement
+  requirement R5 top bottom 
+    on B
+  is
+    @@
+    Some tests [[B]]
+    @@
   requirement
 package

@@ -12,91 +12,98 @@ package A
     @@
     let y in integer
   part
-  requirement R1 
-    on B
+  requirement R1 top bottom 
+    on B::x
   is
     B::x in { s + 2 for s in [ 0, 1 ] }
   requirement
-  requirement R2 
-    on B
+  requirement R2 top bottom 
+    on B::y
   is
     { s * 2 for s in integer such that s > 0 and s < B::y } includes { B::y }
   requirement
-  requirement R3 
-    on B
+  requirement R3 top bottom 
+    on B::x
   is
     sum s * s for s in [[ 1, 10 ]] end > B::x
   requirement
-  requirement R4 
-    on B
+  requirement R4 top bottom 
+    on B::y
   is
     all
       s < B::x
       for s in { 1, 2, 3 } such that s > B::y
     end
   requirement
-  requirement R5 
-    on B
+  requirement R5 top bottom 
+    on B::x
   is
     any
       s = B::x
       for s in real
     end
   requirement
-  requirement R6 
-    on B
+  requirement R6 top bottom 
+    on B::y
   is
     B::y in union { s, s + 1 } for s in [[ 0, 3 ]] end
   requirement
-  requirement R7 
-    on B
+  requirement R7 top bottom 
+    on B::x
   is
-    { t for t in { s ^ 2 for s in integer } such that t < 100 } includes { 1, 4 }
+    { t for t in { s ^ 2 for s in integer } such that t < 100 } includes { 1, 4 } and B::x > 0
   requirement
-  requirement R8 
-    on B
+  requirement R8 top bottom 
+    on B::x
   is
-    sup s for s in ] 0, 1 [ end = 1 and inf s for s in [ 0, 1 ] end = 0
+    sup s for s in ] 0, 1 [ end = 1 and inf s for s in [ 0, 1 ] end = 0 and B::x > 0
   requirement
-  requirement R9 
-    on B
+  requirement R9 top bottom 
+    on B::y
   is
     count s for s in integer such that s > 0 and s < B::y end > 2
   requirement
-  requirement R10 
-    on B
+  requirement R10 top bottom 
+    on B::x
   is
-    count s for s in { true, false } end = 2
+    count s for s in { true, false } end = 2 and B::x > 0
   requirement
-  requirement R11 
-    on B
+  requirement R11 top bottom 
+    on B::x
   is
-    argmax 0 - s ^ 2 for s in real end = { 0 }
+    argmax 0 - s ^ 2 for s in real end = { 0 } and B::x > 0
   requirement
-  requirement R12 
-    on B
+  requirement R12 top bottom 
+    on B::x
   is
-    argmin (s - 3) ^ 2 for s in [[ 0, 10 ]] such that s > 5 end includes { 6 }
+    argmin (s - 3) ^ 2 for s in [[ 0, 10 ]] such that s > 5 end includes { 6 } and B::x > 0
   requirement
-  requirement R13 
-    on B
+  requirement R13 top bottom 
+    on B::x
   is
-    choose t for t in argmax 0 - s ^ 2 for s in real end end = 0
+    choose t for t in argmax 0 - s ^ 2 for s in real end end = 0 and B::x > 0
   requirement
-  requirement R14 
-    on B
+  requirement R14 top bottom 
+    on B::y
   is
     all
       s < B::x + B::y
       for s in real such that s > 10
     end
   requirement
-  requirement R15 
-    on B
+  requirement R15 top bottom 
+    on B::x
   is
     any
       s > B::y and s < B::x
       for s in real
     end
+  requirement
+  requirement R16 top bottom 
+    on B
+  is
+    @@
+    Some tests [[B]]
+    @@
   requirement
 package

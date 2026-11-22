@@ -7,9 +7,16 @@ package S
   part P
     let x in S::T
   part
-  requirement R1 
+  requirement R1 top bottom 
     on P::x
   is
     P::x = T::A
+  requirement
+  requirement R2 top bottom 
+    on P
+  is
+    @@
+    Some tests [[P]]
+    @@
   requirement
 package

@@ -12,9 +12,23 @@ package A
     @@
     let y in boolean
   part
-  requirement R1 
-    on B
+  requirement R1 top bottom 
+    on B::x
   is
     eventually B::x or (rising B::y and always falling B::x since B::y or previously B::x)
+  requirement
+  requirement R2 top bottom 
+    on B::y
+  is
+    @@
+    Some tests [[B::y]]
+    @@
+  requirement
+  requirement R3 top bottom 
+    on B
+  is
+    @@
+    Some tests [[B]]
+    @@
   requirement
 package

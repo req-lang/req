@@ -12,9 +12,23 @@ package A
     @@
     let y in integer \ W \
   part
-  requirement R1 
-    on B
+  requirement R1 top bottom 
+    on B::x
   is
     (- B::x / B::y + 50 ! * + B::x) ^ 2 - B::y ^ 2 % 2 > 0
+  requirement
+  requirement R2 top bottom 
+    on B::y
+  is
+    @@
+    Some tests [[B::y]]
+    @@
+  requirement
+  requirement R3 top bottom 
+    on B
+  is
+    @@
+    Some tests [[B]]
+    @@
   requirement
 package

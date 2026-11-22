@@ -3,14 +3,21 @@ package S
     let x in [ 0, 1 ]
     let y in [[ 0, 10 ]]
   part
-  requirement R1 
-    on P::x
+  requirement R1 top bottom 
+    on P::y
   is
     P::x = 10 and P::y = 5
   requirement
-  requirement R2 
+  requirement R2 top bottom 
     on P::x
   is
     P::x in 0.5 tol 0.5
+  requirement
+  requirement R3 top bottom 
+    on P
+  is
+    @@
+    Some tests [[P]]
+    @@
   requirement
 package

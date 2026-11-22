@@ -12,14 +12,21 @@ package A
     @@
     let y in boolean
   part
-  requirement R1 
-    on B
+  requirement R1 top bottom 
+    on B::x
   is
     not B::x and B::y or false xor B::x iff true implies B::y
   requirement
-  requirement R2 
-    on B
+  requirement R2 top bottom 
+    on B::y
   is
     B::x <> B::y and B::y <> true
+  requirement
+  requirement R3 top bottom 
+    on B
+  is
+    @@
+    Some tests [[B]]
+    @@
   requirement
 package
