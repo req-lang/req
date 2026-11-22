@@ -28,17 +28,18 @@ pub enum Issue {
 }
 
 impl Issue {
-    /// Where the issue is in the source: the most precise span the issue knows, `entity` (the
-    /// span of the entity it was reported on) otherwise
+    /// Where the issue is in the source: the most precise span the issue knows, the name of
+    /// `entity` (the entity it was reported on) otherwise
     pub fn span(&self, entity: node::entity::Idx, info: &Info) -> Span {
         match self {
             Issue::Type(_, expr) => info.expression.span_of(*expr),
             Issue::Identifier(identifier) => info.identifiers.span_of(*identifier),
             Issue::Reference(reference) => info.references.span_of(*reference),
             Issue::Network(_, reference) => info.references.span_of(*reference),
-            Issue::Owned(_) | Issue::Path(_) => {
-                info.entities.tokens_of(entity).first().unwrap().span
-            }
+            Issue::Owned(_) | Issue::Path(_) => info
+                .entities
+                .name_of(entity)
+                .unwrap_or_else(|| info.entities.span_of(entity)),
         }
     }
 }

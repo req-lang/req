@@ -102,3 +102,18 @@ fn connection_issues_are_underlined_on_what_creates_the_connection() {
         );
     }
 }
+
+#[test]
+fn entity_issues_are_underlined_on_the_name_of_the_entity() {
+    let input = "package p\n  requirement lonely is @@ x @@ requirement\npackage";
+    let found = underlined(input, |i| matches!(i, Issue::Owned(_)));
+    assert!(!found.is_empty());
+    assert!(found.iter().all(|text| *text == "lonely"), "{found:?}");
+}
+
+#[test]
+fn duplicated_entities_are_underlined_on_their_name() {
+    let input = "package p\n  part twin\n  part\n  part twin\n  part\npackage";
+    let found = underlined(input, |i| matches!(i, Issue::Path(_)));
+    assert_same_items(found, &["twin", "twin"]);
+}
