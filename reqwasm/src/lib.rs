@@ -1,5 +1,6 @@
 use reqdiag::Diagnostic;
-use reqlang::{Specification, exporter, renderer::formatter, syntax::parser};
+use reqexport::html;
+use reqlang::{Specification, renderer::formatter, syntax::parser};
 use serde::Serialize;
 use wasm_bindgen::prelude::*;
 
@@ -21,7 +22,7 @@ pub fn format_source(source: &str) -> Result<String, String> {
 
 pub fn export_source(source: &str) -> String {
     let (tree, _) = parser::parse(source);
-    exporter::html::render_string(&Specification::from(tree))
+    html::render_string(&Specification::from(tree))
 }
 
 #[wasm_bindgen(start)]

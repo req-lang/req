@@ -1,8 +1,9 @@
-use crate::{
-    exporter::html::escape,
+use reqlang::{
     node::{expression::Idx, tree::Tree},
     renderer::formatter::expression::{self, Ctx},
 };
+
+use crate::html::escape;
 
 /// A formal expression is code, written as the formatter writes it. The page highlights `language-req`.
 pub fn render<W: std::io::Write>(tree: &Tree, root: Idx, out: &mut W) -> std::io::Result<()> {

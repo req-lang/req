@@ -1,0 +1,22 @@
+[package]
+name = "reqexport"
+version = "0.1.0"
+description = "req language light exporters"
+edition = "2024"
+
+[package.metadata]
+author = "Sami Dahoux <sami@qitab.io>"
+copyright = "© 2025-2026. All rights reserved. Sami Dahoux"
+
+[dependencies]
+reqlang = { path = "../reqlang/" }
+markdown = "1.0.0"
+
+[dev-dependencies]
+pretty_assertions = "1.4.1"
+unindent = "0.2.4"
+
+[lib]
+name = "reqexport"
+path = "src/lib.rs"
+crate-type = ["lib"]

@@ -1,12 +1,4 @@
-//! A specification as an HTML fragment: headings, descriptions, requirements and attributes, with the
-//! references between them as links to `#anchors`. It is meant to be put in a page (the playground of the
-//! documentation does), not to be a page: there is no `<html>`, no style and no script.
-//!
-//! The structure is the one of the LaTeX exporter of `extra`: `entity` walks the tree, `markup` writes the
-//! informal text and `expression` the formal one. Informal text is Markdown, with no raw HTML (see `markup`).
-//! Formal expressions are code, `<code class="language-req">`, left to the page to highlight.
-
-use crate::Specification;
+use reqlang::Specification;
 
 pub mod entity;
 pub mod expression;

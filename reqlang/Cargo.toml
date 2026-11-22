@@ -9,8 +9,6 @@ author = "Sami Dahoux <sami@qitab.io>"
 copyright = "© 2025-2026. All rights reserved. Sami Dahoux"
 
 [dependencies]
-markdown = "1.0.0"
-pretty_assertions = "1.4.1"
 unicode-normalization = "0.1.25"
 
 [dev-dependencies]

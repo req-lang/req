@@ -4,8 +4,9 @@ use clap::Parser;
 use colored::Colorize;
 use itertools::Itertools;
 use reqdiag::{Diagnostic, Severity};
+use reqexport::html;
 use reqlang::{
-    Specification, exporter,
+    Specification,
     renderer::formatter,
     syntax::{location::Span, parser},
 };
@@ -37,8 +38,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             let spec = Specification::from(tree);
             match output {
-                Some(p) => exporter::html::render(&spec, &mut fs::File::create(p)?),
-                None => exporter::html::render(&spec, &mut io::stdout()),
+                Some(p) => html::render(&spec, &mut fs::File::create(p)?),
+                None => html::render(&spec, &mut io::stdout()),
             }?;
         }
         Command::Check { input, json } => {

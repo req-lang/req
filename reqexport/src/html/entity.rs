@@ -1,11 +1,12 @@
-use crate::{
+use reqlang::{
     Specification,
-    exporter::html::{escape, expression, markup},
     node::{
         entity::{Idx, Node, RequirementVariant, Variant},
         tree::Tree,
     },
 };
+
+use crate::html::{escape, expression, markup};
 
 /// `level` is 1 for the root, the package of the file. A package or a part is a heading, followed by its
 /// description and by the requirements and attributes it contains, one level deeper.

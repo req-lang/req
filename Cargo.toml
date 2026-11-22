@@ -1,6 +1,6 @@
 [workspace]
 
-members = ["reqlang", "reqtool", "reqlsp", "reqwasm", "reqdiag"]
+members = ["reqlang", "reqtool", "reqlsp", "reqwasm", "reqdiag", "reqexport"]
 resolver = "2"
 
 [workspace.package]

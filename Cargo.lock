@@ -884,11 +884,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "reqexport"
+version = "0.1.0"
+dependencies = [
+ "markdown",
+ "pretty_assertions",
+ "reqlang",
+ "unindent",
+]
+
+[[package]]
 name = "reqlang"
 version = "0.9.0"
 dependencies = [
  "criterion",
- "markdown",
  "pretty_assertions",
  "unicode-normalization",
  "unindent",
@@ -914,6 +923,7 @@ dependencies = [
  "colored",
  "itertools 0.14.0",
  "reqdiag",
+ "reqexport",
  "reqlang",
  "serde_json",
 ]
@@ -924,6 +934,7 @@ version = "0.1.0"
 dependencies = [
  "console_error_panic_hook",
  "reqdiag",
+ "reqexport",
  "reqlang",
  "serde",
  "serde-wasm-bindgen",

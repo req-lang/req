@@ -1,11 +1,12 @@
 use pretty_assertions::assert_eq;
-use reqlang::{Specification, exporter, syntax};
+use reqexport::html;
+use reqlang::{Specification, syntax};
 use unindent::unindent;
 
 /// The export of what the parser makes of the input, as the playground does it, syntax errors or not
 fn export(input: &str) -> String {
     let (tree, _) = syntax::parser::parse(&unindent(input));
-    exporter::html::render_string(&Specification::from(tree))
+    html::render_string(&Specification::from(tree))
 }
 
 #[test]

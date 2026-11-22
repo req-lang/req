@@ -1,6 +1,5 @@
-use crate::{
+use reqlang::{
     Specification,
-    exporter::html::entity::{anchor, has_anchor},
     node::{
         entity,
         markup::{Idx, Item},
@@ -8,6 +7,8 @@ use crate::{
         tree::Tree,
     },
 };
+
+use crate::html::entity::{anchor, has_anchor};
 
 /// Informal text is Markdown with references in it, written as the author typed it: `{Name}` becomes a
 /// link to the entity it names. There is no raw HTML: what looks like a tag is shown as text.
